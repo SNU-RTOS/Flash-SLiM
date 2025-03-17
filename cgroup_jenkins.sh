@@ -29,12 +29,12 @@ NUM_REPEATS=0
 PROMPT_ITEM_SIZE=3
 
 CGROUP_MMAX=(
-    #"8G"
+    "8G"
     #"4G"
     #"2G"
     #"1G"
     #"512M"
-    "256M"
+    # "256M"
 )
 
 # Cleanup existing cgroup if it exists

@@ -38,6 +38,36 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "sampler",
+    srcs = ["sampler.cc"],
+    hdrs = ["sampler.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@org_tensorflow//tensorflow/lite:framework",
+        "@org_tensorflow//tensorflow/lite:util",
+        "@org_tensorflow//tensorflow/lite/schema:schema_fbs",
+    ],
+)
+
+
+cc_library(
+    name = "profiler",
+    srcs = ["profiler.cc"],
+    hdrs = ["profiler.h"],
+    deps = [
+        "@org_tensorflow//tensorflow/lite:framework",
+        "@org_tensorflow//tensorflow/lite:util",
+        "@org_tensorflow//tensorflow/lite/delegates/xnnpack:xnnpack_delegate",
+        "@org_tensorflow//tensorflow/lite/experimental/genai:genai_ops",
+        "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
+    ],
+)
+
 cc_binary(
     name = "text_generator_main",
     srcs = [
@@ -55,6 +85,8 @@ cc_binary(
     }),
     deps = [
         ":utils",
+        ":sampler",
+        ":profiler",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",

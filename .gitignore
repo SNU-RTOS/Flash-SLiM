@@ -4,6 +4,8 @@
 __pycache__
 MODULE.bazel.lock
 MODULE.bazel
+.vscode
+
 
 ########## User files ##########
 evaluation/*
