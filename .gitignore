@@ -2,7 +2,8 @@
 ########## Cache files ##########
 *.bin
 __pycache__
-
+MODULE.bazel.lock
+MODULE.bazel
 
 ########## User files ##########
 evaluation/*
