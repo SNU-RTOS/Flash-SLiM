@@ -1,4 +1,6 @@
+cd ..
 source .env
+
 cd ${TENSORFLOW_PATH}
 pwd
 bazel build -c opt //tensorflow/lite/tools/benchmark:benchmark_model
