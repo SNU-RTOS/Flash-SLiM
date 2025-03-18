@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "ai_edge_torch/generative/examples/cpp/utils.h"
+#include "utils.h"
 
 #include <cstddef>
 #include <cstring>
