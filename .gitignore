@@ -17,6 +17,7 @@ perf.*
 text_generator_main
 models/*
 nohup.out
+./scripts/*.log
 
 # Excludes from User files
 !evaluation/show-plot.py
