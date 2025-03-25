@@ -5,6 +5,8 @@ import plotly.graph_objects as go
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
 import logging
+import argparse
+import csv
 
 # Set up logging
 logging.basicConfig(
@@ -46,18 +48,106 @@ class LogMetrics:
     def calculate_total_major_faults(self) -> int:
         return sum(phase.major_faults for phase in self.phases.values())
     
-    def calculate_average_decode_time(self) -> float:
-        return np.mean(self.decode_times) if self.decode_times else 0
 
-def safe_float_conversion(value: str, default: float = 0.0) -> float:
+
+############################################
+# Utility Functions
+############################################
+def __convert_str2float_safe(value: str, default: float = 0.0) -> float:
     """Safely convert string to float with error handling."""
     try:
         return float(value.replace(',', ''))
     except (ValueError, AttributeError):
         logger.warning(f"Could not convert '{value}' to float, using default: {default}")
         return default
+    
+def __get_ram_size_info_from_dir(dir_name: str) -> Optional[str]:
+    """Get RAM size from directory name in the format result_dp_[]G or result_dp_[]M"""
+    match = re.match(r'result_dp_(\d+)(G|M)', dir_name)
+    if match:
+        size = int(match.group(1))
+        unit = match.group(2)
+        if unit == 'M':
+            return f"{size}M"
+        else:  # unit == 'G'
+            return f"{size}G"
+    return None
 
-def parse_phase_info(content: str) -> Dict[str, PhaseMetrics]:
+def get_available_ram_sizes(base_dir: str) -> List[str]:
+    """Get list of available RAM sizes from directory names"""
+    try:
+        dirs = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
+        ram_sizes = []
+        for dir_name in dirs:
+            ram_size = __get_ram_size_info_from_dir(dir_name)
+            if ram_size:
+                ram_sizes.append(ram_size)
+        return sorted(ram_sizes, key=lambda x: (x[-1], int(x[:-1])))  # Sort by unit (M then G) and then by size
+    except Exception as e:
+        logger.error(f"Error getting RAM sizes: {e}")
+        return []
+
+def get_ram_dir_name(ram_size: str) -> str:
+    """Convert RAM size (e.g., '4G' or '512M') to directory name format"""
+    return f"result_dp_{ram_size}"
+
+def export_results_to_csv(results, output_file='results.csv'):
+    '''
+    Export the results to a CSV file with the following columns:
+    '''
+
+    sample_ram = next(iter(results))
+    sample_token = next(iter(results[sample_ram]))
+    sample_metric: LogMetrics = results[sample_ram][sample_token][0]
+    
+    # static_fields = [
+    #     'prefill_time [ms]', 'time_to_first_token [ms]',
+    # ]
+
+    decoding_keys = list(sample_metric.decoding_time_breakdown.keys())
+    prefill_keys = list(sample_metric.prefill_time_breakdown.keys())
+    first_decode_keys = list(sample_metric.first_decode_breakdown.keys())
+    phase_keys = [phase_name for phase_name in list(sample_metric.phases.keys()) if phase_name != "Decode"]
+
+    decoding_fields = [f'decoding_{k} [sec]' for k in decoding_keys]
+    prefill_fields = [f'prefill_{k} [sec]' for k in prefill_keys]
+    first_decode_fields = [f'first_decode_{k} [sec]' for k in first_decode_keys ]
+    metric_phases_fields = [f'{k} [ms]' for k in reversed(phase_keys)]
+    
+    headers = ['ram', 'input_tokens']  + decoding_fields + prefill_fields + first_decode_fields + metric_phases_fields
+
+    with open(output_file, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+
+        for ram_size, token_dict in results.items():
+            for input_tokens, metrics_list in token_dict.items():
+                for metric in metrics_list:
+                    row = [
+                        ram_size,
+                        input_tokens,
+                        # metric.prefill_time,
+                        # metric.time_to_first_token,
+                    ]
+
+                    row += [metric.decoding_time_breakdown[k] for k in decoding_keys]
+                    row += [metric.prefill_time_breakdown[k] for k in prefill_keys]
+                    row += [metric.first_decode_breakdown[k] for k in first_decode_keys]
+                    row += [metric.phases[k].duration for k in reversed(phase_keys)]
+                    
+                    writer.writerow(row)
+                    
+
+    
+    logger.info(f"Exported results to {output_file}")
+
+
+############################################
+# Parsing Functions
+############################################
+
+## from Perf or Rusage
+def __parse_phase_info(content: str) -> Dict[str, PhaseMetrics]:
     phases = {}
     
     # First try to parse using the new detailed performance statistics format
@@ -140,10 +230,11 @@ def parse_phase_info(content: str) -> Dict[str, PhaseMetrics]:
         except (ValueError, IndexError) as e:
             logger.warning(f"Error parsing phase info for {phase_name}: {e}")
             continue
-    
+    # print(phases.keys())
     return phases
 
-def parse_decode_times(content: str) -> List[float]:
+## from Perf or Rusage
+def __parse_decode_time(content: str) -> List[float]:
     """Parse decode times from both old and new formats, extracting CPU time"""
     times = []
     
@@ -191,9 +282,10 @@ def parse_decode_times(content: str) -> List[float]:
     
     return times
 
-def parse_decoding_time_breakdown(content: str) -> Dict[str, float]:
+## from Metric point and Rusage
+def __parse_decode_time_breakdown(content: str) -> Dict[str, float]:
     """
-    Parse decoding time breakdown from log content.
+    Parse decode time breakdown from log content.
     
     Returns a dictionary with the following keys:
     - 'avg_latency': Average Decoding Latency (in seconds)
@@ -211,34 +303,41 @@ def parse_decoding_time_breakdown(content: str) -> Dict[str, float]:
     avg_latency_match = re.search(avg_latency_pattern, content)
     if avg_latency_match:
         # Convert from milliseconds to seconds for consistency with other time measurements
-        ms_value = safe_float_conversion(avg_latency_match.group(1))
+        ms_value = __convert_str2float_safe(avg_latency_match.group(1))
         breakdown['avg_latency'] = ms_value / 1000.0  # Convert ms to seconds
     
     # Parse time breakdown
-    time_pattern = r"- ([\d.]+)\s*\[sec\] (User|System) time"
-    time_matches = list(re.finditer(time_pattern, content))
+    block_pattern = r"(Decode\s+(\d+)\s+took\s*\n(?:\s*-\s*[\d.]+\s*\[sec\]\s*\w+ time\s*\n?){2,3})"
+    blocks = re.finditer(block_pattern, content)
     
-    for match in time_matches:
-        time_value = safe_float_conversion(match.group(1))
-        time_type = match.group(2).lower()
+    for block_match in blocks:
+        block_text = block_match.group(1)  # 전체 Decode 블록
+        phase_id = int(block_match.group(2))  # "Decode 9"의 숫자
         
-        if time_type == 'user':
-            breakdown['user_time'] = time_value
-        elif time_type == 'system':
-            breakdown['system_time'] = time_value
-    
+        # 2. 블록 안에서 시간별 항목 추출
+        time_pattern = r"-\s*([\d.]+)\s*\[sec\]\s+(CPU|User|System) time"
+        for time_match in re.finditer(time_pattern, block_text):
+            time_value = __convert_str2float_safe(time_match.group(1))
+            time_type = time_match.group(2).lower()
+            # print(time_value, time_type)
+            if time_type == 'user':
+                breakdown['user_time'] = time_value
+            elif time_type == 'system':
+                breakdown['system_time'] = time_value
+        
     return breakdown
 
-def parse_prefill_and_ttft(content: str) -> Tuple[float, float]:
+## from ScopeTimer, Metric point
+def __parse_prefill_and_ttft(content: str) -> Tuple[float, float]:
     """Parse prefill time and time to first token with more flexible patterns"""
-    prefill_pattern = r"\[INFO\]\s*Prefill Stage took\s*([\d,]+(?:\.\d+)?)\s*ms"
+    prefill_pattern = r"\[INFO\]\s*Prefill took\s*([\d,]+(?:\.\d+)?)\s*ms"
     ttft_pattern = r"\[METRICS\]\s*Time To First Token\s*:\s*([\d,]+(?:\.\d+)?)\s*ms"
     
     prefill_match = re.search(prefill_pattern, content)
     ttft_match = re.search(ttft_pattern, content)
     
-    prefill_time = safe_float_conversion(prefill_match.group(1)) if prefill_match else 0
-    ttft = safe_float_conversion(ttft_match.group(1)) if ttft_match else 0
+    prefill_time = __convert_str2float_safe(prefill_match.group(1)) if prefill_match else 0
+    ttft = __convert_str2float_safe(ttft_match.group(1)) if ttft_match else 0
     
     if prefill_match and ttft_match:
         logger.info(f"Parsed prefill={prefill_time}ms, ttft={ttft}ms")
@@ -247,7 +346,8 @@ def parse_prefill_and_ttft(content: str) -> Tuple[float, float]:
     
     return prefill_time, ttft
 
-def parse_prefill_breakdown(content: str) -> Dict[str, float]:
+## from Perf or Rusage
+def __parse_prefill_breakdown(content: str) -> Dict[str, float]:
     """
     Parse prefill time breakdown from both old and new log content formats.
     
@@ -268,15 +368,15 @@ def parse_prefill_breakdown(content: str) -> Dict[str, float]:
     
     if new_match:
         # Extract values from the new format
-        breakdown['user_time'] = safe_float_conversion(new_match.group(1))
-        breakdown['system_time'] = safe_float_conversion(new_match.group(2))
-        breakdown['cpu_time'] = safe_float_conversion(new_match.group(3))
+        breakdown['user_time'] = __convert_str2float_safe(new_match.group(1))
+        breakdown['system_time'] = __convert_str2float_safe(new_match.group(2))
+        breakdown['cpu_time'] = __convert_str2float_safe(new_match.group(3))
         logger.info(f"Parsed prefill breakdown from new format: user={breakdown['user_time']}, system={breakdown['system_time']}, cpu={breakdown['cpu_time']}")
         return breakdown
     
     # If new format not found, try old format
     # Find the line with "Prefill Stage took" to locate the section
-    prefill_marker = "Prefill Stage took"
+    prefill_marker = "Prefill took"
     prefill_pos = content.find(prefill_marker)
     
     if prefill_pos != -1:
@@ -293,7 +393,7 @@ def parse_prefill_breakdown(content: str) -> Dict[str, float]:
         
         # Find all time measurements in this section
         for match in re.finditer(time_pattern, prefill_section):
-            time_value = safe_float_conversion(match.group(1))
+            time_value = __convert_str2float_safe(match.group(1))
             time_type = match.group(2).lower()
             
             if time_type == 'cpu':
@@ -307,7 +407,8 @@ def parse_prefill_breakdown(content: str) -> Dict[str, float]:
     
     return breakdown
 
-def parse_first_decode_breakdown(content: str) -> Dict[str, float]:
+## from Perf or Rusage
+def __parse_first_decode_breakdown(content: str) -> Dict[str, float]:
     """
     Parse the first decode step time breakdown from both old and new log content formats.
     
@@ -328,9 +429,9 @@ def parse_first_decode_breakdown(content: str) -> Dict[str, float]:
     
     if new_match:
         # Extract values from the new format
-        breakdown['user_time'] = safe_float_conversion(new_match.group(1))
-        breakdown['system_time'] = safe_float_conversion(new_match.group(2))
-        breakdown['cpu_time'] = safe_float_conversion(new_match.group(3))
+        breakdown['user_time'] = __convert_str2float_safe(new_match.group(1))
+        breakdown['system_time'] = __convert_str2float_safe(new_match.group(2))
+        breakdown['cpu_time'] = __convert_str2float_safe(new_match.group(3))
         logger.info(f"Parsed first decode breakdown from new format: user={breakdown['user_time']}, system={breakdown['system_time']}, cpu={breakdown['cpu_time']}")
         return breakdown
     
@@ -350,7 +451,7 @@ def parse_first_decode_breakdown(content: str) -> Dict[str, float]:
         # Find all time measurements in this section using the pattern "- X [sec] Type time"
         time_pattern = r"-\s*([\d.]+)\s*\[sec\] (CPU|User|System) time"
         for match in re.finditer(time_pattern, decode_section):
-            time_value = safe_float_conversion(match.group(1))
+            time_value = __convert_str2float_safe(match.group(1))
             time_type = match.group(2).lower()
             
             if time_type == 'cpu':
@@ -364,7 +465,7 @@ def parse_first_decode_breakdown(content: str) -> Dict[str, float]:
     
     return breakdown
 
-def parse_log_file(file_path: str) -> Optional[LogMetrics]:
+def analyze_log_file(file_path: str) -> Optional[LogMetrics]:
     metrics = LogMetrics()
     
     try:
@@ -372,16 +473,16 @@ def parse_log_file(file_path: str) -> Optional[LogMetrics]:
             content = f.read()
             
         # Parse all components
-        metrics.phases = parse_phase_info(content)
-        metrics.decode_times = parse_decode_times(content)
-        metrics.prefill_time, metrics.time_to_first_token = parse_prefill_and_ttft(content)
+        metrics.phases = __parse_phase_info(content)
+        metrics.decode_times = __parse_decode_time(content)
+        metrics.prefill_time, metrics.time_to_first_token = __parse_prefill_and_ttft(content)
         
         # Parse decoding time breakdown
-        metrics.decoding_time_breakdown = parse_decoding_time_breakdown(content)
+        metrics.decoding_time_breakdown = __parse_decode_time_breakdown(content)
         
         # Parse prefill and first decode breakdowns
-        metrics.prefill_time_breakdown = parse_prefill_breakdown(content)
-        metrics.first_decode_breakdown = parse_first_decode_breakdown(content)
+        metrics.prefill_time_breakdown = __parse_prefill_breakdown(content)
+        metrics.first_decode_breakdown = __parse_first_decode_breakdown(content)
         
         # Modified validation logic
         # For new format, we don't strictly require 'Decode' in phases
@@ -418,7 +519,7 @@ def process_directory(base_dir: str, ram_dirs: Dict[str, str], input_tokens: Lis
             continue
             
         for token in input_tokens:
-            pattern = f"output_{token}_\\d+\\.txt"
+            pattern = f"output_{token}_\\d+\\.(txt|log)"
             matching_files = [f for f in os.listdir(dir_path) if re.match(pattern, f)]
             
             if not matching_files:
@@ -427,7 +528,10 @@ def process_directory(base_dir: str, ram_dirs: Dict[str, str], input_tokens: Lis
                 
             valid_files = 0
             for file_name in matching_files:
-                metrics = parse_log_file(os.path.join(dir_path, file_name))
+                logger.info(f"=====================================")
+                logger.info(f"Processing file {file_name}")
+                metrics = analyze_log_file(os.path.join(dir_path, file_name))
+
                 if metrics and metrics.is_valid:
                     results[ram_size][token].append(metrics)
                     valid_files += 1
@@ -435,11 +539,16 @@ def process_directory(base_dir: str, ram_dirs: Dict[str, str], input_tokens: Lis
             
             if valid_files > 0:
                 logger.info(f"Processed {valid_files} valid files for {ram_size}, token {token}")
+            logger.info(f"=====================================\n")
     
     if not valid_data_found:
         logger.error("No valid data found in any of the directories")
     
     return results
+
+############################################
+# Plotting Functions
+############################################
 
 
 def create_ttft_plot(results: Dict, ram_sizes: List[str], input_tokens: List[int]):
@@ -541,13 +650,17 @@ def create_ttft_detailed_breakdown_plot(results: Dict, ram_sizes: List[str], inp
 
     # Define colors for each component
     colors = {
-        'prefill_user': '#EDC948',    # Light Salmon
-        'prefill_system': '#BAB0AC',  # Coral
-        'prefill_other': '#d62728',   # Deep Orange
-        'decode_user': '#EDC948',     # Light Blue
-        'decode_system': '#BAB0AC',   # Light Blue
-        'decode_other': '#d62728'     # Blue
+        'prefill_user': '#FFE692',    # Light Salmon
+        'prefill_system': '#D8D8D8',  # Coral
+        'prefill_other': '#FFB0A5',   # Deep Orange
+        'decode_user': '#FFE692',     # Light Blue
+        'decode_system': '#D8D8D8',   # Light Blue
+        'decode_other': '#FFB0A5'     # Blue
     }
+    
+    border_color = 'black'
+    border_width = 0.5
+    font_size = 16
     
     prefill_patterns = {
         'prefill_user': '/',
@@ -616,12 +729,12 @@ def create_ttft_detailed_breakdown_plot(results: Dict, ram_sizes: List[str], inp
         if token_has_data:
             # Add traces for each component in stacked order
             component_order = [
-                ('prefill_user', 'Prefill - User Inference Code Time'),
-                ('prefill_system', 'Prefill - I/O Time'),
-                ('prefill_other', 'Prefill - Preempt Time'),
-                ('decode_user', 'Decode - User Inferece Code Time'),
-                ('decode_system', 'Decode - I/O Time'),
-                ('decode_other', 'Decode - Preempt Time')
+                ('prefill_user', 'CPU Time in Prefill'),
+                ('prefill_system', 'I/O Time in Prefill'),
+                ('prefill_other', 'Preemption Delay in Prefill'),
+                ('decode_user', 'CPU Time in Decode'),
+                ('decode_system', 'I/O Time in Decode'),
+                ('decode_other', 'Preemption Delay in Decode')
             ]
             
             for key, name in component_order:
@@ -635,43 +748,77 @@ def create_ttft_detailed_breakdown_plot(results: Dict, ram_sizes: List[str], inp
                             pattern=dict(
                                 shape=prefill_patterns[key],
                                 solidity=0.3  # Adjust pattern density
-                            )
+                            ),
+                            line=dict(color=border_color, width=border_width),
                         ),
                         text=[f"{v:.2f}" if v is not None and v > 0.01 else "" for v in data[key]],
-                        textposition='inside'
+                        textposition='inside',
+                        textfont=dict(
+                            size=font_size,           # Font size for bar values
+                            color='black',     # Font color for bar values
+                            family='Arial'     # Font family
+                        ),
                     ))
                 else:
                     fig.add_trace(go.Bar(
                     name=name,
                     x=ram_sizes,
                     y=data[key],
-                    marker_color=colors[key],
+                    marker=dict(
+                        color=colors[key],
+                        line=dict(color=border_color, width=border_width),
+                    ),
+                    # marker_line=dict(color=border_color, width=border_width),
                     text=[f"{v:.2f}" if v is not None and v > 0.01 else "" for v in data[key]],
-                    textposition='inside'
+                    textposition='inside',
+                    textfont=dict(
+                        size=font_size,           # Font size for bar values
+                        color="#000000",     # Font color for bar values
+                        family='Arial'     # Font family
+                    ),
                 ))
 
             # Update layout
             fig.update_layout(
-                title=f"Time to First Token Detailed Breakdown (Input Tokens: {token})",
+                # title=f"Time to First Token Detailed Breakdown (Input Tokens: {token})",
                 xaxis_title="RAM Size",
-                yaxis_title="Time (seconds)",
+                yaxis_title="Time [seconds]",
                 barmode='stack',
                 template='plotly_white',
                 showlegend=True,
                 height=600,
                 width=1000,
+                # Legend customization
+                legend=dict(
+                    font=dict(
+                        family="Arial",    # Font family
+                        size=font_size-1,           # Font size for legend text
+                        color="#000000"    # Font color for legend text
+                    ),
+                    # Additional legend customization options
+                    bgcolor="rgba(255,255,255,0.8)",    # Legend background color with transparency
+                    # bordercolor="Black",                # Legend border color
+                    # borderwidth=1,                      # Legend border width
+                    orientation="v",                    # Horizontal legend (use "v" for vertical)
+                    xanchor="left",                    # Legend horizontal anchor point
+                    yanchor="top",                   # Legend vertical anchor point
+                    # y=1,                             # Legend y position (above the plot)
+                    # x=1                                 # Legend x position
+                ),
                 # Add grid lines for better readability
                 xaxis=dict(
                     showgrid=True,
                     gridwidth=1,
-                    gridcolor='LightGray'
+                    gridcolor='LightGray',zeroline=True,
+                    zerolinewidth=1,
+                    zerolinecolor='LightGray'
                 ),
                 yaxis=dict(
                     showgrid=True,
                     gridwidth=1,
                     gridcolor='LightGray',
                     zeroline=True,
-                    zerolinewidth=0.1,
+                    zerolinewidth=1,
                     zerolinecolor='LightGray'
                 )
             )
@@ -713,7 +860,6 @@ def create_decode_latency_plot(results: Dict, ram_sizes: List[str], input_tokens
                 metrics_list = [m for m in results[ram_size][token] if m.is_valid and m.decode_times]
                 if metrics_list:
                     # Calculate average decode time
-                    # avg_decode = np.mean([m.calculate_average_decode_time() for m in metrics_list]) / 1
                     avg_decode = np.mean([m.decoding_time_breakdown['avg_latency'] for m in metrics_list])
                     y_values.append(avg_decode)
                     token_has_data = True
@@ -746,8 +892,9 @@ def create_decode_latency_plot(results: Dict, ram_sizes: List[str], input_tokens
                     showgrid=True,
                     gridwidth=1,
                     gridcolor='LightGray',
-                    # zeroline=True,
-                    # zerolinecolor='lightgray'
+                    zeroline=True,
+                    zerolinecolor='lightgray',
+                    zerolinewidth=1,
                 ),
                 yaxis=dict(
                     showgrid=True,
@@ -755,7 +902,7 @@ def create_decode_latency_plot(results: Dict, ram_sizes: List[str], input_tokens
                     gridcolor='LightGray',
                     zeroline=True,
                     zerolinewidth=0.1,
-                    zerolinecolor='Gray'
+                    zerolinecolor='LightGray'
                 )
             )
             figs.append((token, fig))
@@ -776,10 +923,13 @@ def create_decoding_time_breakdown_plot(results: Dict, ram_sizes: List[str], inp
 
     # Color scheme for time components
     time_colors = {
-        'user_time': '#EDC948',      
-        'system_time': '#BAB0AC',    
-        'other_time': '#d62728'      
+        'user_time': '#FFE692',      
+        'system_time': '#D8D8D8',    
+        'other_time': '#FFB0A5'      
     }
+    
+    border_color = 'black'
+    border_width = 0.5
 
     # For each input token length
     for token in input_tokens:
@@ -825,33 +975,67 @@ def create_decoding_time_breakdown_plot(results: Dict, ram_sizes: List[str], inp
                     time_values[key].append(None)
         
         if token_has_data:
+            
+            component_order = [
+                ('prefill_user', 'CPU Time in Prefill'),
+                ('prefill_system', 'I/O Time in Prefill'),
+                ('prefill_other', 'Preemption Delay in Prefill'),
+                ('decode_user', 'CPU Time in Decode'),
+                ('decode_system', 'I/O Time in Decode'),
+                ('decode_other', 'Preemption Delay in Decode')
+            ]
+            
             # Add traces for user time and system time
             fig.add_trace(go.Bar(
-                name='User Inference Code Time',
+                name='CPU Time',
                 x=ram_sizes,
                 y=time_values['user_time'],
-                marker_color=time_colors['user_time'],
+                marker=dict(
+                    color=time_colors['user_time'],
+                    line=dict(color=border_color, width=border_width),
+                ),
                 text=[f"{v:.2f}" if v is not None else "N/A" for v in time_values['user_time']],
-                textposition='inside'
+                textposition='inside',
+                textfont=dict(
+                    size=15,           # Font size for bar values
+                    color='black',     # Font color for bar values
+                    family='Arial'     # Font family
+                ),
             ))
             
             fig.add_trace(go.Bar(
                 name='I/O Time',
                 x=ram_sizes,
                 y=time_values['system_time'],
-                marker_color=time_colors['system_time'],
+                marker=dict(
+                    color=time_colors['system_time'],
+                    line=dict(color=border_color, width=border_width),
+                ),
                 text=[f"{v:.2f}" if v is not None else "N/A" for v in time_values['system_time']],
-                textposition='inside'
+                textposition='inside',
+                textfont=dict(
+                    size=15,           # Font size for bar values
+                    color='black',     # Font color for bar values
+                    family='Arial'     # Font family
+                ),
             ))
             
             # Add other time trace
             fig.add_trace(go.Bar(
-                name='Preempt Time',
+                name='Preemption Delay',
                 x=ram_sizes,
                 y=time_values['other_time'],
-                marker_color=time_colors['other_time'],
+                marker=dict(
+                    color=time_colors['other_time'],
+                    line=dict(color=border_color, width=border_width),
+                ),
                 text=[f"{v:.2f}" if v is not None else "N/A" for v in time_values['other_time']],
-                textposition='inside'
+                textposition='inside',
+                textfont=dict(
+                    size=15,           # Font size for bar values
+                    color='black',     # Font color for bar values
+                    family='Arial'     # Font family
+                ),
             ))
 
             # Update layout
@@ -864,18 +1048,35 @@ def create_decoding_time_breakdown_plot(results: Dict, ram_sizes: List[str], inp
                 showlegend=True,
                 height=600,
                 width=1000,
+                # Legend customization
+                legend=dict(
+                    font=dict(
+                        family="Arial",    # Font family
+                        size=15,           # Font size for legend text
+                        color="#000000"    # Font color for legend text
+                    ),
+                    # Additional legend customization options
+                    bgcolor="rgba(255,255,255,0.8)",    # Legend background color with transparency
+                    # bordercolor="Black",                # Legend border color
+                    # borderwidth=1,                      # Legend border width
+                    orientation="v",                    # Horizontal legend (use "v" for vertical)
+                    xanchor="left",                    # Legend horizontal anchor point
+                    yanchor="top",                   # Legend vertical anchor point
+                    # y=1,                             # Legend y position (above the plot)
+                    # x=1                                 # Legend x position
+                ),
                 # Add grid lines for better readability
                 xaxis=dict(
                     showgrid=True,
                     gridwidth=1,
-                    gridcolor='LightGray'
+                    gridcolor='LightGray',
                 ),
                 yaxis=dict(
                     showgrid=True,
                     gridwidth=1,
                     gridcolor='LightGray',
                     zeroline=True,
-                    zerolinecolor='lightgray'
+                    zerolinecolor='lightgray',
                 )
             )
             
@@ -897,38 +1098,9 @@ def create_decoding_time_breakdown_plot(results: Dict, ram_sizes: List[str], inp
 
     return figs
 
-def parse_ram_dir(dir_name: str) -> Optional[str]:
-    """Parse RAM size from directory name in the format result_dp_[]G or result_dp_[]M"""
-    match = re.match(r'result_dp_(\d+)(G|M)', dir_name)
-    if match:
-        size = int(match.group(1))
-        unit = match.group(2)
-        if unit == 'M':
-            return f"{size}M"
-        else:  # unit == 'G'
-            return f"{size}G"
-    return None
-
-def get_available_ram_sizes(base_dir: str) -> List[str]:
-    """Get list of available RAM sizes from directory names"""
-    try:
-        dirs = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
-        ram_sizes = []
-        for dir_name in dirs:
-            ram_size = parse_ram_dir(dir_name)
-            if ram_size:
-                ram_sizes.append(ram_size)
-        return sorted(ram_sizes, key=lambda x: (x[-1], int(x[:-1])))  # Sort by unit (M then G) and then by size
-    except Exception as e:
-        logger.error(f"Error getting RAM sizes: {e}")
-        return []
-
-def get_ram_dir_name(ram_size: str) -> str:
-    """Convert RAM size (e.g., '4G' or '512M') to directory name format"""
-    return f"result_dp_{ram_size}"
+############################################
 
 def main():
-    import argparse
     
     parser = argparse.ArgumentParser(description='Analyze inference logs for different RAM sizes.')
     parser.add_argument('--base-dir', type=str, required=True,
@@ -937,6 +1109,8 @@ def main():
                       help='List of RAM sizes to analyze (e.g., 4G 8G 16G 512M)')
     parser.add_argument('--input-tokens', type=int, nargs='+', default=[8],
                       help='List of input token lengths to analyze')
+    parser.add_argument('--export-csv', type=bool, default=True,
+                      help='Export results to a CSV file')
     
     args = parser.parse_args()
     
@@ -966,15 +1140,19 @@ def main():
     # Process all log files
     results = process_directory(args.base_dir, ram_dirs, args.input_tokens)
     
+    # export results to a csv file
+    if args.export_csv:
+        export_results_to_csv(results)
+    
     # Create plots directory if it doesn't exist
     if not os.path.exists('plots'):
         os.makedirs('plots')
     
     # Create and display plots
     plot_functions = {
-        'ttft_breakdown': create_ttft_plot,
-        'ttft_detailed_breakdown': create_ttft_detailed_breakdown_plot,
-        'decode_latency': create_decode_latency_plot,
+        # 'ttft_breakdown': create_ttft_plot,
+        # 'ttft_detailed_breakdown': create_ttft_detailed_breakdown_plot,
+        # 'decode_latency': create_decode_latency_plot,
         'decoding_time_breakdown': create_decoding_time_breakdown_plot,
     }
     
