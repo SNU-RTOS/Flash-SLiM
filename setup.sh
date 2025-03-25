@@ -24,13 +24,13 @@ fi
 cd ${EXTERNAL_PATH}
 
 echo "[INFO] Installing ai-edge-torch"
-## Clone ai-edge-torch
+# Clone ai-edge-torch
 if [ ! -d ${AI_EDGE_TORCH_PATH} ]; then
 
     git clone https://github.com/SNU-RTOS/ai-edge-torch.git
     rm -r ./ai-edge-torch/ai_edge_torch/generative/examples/cpp
 
-    ln -s ${LLM_APP_SRC} ./ai-edge-torch/ai_edge_torch/generative/examples/cpp
+    ln -s ${LLM_APP_SRC} ${EXTERNAL_PATH}/ai_edge_torch/generative/examples/cpp
 
     # Update Tensorflow PATH in ai-edge-torch/WORKSPACE for build
     WORKSPACE_FILE="${AI_EDGE_TORCH_PATH}/WORKSPACE"

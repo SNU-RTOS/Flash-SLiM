@@ -7,6 +7,7 @@ MODULE.bazel
 
 ########## User files ##########
 evaluation/*
+
 result_*
 perf.*
 *.txt
@@ -23,3 +24,4 @@ models/*
 backup
 log_backup
 external
+util/benchmark_ops_results

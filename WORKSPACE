@@ -1,0 +1,1 @@
+external/ai-edge-torch/WORKSPACE
