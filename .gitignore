@@ -4,6 +4,8 @@
 __pycache__
 MODULE.bazel.lock
 MODULE.bazel
+.vscode
+
 
 ########## User files ##########
 evaluation/*
@@ -11,9 +13,12 @@ evaluation/*
 result_*
 perf.*
 *.txt
+/.env
 .env
 text_generator_main
 models/*
+nohup.out
+scripts/*.log
 
 # Excludes from User files
 !evaluation/show-plot.py
