@@ -248,7 +248,6 @@ namespace
 
 } // end anonymous namespace
 
-
 // =======================================================================
 // main() entry
 // =======================================================================
@@ -363,6 +362,9 @@ int main(int argc, char *argv[])
     //     }
     // }
 
+    /* *********************
+     * PREFILL PREPROCESS START
+     * *********************/
     // 6. Prepare Input Prompt
     {
         ai_edge_torch::custom::profiler::ScopeTimer timer("Input Prompt Preparation");
@@ -397,17 +399,15 @@ int main(int argc, char *argv[])
         perf_monitor.start_phase("Prepare_Runners");
         std::size_t effective_prefill_token_size =
             (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
-        // std::cout << "HELLO";
+
         prefill_runner = GetPrefillRunner(
             interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
-        // std::cout << "HELLO2";
+
         MINIMAL_CHECK(prefill_runner != nullptr);
-        // std::cout << "HELLO1";
 
         decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
-        // std::cout << "HELLO4";
+
         MINIMAL_CHECK(decode_runner != nullptr);
-        // std::cout << "HELLO3";
 
         stats = perf_monitor.end_phase("Prepare_Runners");
         getrusage(RUSAGE_SELF, &usage_end);
@@ -415,23 +415,29 @@ int main(int argc, char *argv[])
     ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Signature Runner Preparation");
     metrics.RecordStats("Prepare_Runners", stats);
 
+    TfLiteTensor *prefill_input = nullptr;
+    TfLiteTensor *prefill_input_pos = nullptr;
+    TfLiteTensor *decode_input = nullptr;
+    TfLiteTensor *decode_input_pos = nullptr;
+    TfLiteTensor *kv_cache_k_0 = nullptr;
+    int max_seq_size = 0;
+    int kv_cache_max_size = 0;
+
     // 8. Access Tensors
-    TfLiteTensor *prefill_input = prefill_runner->input_tensor("tokens");
-    TfLiteTensor *prefill_input_pos = prefill_runner->input_tensor("input_pos");
-    TfLiteTensor *decode_input = decode_runner->input_tensor("tokens");
-    TfLiteTensor *decode_input_pos = decode_runner->input_tensor("input_pos");
-    TfLiteTensor *kv_cache_k_0 = decode_runner->input_tensor("kv_cache_k_0");
-
-    int max_seq_size = prefill_input->dims->data[1];
-    int kv_cache_max_size = kv_cache_k_0->dims->data[1];
-
-    // 9. Prefill Stage
     {
-        ai_edge_torch::custom::profiler::ScopeTimer timer("Prefill Stage");
         getrusage(RUSAGE_SELF, &usage_start);
-        perf_monitor.start_phase("Prefill");
+        ai_edge_torch::custom::profiler::ScopeTimer timer("Prefill Input Tensors Setup");
+        perf_monitor.start_phase("Prefill Input Tensors Setup");
+
+        prefill_input = prefill_runner->input_tensor("tokens");
+        prefill_input_pos = prefill_runner->input_tensor("input_pos");
+        decode_input = decode_runner->input_tensor("tokens");
+        decode_input_pos = decode_runner->input_tensor("input_pos");
+        kv_cache_k_0 = decode_runner->input_tensor("kv_cache_k_0");
+        max_seq_size = prefill_input->dims->data[1];
+        kv_cache_max_size = kv_cache_k_0->dims->data[1];
         int prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
-        std::cout << prefill_seq_size;
+
         // Zero out the input tensors
         std::memset(prefill_input->data.i32, 0, prefill_input->bytes);
         std::memset(prefill_input_pos->data.i32, 0, prefill_input_pos->bytes);
@@ -442,14 +448,33 @@ int main(int argc, char *argv[])
             prefill_input->data.i32[i] = prompt_tokens[i];
             prefill_input_pos->data.i32[i] = i;
         }
+        stats = perf_monitor.end_phase("Prefill Input Tensors Setup");
+        getrusage(RUSAGE_SELF, &usage_end);
+    }
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Prefill Input Tensors Setup");
+    metrics.RecordStats("Prefill Input Tensors Setup", stats);
+    /* *********************
+     * PREFILL PREPROCESS END
+     * *********************/
 
+    /* *********************
+     * PREFILL START
+     * *********************/
+    // 9. Prefill Stage
+    {
+        getrusage(RUSAGE_SELF, &usage_start);
+        ai_edge_torch::custom::profiler::ScopeTimer timer("Prefill");
+        perf_monitor.start_phase("Prefill");
         // Execute the prefill runner
         MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk);
         stats = perf_monitor.end_phase("Prefill");
         getrusage(RUSAGE_SELF, &usage_end);
     }
-    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Prefill Stage");
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Prefill");
     metrics.RecordStats("Prefill", stats);
+    /* *********************
+     * PREFILL END
+     * *********************/
 
     // 10. Decoding Stage with separate metrics for inference and sampling
     std::cout << "\nPrompt:\n"
@@ -461,10 +486,7 @@ int main(int argc, char *argv[])
     std::vector<ai_edge_torch::custom::profiler::PerfStats> decode_stats_vec;
     std::vector<ai_edge_torch::custom::profiler::RUsageRecord> rusageRecords;
     struct ai_edge_torch::custom::profiler::RUsageRecord decode_record;
-    // rusage decode_start, decode_end;
     {
-        // ai_edge_torch::custom::profiler::ScopeTimer timer("Decoding Stage");
-
         // Determine how many tokens to generate
         int max_decode_steps = (absl::GetFlag(FLAGS_max_decode_steps) == -1)
                                    ? kv_cache_max_size
@@ -516,7 +538,7 @@ int main(int argc, char *argv[])
                 break;
             }
 
-            // Decode the single token to text
+            // Detokenize the single token to text
             std::vector<int> single_token_vec = {next_token};
             std::string single_decoded_text;
             MINIMAL_CHECK(sp_processor->Decode(single_token_vec, &single_decoded_text).ok());

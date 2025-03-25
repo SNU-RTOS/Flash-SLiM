@@ -34,10 +34,10 @@ while read -r line; do
         sudo ./text_generator_main \
             --tflite_model="${MODEL_PATH}/${MODEL_NAME}.tflite" \
             --sentencepiece_model="${MODEL_PATH}/tokenizer.model" \
-            --max_decode_steps=128 \
+            --max_decode_steps=10 \
             --start_token="<bos>" \
             --stop_token="<eos>" \
-            --num_threads=2 \
+            --num_threads=1 \
             --prompt="$prompt" \
             --weight_cache_path="${MODEL_PATH}/${MODEL_NAME}.xnnpack_cache"
 

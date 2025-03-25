@@ -12,6 +12,7 @@ LOG_ENABLED=false
 CORE_LIST="all"  # 기본값: 모든 코어 사용 (taskset 사용 안 함)
 NUM_THREADS=1    # 기본값: 1개 스레드 사용
 FILE="./${PROMPT_PATH}/sample_prompt_8_1.txt"
+MAX_TOKEN_LENGHT_TO_GENERATE=10
 
 # Parse command-line arguments
 while [[ "$#" -gt 0 ]]; do
@@ -20,12 +21,14 @@ while [[ "$#" -gt 0 ]]; do
         -c|--core) CORE_LIST="$2"; shift ;;
         -t|--threads) NUM_THREADS="$2"; shift ;;
         -file|--file) FILE="$2"; shift ;;
+        -tl|--tl) MAX_TOKEN_LENGHT_TO_GENERATE="$2"; shift ;;
         -h|--help)
             echo "Usage: $0 [-l|--log] [-c|--core CORES] [-t|--threads NUM_THREADS]"
             echo "  -l, --log        Enable logging (default: disabled)"
             echo "  -c, --core CORES Set CPU cores for execution (default: all cores)"
             echo "  -t, --threads NUM_THREADS Set number of threads (default: 1)"
             echo "  -file, --file FILE Set the input file (default: sample_prompt_8_1.txt)"
+            echo "  -tl, --tl max_token_length to generate (default: 16)"
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -84,7 +87,7 @@ while read -r line; do
         CMD="./text_generator_main \
             --tflite_model='${MODEL_PATH}/${MODEL_NAME}.tflite' \
             --sentencepiece_model='${MODEL_PATH}/tokenizer.model' \
-            --max_decode_steps=128 \
+            --max_decode_steps=${MAX_TOKEN_LENGHT_TO_GENERATE} \
             --start_token='<bos>' \
             --stop_token='<eos>' \
             --num_threads='${NUM_THREADS}' \
