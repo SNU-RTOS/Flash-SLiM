@@ -73,26 +73,26 @@ clear_caches() {
     sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
     echo "[INFO] Clearing CPU Caches"
 
-    # ARCH=$(uname -m)
+    ARCH=$(uname -m)
 
-    # case "$ARCH" in
-    #     "x86_64")
-    #         CACHE_SCRIPT="./clear_cache_x86"
-    #         ;;
-    #     "aarch64")
-    #         CACHE_SCRIPT="./clear_cache_arm"
-    #         ;;
-    #     *)
-    #         echo "[ERROR] Unsupported architecture: $ARCH"
-    #         return 1
-    #         ;;
-    # esac
-    # CACHE_SCRIPT="./clear_cache_arm"
-    # if [[ -f "$CACHE_SCRIPT" ]]; then
-    #     "$CACHE_SCRIPT"
-    # else
-    #     echo "[WARNING] CPU cache clearing script not found: $CACHE_SCRIPT"
-    # fi
+    case "$ARCH" in
+        "x86_64")
+            CACHE_SCRIPT="./clear_cache_x86"
+            ;;
+        "aarch64")
+            CACHE_SCRIPT="./clear_cache_arm"
+            ;;
+        *)
+            echo "[ERROR] Unsupported architecture: $ARCH"
+            return 1
+            ;;
+    esac
+    
+    if [[ -f "$CACHE_SCRIPT" ]]; then
+        "$CACHE_SCRIPT"
+    else
+        echo "[WARNING] CPU cache clearing script not found: $CACHE_SCRIPT"
+    fi
 
     echo "[INFO] DONE: Clearing Caches"
     echo ""
