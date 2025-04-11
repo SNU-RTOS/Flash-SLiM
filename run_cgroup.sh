@@ -19,6 +19,17 @@ FILE="./${PROMPT_PATH}/sample_prompt_8_1.txt"
 MAX_TOKEN_LENGHT_TO_GENERATE=16
 NUM_REPEATS=1
 
+# Set logging functions
+if [ "$LOG_ENABLED" = true ]; then
+    log() {
+        echo "$@" | tee -a "$OUTPUT_FILE"
+    }
+else
+    log() {
+        echo "$@"
+    }
+fi
+
 # Parse command-line arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in

@@ -1,9 +1,12 @@
 #!/bin/bash
 
+################ Load utils ################
+source ./util/utils.sh
 
 ################ Setup environment ################
 source .env
-source ./util/utils.sh
+
+##################################
 # MODEL_PATH="/home/rtos/workspace/ghpark/export/gemma-2-2b-it-q8"
 # MODEL_NAME="gemma2_q8_ekv1024"
 
@@ -34,7 +37,7 @@ while read -r line; do
         sudo ./text_generator_main \
             --tflite_model="${MODEL_PATH}/${MODEL_NAME}.tflite" \
             --sentencepiece_model="${MODEL_PATH}/tokenizer.model" \
-            --max_decode_steps=10 \
+            --max_decode_steps=32 \
             --start_token="<bos>" \
             --stop_token="<eos>" \
             --num_threads=1 \

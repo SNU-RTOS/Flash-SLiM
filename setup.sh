@@ -22,15 +22,19 @@ fi
 
 ########## Setup external sources ##########
 cd ${EXTERNAL_PATH}
-
+pwd
 echo "[INFO] Installing ai-edge-torch"
-# Clone ai-edge-torch
+# Install ai-edge-torch
 if [ ! -d ${AI_EDGE_TORCH_PATH} ]; then
-
+    # Clone customized ai-edge-torch 
     git clone https://github.com/SNU-RTOS/ai-edge-torch.git
-    rm -r ./ai-edge-torch/ai_edge_torch/generative/examples/cpp
 
-    ln -s ${LLM_APP_SRC} ${EXTERNAL_PATH}/ai_edge_torch/generative/examples/cpp
+    if [ -d "${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp" ]; then
+        rm -r ${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp
+        echo "[INFO] delete exisiting ${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp"
+    fi
+
+    ln -s ${LLM_APP_SRC} ${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp
 
     # Update Tensorflow PATH in ai-edge-torch/WORKSPACE for build
     WORKSPACE_FILE="${AI_EDGE_TORCH_PATH}/WORKSPACE"
@@ -40,17 +44,24 @@ else
     echo "[INFO] ai-edge-torch is already installed, skipping ..."
 fi
 
-## Clone tensorflow
+## Install tensorflow
 echo "[INFO] Installing tensorflow"
 if [ ! -d ${TENSORFLOW_PATH} ]; then
-    git clone https://github.com/tensorflow/tensorflow.git
-    cd tensorflow
-    git switch --detach ${TENSORFLOW_COMMIT_HASH}
+    mkdir -p ${TENSORFLOW_PATH}
+    cd ${TENSORFLOW_PATH}
+    pwd
+    git init .
+    git remote add origin https://github.com/tensorflow/tensorflow.git
+    git fetch --depth 1 origin  ${TENSORFLOW_COMMIT_HASH}
+    git checkout FETCH_HEAD
     echo "[INFO] Patching tensorflow source to build with ai-edge-torch"
     patch -p1 <../ai-edge-torch/bazel/org_tensorflow_system_python.diff
 else
     echo "[INFO] tensorflow is already installed, skipping ..."
 fi
+
+cd ${EXTERNAL_PATH}
+pwd
 
 ########## Build LiteRT_LLM_Inference_app ##########
 echo "[INFO] Build ${LLM_APP_BINARY_NAME}"
