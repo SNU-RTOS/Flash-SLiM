@@ -9,7 +9,6 @@ TENSORFLOW_COMMIT_HASH=117a62ac439ed87eb26f67208be60e01c21960de
 
 LLM_APP_SRC=${ROOT_PATH}/src
 LLM_APP_BINARY_NAME=text_generator_main
-# LLM_APP_BINARY_PATH=${AI_EDGE_TORCH_PATH}/bazel-bin/ai_edge_torch/generative/examples/cpp/${LLM_APP_BINARY_NAME}
 LLM_APP_BINARY_PATH=./output/${LLM_APP_BINARY_NAME}
 
 echo "[INFO] ROOT_PATH: ${ROOT_PATH}"
@@ -89,9 +88,9 @@ cd ${ROOT_PATH}/scripts
 pwd
 
 echo "[INFO] Build LiteRT"
-./build-litert.sh  debug
-./build-litert_gpu_delegate.sh  debug
-./build-deps.sh  debug
+./build-litert.sh  release
+./build-litert_gpu_delegate.sh  release
+./build-deps.sh  release
 echo "========================"
 
 # ########## Build LiteRT_LLM_Inference_app ##########
@@ -102,16 +101,19 @@ pwd
 ${ROOT_PATH}/build.sh
 echo "========================"
 
-cp ${LLM_APP_BINARY_PATH} ${LLM_APP_BINARY_NAME} 
 # ########## Make soft symlink ##########
-# cd ${ROOT_PATH}
-# pwd
-# echo "[INFO] Succefully built ${LLM_APP_BINARY_NAME}"
-# echo "[INFO] Making soft symbolic link ${LLM_APP_BINARY_NAME} from ${LLM_APP_BINARY_PATH} to ${ROOT_PATH}"
-# if [ ${LLM_APP_BINARY_NAME} ]; then
-#     rm ${LLM_APP_BINARY_NAME}
-#     echo "Deleted: ${LLM_APP_BINARY_NAME}"
-# fi
-# ln -s ${LLM_APP_BINARY_PATH} 
+cd ${ROOT_PATH}
+pwd
+echo "[INFO] Succefully built ${LLM_APP_BINARY_NAME}"
 
-# echo "[INFO] Setup finished."
+if [ ${LLM_APP_BINARY_NAME} ]; then
+    rm ${LLM_APP_BINARY_NAME}
+    echo "Exisinting symlink deleted: ${LLM_APP_BINARY_NAME}"
+fi
+
+echo "[INFO] Making soft symbolic link ${LLM_APP_BINARY_NAME} from ${LLM_APP_BINARY_PATH} to ${ROOT_PATH}"
+ln -s ${LLM_APP_BINARY_PATH} 
+
+
+echo "[INFO] Setup finished."
+exit 0

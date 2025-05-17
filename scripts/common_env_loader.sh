@@ -1,7 +1,3 @@
-
-
-#!/bin/bash
-
 # sshpass 설치 여부 확인
 if ! command -v sshpass &> /dev/null; then
     echo "sshpass가 설치되어 있지 않습니다. 설치 합니다."

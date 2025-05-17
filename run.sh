@@ -127,3 +127,6 @@ while read -r line; do
         log "==================================="
     fi
 done <"$FILE"
+
+
+exit 0

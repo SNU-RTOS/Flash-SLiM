@@ -46,6 +46,7 @@ while read -r line; do
 
     fi
 done <"$FILE"
+exit 0
 
 ######
 # text_generator_main: Warning: SetProgramUsageMessage() never called

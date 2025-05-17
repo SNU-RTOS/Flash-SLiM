@@ -1,18 +1,25 @@
 #!/bin/bash
+
+# ──────────────────────────────────────────────────────────────────────────────
+source common.sh
 cd ..
 source .env
 
+# ── Build Configuration ───────────────────────────────────────────────────────
 BUILD_MODE=${1:-release}
 if [ "$BUILD_MODE" = "debug" ]; then
   BAZEL_CONF="-c dbg"
-  COPT_FLAGS="--copt=-Og --copt=-fPIC"
+  COPT_FLAGS="--copt=-Og"
   LINKOPTS=""
+  USE_PIC_SUFFIX="a"
 else
   BAZEL_CONF="-c opt"
-  COPT_FLAGS="--copt=-Os --copt=-fPIC"
+  COPT_FLAGS="--copt=-Os --copt=-fPIC "
   LINKOPTS="--linkopt=-s"
+  USE_PIC_SUFFIX="pic.a"
 fi
 
+# ── paths ─────────────────────────────────────────────────────────────────────
 ABSEIL_PATH=${AI_EDGE_TORCH_PATH}/bazel-bin/external/com_google_absl/absl
 ABSEIL_HEADER_PATH=${AI_EDGE_TORCH_PATH}/bazel-ai-edge-torch/external/com_google_absl/absl
 SENTENCEPIECE_PATH=${AI_EDGE_TORCH_PATH}/bazel-bin/external/com_google_sentencepiece
@@ -20,48 +27,56 @@ SENTENCEPIECE_HEADER_PATH=${AI_EDGE_TORCH_PATH}/bazel-ai-edge-torch/external/com
 PROTOBUF_PATH=${AI_EDGE_TORCH_PATH}/bazel-bin/external/com_google_protobuf
 PROTOBUF_HEADER_PATH=${AI_EDGE_TORCH_PATH}/bazel-ai-edge-torch/external/com_google_protobuf
 
-
-cd ${AI_EDGE_TORCH_PATH}
+cd "${AI_EDGE_TORCH_PATH}"
 pwd
 
-########## Build ##########
+# ── build abseil and sentencepiece ──────────────────────────────────────────────
+echo "[INFO] Build abseil ($BUILD_MODE mode) .."
+bazel build ${BAZEL_CONF} \
+  $(bazel query 'kind("cc_library", @com_google_absl//absl/...:*) except attr("name", ".*benchmark.*", @com_google_absl//absl/...)') \
+  @com_google_sentencepiece//:sentencepiece_processor \
+  @com_google_sentencepiece//:sentencepiece_proto \
+  @com_google_sentencepiece//:sentencepiece_model_proto \
+  @com_google_protobuf//:protobuf_lite \
+  ${COPT_FLAGS} ${LINKOPTS}
 
-# echo "[INFO] Build abseil ($BUILD_MODE mode) .."
-# bazel build ${BAZEL_CONF} \
-#   $(bazel query 'kind("cc_library", @com_google_absl//absl/...:*) except attr("name", ".*benchmark.*", @com_google_absl//absl/...)') \
-#                           @com_google_sentencepiece//:sentencepiece_processor \
-#     @com_google_sentencepiece//:sentencepiece_proto \
-#     @com_google_sentencepiece//:sentencepiece_model_proto \
-#     @com_google_protobuf//:protobuf_lite \
-#     ${COPT_FLAGS} ${LINKOPTS}
-
-########## Symlink ##########
+# ── symlinks ──────────────────────────────────────────────────────────────────
 echo "[INFO] Symlink abseil and sentencepiece .."
 
-find -L "${ABSEIL_PATH}" -type f -name "lib*.a" | while read -r libfile; do
-  target_link="${ROOT_PATH}/lib/absl/$(basename "$libfile")"
-  echo "→ Making symlink: $(basename "$libfile")"
-  ln -sf "$libfile" "$target_link"
+
+mkdir -p "${ROOT_PATH}/lib/absl" "${ROOT_PATH}/inc"
+
+## ──────────── abseil ──────────────────────────────────────────────
+find -L "${ABSEIL_PATH}" -type f -name "lib*.${USE_PIC_SUFFIX}" | while read -r libfile; do
+  base="$(basename "$libfile")"
+  link_name="${base%.$USE_PIC_SUFFIX}.a"
+  target_link="${ROOT_PATH}/lib/absl/${link_name}"
+
+  create_symlink_or_fail "$libfile" "$target_link" "$link_name"
 done
 
-echo "→ Making symlink: abseil header files"
-ln -sf ${ABSEIL_HEADER_PATH} ${ROOT_PATH}/inc/
+create_symlink_or_fail "${ABSEIL_HEADER_PATH}" \
+                       "${ROOT_PATH}/inc/absl" \
+                       "abseil header files"
 
+## ──────────── Sentencepiece ───────────────────────────────────────
+create_symlink_or_fail "${SENTENCEPIECE_PATH}/libsentencepiece_processor.pic.a" \
+                         "${ROOT_PATH}/lib/libsentencepiece_processor.a" \
+                         "libsentencepiece_processor.a"
 
-# SentencePiece
-echo "→ Making symlink: libsentencepiece_processor.a"
-ln -sf ${SENTENCEPIECE_PATH}/libsentencepiece_processor.a ${ROOT_PATH}/lib/
-echo "→ Making symlink: libsentencepiece_proto.a"
-ln -sf ${SENTENCEPIECE_PATH}/libsentencepiece_proto.a  ${ROOT_PATH}/lib/
-echo "→ Making symlink: libsentencepiece_model_proto.a"
-ln -sf ${SENTENCEPIECE_PATH}/libsentencepiece_model_proto.a ${ROOT_PATH}/lib/
-echo "→ Making symlink: sentencepiece header files"
-ln -sf ${SENTENCEPIECE_HEADER_PATH} ${ROOT_PATH}/inc/sentencepiece
+for name in sentencepiece_proto sentencepiece_model_proto; do
+  libfile="${SENTENCEPIECE_PATH}/lib${name}.a"
+  create_symlink_or_fail "$libfile" "${ROOT_PATH}/lib/lib${name}.a" "lib${name}.a"
+done
 
-# ProtoBuf
-echo "→ Making symlink: libprotobuf_lite.so"
-ln -sf ${PROTOBUF_PATH}/libprotobuf_lite.so ${ROOT_PATH}/lib/
+create_symlink_or_fail "${SENTENCEPIECE_HEADER_PATH}" \
+                       "${ROOT_PATH}/inc/sentencepiece" \
+                       "sentencepiece header files"
 
+## ──────────── Protobuf ────────────────────────────────────────────
+create_symlink_or_fail "${PROTOBUF_PATH}/libprotobuf_lite.so" \
+                       "${ROOT_PATH}/lib/libprotobuf_lite.so" \
+                       "libprotobuf_lite.so"
 
-cd ${ROOT_PATH}/scripts
+cd "${ROOT_PATH}/scripts"
 pwd
