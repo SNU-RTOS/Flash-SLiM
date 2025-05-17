@@ -9,7 +9,9 @@ MODULE.bazel
 
 ########## User files ##########
 evaluation/*
-
+lib
+obj
+output
 result_*
 perf.*
 *.txt
@@ -30,3 +32,7 @@ backup
 log_backup
 external
 util/benchmark_ops_results
+inc/absl
+inc/sentencepiece
+inc/tensorflow
+inc/flatbuffers

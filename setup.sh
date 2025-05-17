@@ -9,7 +9,8 @@ TENSORFLOW_COMMIT_HASH=117a62ac439ed87eb26f67208be60e01c21960de
 
 LLM_APP_SRC=${ROOT_PATH}/src
 LLM_APP_BINARY_NAME=text_generator_main
-LLM_APP_BINARY_PATH=${AI_EDGE_TORCH_PATH}/bazel-bin/ai_edge_torch/generative/examples/cpp/${LLM_APP_BINARY_NAME}
+# LLM_APP_BINARY_PATH=${AI_EDGE_TORCH_PATH}/bazel-bin/ai_edge_torch/generative/examples/cpp/${LLM_APP_BINARY_NAME}
+LLM_APP_BINARY_PATH=./output/${LLM_APP_BINARY_NAME}
 
 echo "[INFO] ROOT_PATH: ${ROOT_PATH}"
 echo "[INFO] EXTERNAL PATH: ${EXTERNAL_PATH}"
@@ -63,21 +64,54 @@ fi
 cd ${EXTERNAL_PATH}
 pwd
 
-########## Build LiteRT_LLM_Inference_app ##########
+########## Make folders ##########
+cd ${ROOT_PATH}
+pwd
+
+if [ ! -d "inc" ]; then
+    mkdir inc    
+fi
+
+if [ ! -d "lib" ]; then
+    mkdir lib   
+fi
+
+if [ ! -d "obj" ]; then
+    mkdir obj  
+fi
+
+if [ ! -d "output" ]; then
+    mkdir output  
+fi
+
+########## Build LiteRT ##########
+cd ${ROOT_PATH}/scripts
+pwd
+
+echo "[INFO] Build LiteRT"
+./build-litert.sh  debug
+./build-litert_gpu_delegate.sh  debug
+./build-deps.sh  debug
+echo "========================"
+
+# ########## Build LiteRT_LLM_Inference_app ##########
 echo "[INFO] Build ${LLM_APP_BINARY_NAME}"
 echo "========================"
 cd ${ROOT_PATH}
+pwd
 ${ROOT_PATH}/build.sh
-cd ${ROOT_PATH}
 echo "========================"
 
-########## Make soft symlink ##########
-echo "[INFO] Succefully built ${LLM_APP_BINARY_NAME}"
-echo "[INFO] Making soft symbolic link ${LLM_APP_BINARY_NAME} from ${LLM_APP_BINARY_PATH} to ${ROOT_PATH}"
-if [ ${LLM_APP_BINARY_NAME} ]; then
-    rm ${LLM_APP_BINARY_NAME}
-    echo "Deleted: ${LLM_APP_BINARY_NAME}"
-fi
-ln -s ${LLM_APP_BINARY_PATH} 
+cp ${LLM_APP_BINARY_PATH} ${LLM_APP_BINARY_NAME} 
+# ########## Make soft symlink ##########
+# cd ${ROOT_PATH}
+# pwd
+# echo "[INFO] Succefully built ${LLM_APP_BINARY_NAME}"
+# echo "[INFO] Making soft symbolic link ${LLM_APP_BINARY_NAME} from ${LLM_APP_BINARY_PATH} to ${ROOT_PATH}"
+# if [ ${LLM_APP_BINARY_NAME} ]; then
+#     rm ${LLM_APP_BINARY_NAME}
+#     echo "Deleted: ${LLM_APP_BINARY_NAME}"
+# fi
+# ln -s ${LLM_APP_BINARY_PATH} 
 
-echo "[INFO] Setup finished."
+# echo "[INFO] Setup finished."
