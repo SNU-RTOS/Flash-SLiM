@@ -1,119 +1,107 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# ------------------------------------------------------------------------------
+# setup.sh
+#
+# 1) Prepare third-party sources (ai-edge-torch, TensorFlow at a fixed commit)
+# 2) Build LiteRT and the GPU delegate
+# 3) Build the LLM inference application
+#
+# Required environment variables (.env):
+#   ROOT_PATH           – project root directory
+#   EXTERNAL_PATH       – directory for external sources (e.g. ${ROOT_PATH}/external)
+#   AI_EDGE_TORCH_PATH  – "${EXTERNAL_PATH}/ai-edge-torch"
+#   TENSORFLOW_PATH     – "${EXTERNAL_PATH}/tensorflow"
+#   LLM_APP_SRC         – "${ROOT_PATH}/src/llm_app"
+#
+# Usage:
+#   ./setup.sh          # build in “release” mode (default)
+#   ./setup.sh debug    # build in “debug”  mode
+# ------------------------------------------------------------------------------
+
+set -euo pipefail
 
 source .env
 
-########## Setup env ##########
+# --- Configuration ------------------------------------------------------------
+TF_COMMIT=117a62ac439ed87eb26f67208be60e01c21960de
+BUILD_TYPE="${1:-release}"   # debug | release
 
-TENSORFLOW_COMMIT_HASH=117a62ac439ed87eb26f67208be60e01c21960de
+# --- Helpers ------------------------------------------------------------------
+run()         { echo "+ $*"; "$@"; }
+ensure_dir()  { [[ -d $1 ]] || run mkdir -p "$1"; }
+banner()      { printf "\n\033[1;34m========== %s ==========\033[0m\n" "$*"; }
 
+# --- Show environment ---------------------------------------------------------
+cat <<EOF
+[ENV]
+  ROOT_PATH          = ${ROOT_PATH}
+  EXTERNAL_PATH      = ${EXTERNAL_PATH}
+  AI_EDGE_TORCH_PATH = ${AI_EDGE_TORCH_PATH}
+  TENSORFLOW_PATH    = ${TENSORFLOW_PATH}
+  BUILD_TYPE         = ${BUILD_TYPE}
+EOF
 
-LLM_APP_SRC=${ROOT_PATH}/src
-LLM_APP_BINARY_NAME=text_generator_main
-LLM_APP_BINARY_PATH=./output/${LLM_APP_BINARY_NAME}
+# ------------------------------------------------------------------------------
+# 1. Ensure external directory exists
+# ------------------------------------------------------------------------------
+ensure_dir "${EXTERNAL_PATH}"
 
-echo "[INFO] ROOT_PATH: ${ROOT_PATH}"
-echo "[INFO] EXTERNAL PATH: ${EXTERNAL_PATH}"
-echo "[INFO] AI_EDGE_TORCH_PATH: ${AI_EDGE_TORCH_PATH}"
-echo "[INFO] TENSORFLOW_PATH: ${TENSORFLOW_PATH}"
+# ------------------------------------------------------------------------------
+# 2. Clone ai-edge-torch and create sample-app symlink
+# ------------------------------------------------------------------------------
+banner "Installing ai-edge-torch"
+if [[ ! -d "${AI_EDGE_TORCH_PATH}" ]]; then
+  run git clone https://github.com/SNU-RTOS/ai-edge-torch.git "${AI_EDGE_TORCH_PATH}"
 
-if [ ! -d ${EXTERNAL_PATH} ]; then
-    mkdir -p ${EXTERNAL_PATH}
-fi
+  # Link our app sources into examples/cpp
+  EX_CPP="${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp"
+  [[ -e "${EX_CPP}" ]] && run rm -rf "${EX_CPP}"
+  run ln -s "${LLM_APP_SRC}" "${EX_CPP}"
 
-########## Setup external sources ##########
-cd ${EXTERNAL_PATH}
-pwd
-echo "[INFO] Installing ai-edge-torch"
-# Install ai-edge-torch
-if [ ! -d ${AI_EDGE_TORCH_PATH} ]; then
-    # Clone customized ai-edge-torch 
-    git clone https://github.com/SNU-RTOS/ai-edge-torch.git
-
-    if [ -d "${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp" ]; then
-        rm -r ${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp
-        echo "[INFO] delete exisiting ${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp"
-    fi
-
-    ln -s ${LLM_APP_SRC} ${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp
-
-    # Update Tensorflow PATH in ai-edge-torch/WORKSPACE for build
-    WORKSPACE_FILE="${AI_EDGE_TORCH_PATH}/WORKSPACE"
-    sed -i "s|path = \".*\"|path = \"${TENSORFLOW_PATH}\"|" "$WORKSPACE_FILE"
-    echo "[INFO] Updated tensorflow local_repository path in ${TENSORFLOW_PATH}/WORKSPACE to: ${TENSORFLOW_PATH}"
+  # Update TensorFlow path in WORKSPACE
+  WORKSPACE="${AI_EDGE_TORCH_PATH}/WORKSPACE"
+  run sed -i "s|path = \".*\"|path = \"${TENSORFLOW_PATH}\"|" "${WORKSPACE}"
 else
-    echo "[INFO] ai-edge-torch is already installed, skipping ..."
+  echo "[SKIP] ai-edge-torch already present."
 fi
 
-## Install tensorflow
-echo "[INFO] Installing tensorflow"
-if [ ! -d ${TENSORFLOW_PATH} ]; then
-    mkdir -p ${TENSORFLOW_PATH}
-    cd ${TENSORFLOW_PATH}
-    pwd
-    git init .
-    git remote add origin https://github.com/tensorflow/tensorflow.git
-    git fetch --depth 1 origin  ${TENSORFLOW_COMMIT_HASH}
-    git checkout FETCH_HEAD
-    echo "[INFO] Patching tensorflow source to build with ai-edge-torch"
-    patch -p1 <../ai-edge-torch/bazel/org_tensorflow_system_python.diff
+# ------------------------------------------------------------------------------
+# 3. Clone TensorFlow at the specified commit
+# ------------------------------------------------------------------------------
+banner "Installing TensorFlow (${TF_COMMIT})"
+if [[ ! -d "${TENSORFLOW_PATH}" ]]; then
+  ensure_dir "${TENSORFLOW_PATH}"
+  pushd "${TENSORFLOW_PATH}" >/dev/null
+  run git init .
+  run git remote add origin https://github.com/tensorflow/tensorflow.git
+  run git fetch --depth 1 origin "${TF_COMMIT}"
+  run git checkout FETCH_HEAD
+  echo "[INFO] Applying LiteRT patch ..."
+  run patch -p1 <"${AI_EDGE_TORCH_PATH}/bazel/org_tensorflow_system_python.diff"
+  popd >/dev/null
 else
-    echo "[INFO] tensorflow is already installed, skipping ..."
+  echo "[SKIP] TensorFlow already present."
 fi
 
-cd ${EXTERNAL_PATH}
-pwd
+# ------------------------------------------------------------------------------
+# 4. Create local build directories (inc/lib/obj/output)
+# ------------------------------------------------------------------------------
+for d in inc lib obj output; do ensure_dir "${ROOT_PATH}/${d}"; done
 
-########## Make folders ##########
-cd ${ROOT_PATH}
-pwd
+# ------------------------------------------------------------------------------
+# 5. Build LiteRT and its dependencies
+# ------------------------------------------------------------------------------
+banner "Building LiteRT and delegates (${BUILD_TYPE})"
+pushd "${ROOT_PATH}/scripts" >/dev/null
+run ./build-litert.sh              "${BUILD_TYPE}"
+run ./build-litert_gpu_delegate.sh "${BUILD_TYPE}"
+run ./build-deps.sh                "${BUILD_TYPE}"
+popd >/dev/null
 
-if [ ! -d "inc" ]; then
-    mkdir inc    
-fi
+# ------------------------------------------------------------------------------
+# 6. Build the LLM inference application
+# ------------------------------------------------------------------------------
+# banner "Building LLM inference app (${BUILD_TYPE})"
+# run "${ROOT_PATH}/build.sh" "${BUILD_TYPE}"
 
-if [ ! -d "lib" ]; then
-    mkdir lib   
-fi
-
-if [ ! -d "obj" ]; then
-    mkdir obj  
-fi
-
-if [ ! -d "output" ]; then
-    mkdir output  
-fi
-
-########## Build LiteRT ##########
-cd ${ROOT_PATH}/scripts
-pwd
-
-echo "[INFO] Build LiteRT"
-./build-litert.sh  release
-./build-litert_gpu_delegate.sh  release
-./build-deps.sh  release
-echo "========================"
-
-# ########## Build LiteRT_LLM_Inference_app ##########
-echo "[INFO] Build ${LLM_APP_BINARY_NAME}"
-echo "========================"
-cd ${ROOT_PATH}
-pwd
-${ROOT_PATH}/build.sh
-echo "========================"
-
-# ########## Make soft symlink ##########
-cd ${ROOT_PATH}
-pwd
-echo "[INFO] Succefully built ${LLM_APP_BINARY_NAME}"
-
-if [ ${LLM_APP_BINARY_NAME} ]; then
-    rm ${LLM_APP_BINARY_NAME}
-    echo "Exisinting symlink deleted: ${LLM_APP_BINARY_NAME}"
-fi
-
-echo "[INFO] Making soft symbolic link ${LLM_APP_BINARY_NAME} from ${LLM_APP_BINARY_PATH} to ${ROOT_PATH}"
-ln -s ${LLM_APP_BINARY_PATH} 
-
-
-echo "[INFO] Setup finished."
-exit 0
+banner "Setup complete"

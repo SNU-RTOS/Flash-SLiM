@@ -1,186 +1,202 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# ------------------------------------------------------------------------------
+# run_cgroup.sh – Memory‑constrained LLM inference benchmark (cgroup v2 / v1)
+# ------------------------------------------------------------------------------
+# • Runs each prompt under a given MemoryMax (CGROUP_MMAX array)
+# • Supports GPU / CPU binaries (name pattern: output/text_generator_main_<target>)
+# • Auto‑detects cgroup v2 (systemd‑run) or falls back to cgroup v1 (cgexec)
+# ------------------------------------------------------------------------------
 
-################ Load utils ################
-source ./util/utils.sh
+set -euo pipefail
 
-log() {
-    echo "$@" | tee -a "$OUTPUT_FILE"
-}
+# ------------------------------------------------------------------------------
+# 0. Load environment and helpers
+# ------------------------------------------------------------------------------
+source .env               # contains PROMPT_PATH, MODEL_PATH, …
+source ./scripts/utils.sh # provides clear_caches()
 
-################ Setup Environment ################
-source .env
-
-################ CLI Parsing ################
-# Default values
+# ------------------------------------------------------------------------------
+# 1. Defaults & CLI parsing
+# ------------------------------------------------------------------------------
+TARGET="cpu" # cpu | gpu
 LOG_ENABLED=false
-CORE_LIST="all" # 기본값: 모든 코어 사용 (taskset 사용 안 함)
-NUM_THREADS=1   # 기본값: 1개 스레드 사용
-FILE="./${PROMPT_PATH}/sample_prompt_8_1.txt"
-MAX_TOKEN_LENGHT_TO_GENERATE=16
+CORE_LIST="all" # taskset core list
+NUM_THREADS=1
+PROMPT_FILE="./${PROMPT_PATH}/sample_prompt_8_1.txt"
+MAX_TOK_LEN=16
 NUM_REPEATS=1
 
-# Set logging functions
-if [ "$LOG_ENABLED" = true ]; then
-    log() {
-        echo "$@" | tee -a "$OUTPUT_FILE"
-    }
-else
-    log() {
-        echo "$@"
-    }
-fi
+usage() {
+    cat <<EOF
+Usage: run_cgroup.sh [OPTIONS]
 
-# Parse command-line arguments
-while [[ "$#" -gt 0 ]]; do
+Run LLM inference benchmarks with per‑process memory limits.
+
+Options:
+  -g, --target <gpu|cpu>   Select binary to run (default: cpu)
+  -l, --log                Enable logging to ./result_<mem>/output_*.log
+  -c, --core <CORES>       Bind to CPU core list (e.g. "0-3" or "1,3")
+  -t, --threads <N>        Threads per run (default: 1)
+  -f, --file <PATH>        Prompt CSV file (default: \$PROMPT_FILE)
+  --tl, --max_tokens <N>   Max tokens to generate (default: 16)
+  -r, --repeat <N>         Repeat all prompts N times (default: 1)
+  -h, --help               Show this help and exit
+
+Examples:
+  ./run_cgroup.sh --target gpu --log --core 0-3 --threads 4 --repeat 3
+  ./run_cgroup.sh -f prompts/sample_prompt_8_10.txt --tl 32
+EOF
+    exit 0
+}
+
+while [[ $# -gt 0 ]]; do
     case $1 in
-    -l | --log) LOG_ENABLED=true ;;
+    -g | --target)
+        TARGET="$2"
+        shift 2
+        ;;
+    -l | --log)
+        LOG_ENABLED=true
+        shift
+        ;;
     -c | --core)
         CORE_LIST="$2"
-        shift
+        shift 2
         ;;
     -t | --threads)
         NUM_THREADS="$2"
-        shift
+        shift 2
         ;;
-    -i | --input_prompt_path)
-        FILE="$2"
-        shift
+    -f | --file)
+        PROMPT_FILE="$2"
+        shift 2
         ;;
-    -mtl | --max_token_length)
-        MAX_TOKEN_LENGHT_TO_GENERATE="$2"
-        shift
+    -tl | --max_tokens)
+        MAX_TOK_LEN="$2"
+        shift 2
         ;;
     -r | --repeat)
         NUM_REPEATS="$2"
-        shift
+        shift 2
         ;;
-    -h | --help)
-        echo "Usage: $0 [-l|--log] [-c|--core CORES] [-t|--threads NUM_THREADS] [-i|--input_prompt_path PATH] [-mtl|--max_token_length NUM] [-r|--repeat NUM]"
-        echo "  -l, --log                   Enable logging (default: disabled)"
-        echo "  -c, --core                  CORES CPU cores for execution (default: all cores)"
-        echo "  -t, --threads               NUM_THREADS number of threads (default: 1)"
-        echo "  -i, --input_prompt_path     PATH Path of input prompt file (default: sample_prompt_8_1.txt)"
-        echo "  -mtl, --max_token_length    NUM Max_token_length to generate (default: 16)"
-        echo "  -r, --repeat                NUM Number of repeat (default: 1)"
-        exit 0
-        ;;
+    -h | --help) usage ;;
     *)
-        echo "Unknown option: $1"
-        exit 1
+        echo "[ERROR] Unknown option: $1" >&2
+        usage
         ;;
     esac
-    shift
 done
 
-################ Model Info ################
-# Llama 3.2 3B INT8 quantized
-MODEL_PATH="${MODEL_PATH}/llama-3.2-3b-it-q8"
+[[ "${TARGET}" =~ ^(gpu|cpu)$ ]] || {
+    echo "Invalid --target ${TARGET}"
+    exit 1
+}
+
+# ------------------------------------------------------------------------------
+# 2. Logging helper (overridden if --log)
+# ------------------------------------------------------------------------------
+log() { echo "$@"; }
+if [ "$LOG_ENABLED" = true ]; then
+    log() { echo "$@" | tee -a "$OUTPUT_FILE"; }
+fi
+
+# ------------------------------------------------------------------------------
+# 3. Model configuration
+# ------------------------------------------------------------------------------
+MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
 MODEL_NAME="llama_q8_ekv1024"
+BIN="output/text_generator_main_${TARGET}"
 
-if [ ! -f "$FILE" ]; then
-    echo "'$FILE' no exists"
+[[ -x "$BIN" ]] || {
+    echo "[ERROR] Binary not found: $BIN"
     exit 1
-fi
+}
+[[ -f "$PROMPT_FILE" ]] || {
+    echo "[ERROR] Prompt file not found: $PROMPT_FILE"
+    exit 1
+}
 
-################ Check number of prompts in given .txt file ################
-if [[ "$FILE" =~ ^.*_.*_([0-9]+)\.txt$ ]]; then
+if [[ "$PROMPT_FILE" =~ ^.*_.*_([0-9]+)\.txt$ ]]; then
     PROMPT_ITEM_SIZE="${BASH_REMATCH[1]}"
-    # echo "Number of prompts: $PROMPT_ITEM_SIZE in $FILE"
 else
-    echo "Please check the name of prompt file. '[ANY NAME]_[ANY NAME]_[number of prompts].txt' "
+    echo "[ERROR] Prompt filename must match *_*_<N>.txt"
     exit 1
 fi
 
-################ Set CGROUP ################
+# ------------------------------------------------------------------------------
+# 4. Memory scenarios to test (edit as needed)
+# ------------------------------------------------------------------------------
 CGROUP_MMAX=(
-    "8G"
-    # "4G"
-    # "2G"
-    # "1G"
     # "512M"
-    #"256M"
-)
-# Cleanup existing cgroup if it exists
-if [ -d "/sys/fs/cgroup/memory/mygroup" ]; then
-    # Kill any processes still in the cgroup
-    kill -9 $(cat /sys/fs/cgroup/memory/mygroup/tasks 2>/dev/null) 2>/dev/null
-    # Remove the cgroup
-    rmdir /sys/fs/cgroup/memory/mygroup 2>/dev/null
-fi
+    # "1G"
+    "2G"
+    )
 
-mkdir -p /sys/fs/cgroup/memory/mygroup
+# ------------------------------------------------------------------------------
+# 5. cgroup execution helper
+# ------------------------------------------------------------------------------
+run_with_memlimit() {
+    local mmax="$1"
+    shift
+    local cmd=("$@")
 
-################ Main Scripts ################
+    if mount | grep -q "cgroup2"; then
+        systemd-run --quiet --scope \
+            -p MemoryMax=$mmax -p MemoryHigh=$mmax -p MemorySwapMax=0 \
+            -- "${cmd[@]}"
+    else
+        local cg="/sys/fs/cgroup/memory/llmbench"
+        mkdir -p "$cg"
+        echo 0 >"$cg/memory.force_empty" || true
+        echo "$(($(numfmt --from=iec $mmax)))" >"$cg/memory.limit_in_bytes"
+        cgexec -g memory:llmbench -- "${cmd[@]}"
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# 6. Main loop
+# ------------------------------------------------------------------------------
 for MMAX in "${CGROUP_MMAX[@]}"; do
     RESULTS_DIR="result_${MMAX}"
-
-    if [ ! -d "$RESULTS_DIR" ]; then
-        mkdir "$RESULTS_DIR"
-    fi
-
-    # Set memory limit of the cgroup
-    echo $MMAX >/sys/fs/cgroup/memory/mygroup/memory.limit_in_bytes
-    echo 0 >/sys/fs/cgroup/memory/mygroup/memory.force_empty
-
+    mkdir -p "$RESULTS_DIR"
     prompt_id=1
-    echo "======== Current Allocatable Memory Size: $MMAX ======="
+    echo "[INFO] === Memory Limit: $MMAX ==="
 
-    for ((i = 1; i <= NUM_REPEATS; i++)); do
-        echo "========== Iteration $i/$NUM_REPEATS =========="
+    for ((iter = 1; iter <= NUM_REPEATS; iter++)); do
+        echo "[INFO] --- Iteration $iter / $NUM_REPEATS ---"
 
-        while read -r line; do
-            if [[ "$line" =~ ^([0-9]+),\"(.*)\"$ ]]; then
-                token_count="${BASH_REMATCH[1]}"
-                prompt="${BASH_REMATCH[2]}"
+        while IFS= read -r line; do
+            [[ "$line" =~ ^([0-9]+),\"(.*)\"$ ]] || continue
+            token_count="${BASH_REMATCH[1]}"
+            prompt="${BASH_REMATCH[2]}"
 
-                # token_count 값을 반영하여 로그 파일 동적으로 설정
-                # TIMESTAMP=$(date +"%y%m%d_%H%M%S")  # 타임스탬프 생성
-                OUTPUT_FILE="${RESULTS_DIR}/output_${token_count}_$((${i} * ${PROMPT_ITEM_SIZE} + ${prompt_id})).log"
+            OUTPUT_FILE="${RESULTS_DIR}/output_${token_count}_$((iter * PROMPT_ITEM_SIZE + prompt_id)).log"
 
-                log "[INFO] Start LLM inference"
-                log "[INFO] Model: ${MODEL_NAME}"
-                log "[INFO] Using CPU Cores: ${CORE_LIST}"
-                log "[INFO] Number of Threads: ${NUM_THREADS}"
-                log "[INFO] Logging Enabled: ${LOG_ENABLED}"
-                log "[INFO] Output File: ${OUTPUT_FILE}"
+            log "[INFO] Prompt #${prompt_id} | Tokens: $token_count"
+            log "[INFO] CPU cores: ${CORE_LIST} | Threads: ${NUM_THREADS} | Target: ${TARGET}"
+            clear_caches
 
-                log "[INFO] Dropping OS Page Caches.."
-                clear_caches
-                log "[INFO] Clearing CPU Caches"
+            cmd=("$BIN"
+                --tflite_model "${MODEL_DIR}/${MODEL_NAME}.tflite"
+                --sentencepiece_model "${MODEL_DIR}/tokenizer.model"
+                --max_decode_steps "${MAX_TOK_LEN}"
+                --start_token "<bos>"
+                --stop_token "<eos>"
+                --num_threads "${NUM_THREADS}"
+                --prompt "${prompt}"
+                --weight_cache_path "${MODEL_DIR}/${MODEL_NAME}.xnnpack_cache")
 
-                log "[INFO] Running inference for token count: $token_count"
+            [[ "$CORE_LIST" != "all" ]] && cmd=(taskset -c "$CORE_LIST" "${cmd[@]}")
 
-                # taskset 적용 여부 결정
-                CMD="./text_generator_main \
-                    --tflite_model='${MODEL_PATH}/${MODEL_NAME}.tflite' \
-                    --sentencepiece_model='${MODEL_PATH}/tokenizer.model' \
-                    --max_decode_steps=${MAX_TOKEN_LENGHT_TO_GENERATE} \
-                    --start_token='<bos>' \
-                    --stop_token='<eos>' \
-                    --num_threads='${NUM_THREADS}' \
-                    --prompt='${prompt}' \
-                    --weight_cache_path='${MODEL_PATH}/${MODEL_NAME}.xnnpack_cache'"
-
-                if [ "$CORE_LIST" != "all" ]; then
-                    CMD="cgexec -g memory:mygroup taskset -c ${CORE_LIST} ${CMD}"
-                fi
-
-                # Run the model and log everything
-                if [ "$LOG_ENABLED" = true ]; then
-                    eval "sudo $CMD" 2>&1 | tee -a "$OUTPUT_FILE"
-                    log "[INFO] Results saved in: $OUTPUT_FILE"
-                else
-                    eval "sudo $CMD"
-                fi
-                log "==================================="
-
+            if [ "$LOG_ENABLED" = true ]; then
+                run_with_memlimit "$MMAX" "${cmd[@]}" 2>&1 | tee -a "$OUTPUT_FILE"
+            else
+                run_with_memlimit "$MMAX" "${cmd[@]}"
             fi
 
-            prompt_id=$((prompt_id + 1))
-            if ((prompt_id > ${PROMPT_ITEM_SIZE})); then
-                prompt_id=1
-            fi
-
-        done <"$FILE"
+            ((prompt_id++))
+            ((prompt_id > PROMPT_ITEM_SIZE)) && prompt_id=1
+        done <"$PROMPT_FILE"
     done
+
 done

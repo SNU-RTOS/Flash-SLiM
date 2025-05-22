@@ -1,72 +1,86 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# run_once.sh
+#
+#   ./run_once.sh            # run GPU binary (default) once
+#   ./run_once.sh cpu        # run CPU binary once
+#   ./run_once.sh gpu        # explicit GPU run
+#
+# Prerequisites:
+#   * build.sh must have produced  output/text_generator_main_gpu  and/or
+#     output/text_generator_main_cpu.
+#   * .env defines ROOT_PATH, MODEL_PATH, PROMPT_PATH, etc.
+#   * scripts/utils.sh provides clear_caches()
+
+set -euo pipefail
 
 ################ Load utils ################
-source ./util/utils.sh
+source ./scripts/utils.sh
 
 ################ Setup environment ################
 source .env
 
-##################################
-# MODEL_PATH="/home/rtos/workspace/ghpark/export/gemma-2-2b-it-q8"
-# MODEL_NAME="gemma2_q8_ekv1024"
+# ---------------------------------------------------------------------------
+# 1. Choose target (gpu|cpu)
+# ---------------------------------------------------------------------------
+TARGET="${1:-gpu}"          # default = gpu
 
-# MODEL_PATH="/home/rtos/workspace/ghpark/export/gemma-2-2b-it-fp32"
-# MODEL_NAME="gemma2_f32_ekv1024"
-
-MODEL_PATH="${MODEL_PATH}/llama-3.2-3b-it-q8"
-MODEL_NAME="llama_q8_ekv1024"
-
-
-FILE="./${PROMPT_PATH}/sample_prompt_8_1.txt"
-
-if [ ! -f "$FILE" ]; then
-    echo "Error: 파일 '$FILE'이 존재하지 않습니다."
+case "${TARGET}" in
+  gpu|cpu) ;;
+  *)
+    echo "Usage: $0 [gpu|cpu]" >&2
     exit 1
+    ;;
+esac
+
+BIN="output/text_generator_main_${TARGET}"
+if [[ ! -x "${BIN}" ]]; then
+  echo "Error: ${BIN} not found or not executable. Build it first!" >&2
+  exit 2
 fi
 
-echo "[INFO] Dropping OS Page Caches.."
+echo "[INFO] Selected binary  : ${BIN}"
+echo "[INFO] Target accelerator: ${TARGET^^}"
+
+# ---------------------------------------------------------------------------
+# 2. Model & prompt settings
+# ---------------------------------------------------------------------------
+MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
+MODEL_NAME="llama_q8_ekv1024"
+
+PROMPT_FILE="./${PROMPT_PATH}/sample_prompt_8_1.txt"
+if [[ ! -f "${PROMPT_FILE}" ]]; then
+  echo "Error: prompt file '${PROMPT_FILE}' does not exist." >&2
+  exit 3
+fi
+
+# Grab the first valid prompt line:  <token_count>,"<prompt text>"
+IFS= read -r FIRST_LINE < "${PROMPT_FILE}"
+if [[ ! "${FIRST_LINE}" =~ ^([0-9]+),\"(.*)\"$ ]]; then
+  echo "Error: prompt-file line format invalid." >&2
+  exit 4
+fi
+
+TOKEN_COUNT="${BASH_REMATCH[1]}"
+PROMPT_TEXT="${BASH_REMATCH[2]}"
+
+echo "[INFO] Using prompt (${TOKEN_COUNT} tokens): ${PROMPT_TEXT}"
+
+# ---------------------------------------------------------------------------
+# 3. Clear caches
+# ---------------------------------------------------------------------------
+echo "[INFO] Dropping OS page cache..."
 clear_caches
-echo "[INFO] Clearing CPU Caches"
+echo "[INFO] CPU caches cleared."
 
-################ scripts ################
-while read -r line; do
-    if [[ "$line" =~ ^([0-9]+),\"(.*)\"$ ]]; then
-            token_count="${BASH_REMATCH[1]}"
-            prompt="${BASH_REMATCH[2]}"
-
-        sudo ./text_generator_main \
-            --tflite_model="${MODEL_PATH}/${MODEL_NAME}.tflite" \
-            --sentencepiece_model="${MODEL_PATH}/tokenizer.model" \
-            --max_decode_steps=32 \
-            --start_token="<bos>" \
-            --stop_token="<eos>" \
-            --num_threads=1 \
-            --prompt="$prompt" \
-            --weight_cache_path="${MODEL_PATH}/${MODEL_NAME}.xnnpack_cache"
-
-    fi
-done <"$FILE"
-exit 0
-
-######
-# text_generator_main: Warning: SetProgramUsageMessage() never called
-#   Flags from ai_edge_torch/generative/examples/cpp/text_generator_main.cc:
-#     --lora_path (Optional path to LoRA artifact.); default: "";
-#     --max_decode_steps (The number of tokens to generate. Defaults to the KV
-#       cache size defined during conversion.); default: -1;
-#     --num_threads (Number of threads to use. Defaults to 4.); default: 4;
-#     --prompt (Input prompt to the model.); default: "Write an email:";
-#     --sentencepiece_model (Path to sentencepiece model.); default: "";
-#     --start_token (Start token is appended to the beginning of input prompt to
-#       signify start of sentence.); default: "";
-#     --stop_token (Stop token used to deterine end of decoding loop. If not
-#       provided will decode until max_kv_cache_size or max_decode_steps.);
-#       default: "";
-#     --tflite_model (Two-signature tflite model prepared for text generation
-#       using ODML tools.); default: "";
-#     --weight_cache_path (XNNPACK weight caching path, e.g.
-#       /tmp/model.xnnpack_cache.); default: "";
-
-# Try --helpfull to get a list of all flags or --help=substring shows help for
-# flags which include specified substring in either in the name, or description or
-# path.
+# ---------------------------------------------------------------------------
+# 4. Run once
+# ---------------------------------------------------------------------------
+sudo "./${BIN}" \
+  --tflite_model="${MODEL_DIR}/${MODEL_NAME}.tflite" \
+  --sentencepiece_model="${MODEL_DIR}/tokenizer.model" \
+  --max_decode_steps=32 \
+  --start_token="<bos>" \
+  --stop_token="<eos>" \
+  --num_threads=1 \
+  --prompt="${PROMPT_TEXT}" \
+  --weight_cache_path="${MODEL_DIR}/${MODEL_NAME}.xnnpack_cache"

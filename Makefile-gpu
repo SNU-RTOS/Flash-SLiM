@@ -1,0 +1,94 @@
+###############################################################################
+# Makefile 
+# Created by: Geonha Park
+# Date: 2025-05-17
+###############################################################################
+
+# 0. Base directories ─────────────────────────────────────────────────────────
+ROOT_DIR      := $(shell pwd)
+SRC_DIR       := src
+OBJ_DIR       := obj
+TARGET        := text_generator_main_gpu
+TARGET_PATH   := output/$(TARGET)
+
+# 1. Compiler settings ────────────────────────────────────────────────────────
+CXX           := g++
+CXXFLAGS      := -std=c++17 -D_USE_INTERNAL_STRING_VIEW -pthread
+INCS          := -Iinc -Iinc/sentencepiece -Iinc/absl
+
+# 2. Library directories ──────────────────────────────────────────────────────
+ABSL_LIB_DIR  := $(ROOT_DIR)/lib/absl
+LIB_DIRS      := -Llib -L$(ABSL_LIB_DIR)
+
+# 3. Abseil static libraries (keep only what you need) ────────────────────────
+ABSL_COMPONENTS := \
+	atomic_hook_test_helper \
+	bad_any_cast_impl        bad_optional_access    bad_variant_access \
+	base                     check_op              city                \
+	civil_time               commandlineflag       commandlineflag_internal \
+	conditions               config                cord cord_internal \
+	cordz_functions          cordz_handle          cordz_info          cordz_sample_token \
+	cpu_detect               crc32c                crc_cord_state      crc_internal \
+	debugging_internal       demangle_internal     die_if_null         distributions \
+	distribution_test_util   examine_stack         exception_safety_testing \
+	exponential_biased       failure_signal_handler flag               flag_internal \
+	fnmatch                  format                globals             graphcycles_internal \
+	hash                     hash_generator_testing hashtablez_sampler  initialize \
+	int128                   internal              kernel_timeout_internal \
+	leak_check               log_entry             log_message         log_severity \
+	log_sink                 log_sink_set          low_level_hash      malloc_internal \
+	marshalling              nullguard             parse               periodic_sampler \
+	platform                 pool_urbg             pow10_helper        private_handle_accessor \
+	program_name             proto                 randen              randen_hwaes \
+	randen_hwaes_impl        randen_slow           raw_hash_set        raw_logging_internal \
+	reflection               scoped_mock_log       scoped_set_env      seed_gen_exception \
+	seed_material            seed_sequences        spinlock_wait       stack_consumption \
+	stacktrace               status                statusor            strerror \
+	str_format_internal      strings               string_view         symbolize \
+	synchronization          throw_delegate      time \
+	time_zone                usage                 usage_internal
+
+# Use --start-group / --end-group so the linker can resolve cyclic deps
+ABSL_LIBS  := $(foreach lib,$(ABSL_COMPONENTS),-l$(lib))
+ABSL_GROUP := -Wl,--start-group $(ABSL_LIBS) -Wl,--end-group
+GENAIOPS_GROUP := -Wl,--start-group -lgenai_ops -lcache_buffer -lflatbuffers -Wl,--end-group
+
+# 4. External libraries ───────────────────────────────────────────────────────
+EXT_LIBS := \
+	-ltensorflowlite \
+	-ltensorflowlite_gpu_delegate -lEGL -lGLESv2 \
+	-lsentencepiece_processor -lsentencepiece_proto -lsentencepiece_model_proto \
+	-lprotobuf_lite \
+	-ldl -lrt -pthread          # required by Abseil & TF Lite
+
+# 5. Linker flags ─────────────────────────────────────────────────────────────
+LDFLAGS := -Wl,-rpath=\$$ORIGIN/../lib:\$$ORIGIN/lib $(EXT_LIBS) $(ABSL_GROUP) $(GENAIOPS_GROUP) 
+
+# 6. Sources / objects ────────────────────────────────────────────────────────
+SRCS     := text_generator_main.cc profiler.cc sampler.cc utils.cc
+OBJS     := $(SRCS:%.cc=%.o)
+OBJECTS  := $(patsubst %.o,$(OBJ_DIR)/%.o,$(OBJS))
+DEPS     := $(OBJECTS:.o=.d)
+
+# 7. Build rules ──────────────────────────────────────────────────────────────
+.PHONY: all clean
+
+all: $(TARGET_PATH)
+	@echo "✔ Build completed successfully"
+
+# (1) individual object files
+$(OBJ_DIR)/%.o : $(SRC_DIR)/%.cc
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(INCS) $(LIB_DIRS) -c $< -o $@ -MD
+
+# (2) final executable
+$(TARGET_PATH): $(OBJECTS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(INCS) $(LIB_DIRS) $(OBJECTS) -o $@ $(LDFLAGS)
+
+# (3) clean
+clean:
+	rm -rf $(TARGET_PATH) $(OBJECTS) $(DEPS)
+
+# (4) auto-generated dependencies
+-include $(DEPS)
