@@ -24,7 +24,7 @@ source ./scripts/utils.sh               # provides clear_caches()
 # 1. Defaults & CLI parsing
 # ------------------------------------------------------------------------------
 TARGET="cpu"           # cpu | gpu
-LOG_ENABLED=true
+LOG_ENABLED=false  # log to file
 CORE_LIST=all        # taskset core list
 NUM_THREADS=1
 PROMPT_FILE="./${PROMPT_PATH}/sample_prompt_8_1.txt"
@@ -42,7 +42,7 @@ usage() {
     Options:
     -g, --target <gpu|cpu>   Select binary to run (default: cpu)
 
-    -l, --log Enable logging to ./result_run_once directory. (default: on)
+    -l, --log Enable logging to ./result_run_once directory. (default: off)
 
     -c, --core <CORES>
         Specify CPU core(s) to bind the process using 'taskset'.

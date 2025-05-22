@@ -1,5 +1,6 @@
 #include "profiler.h"
 
+
 namespace
 {
     // Helper function to convert timeval to seconds
@@ -21,7 +22,7 @@ namespace
         std::ifstream stat_file("/proc/stat");
         if (!stat_file.is_open())
         {
-            return {0.0, 0.0};
+            return std::make_pair(0.0, 0.0);
         }
 
         std::string line;
@@ -41,11 +42,11 @@ namespace
                 double user_time = user + nice;
                 double system_time = system + irq + softirq;
 
-                return {user_time, system_time};
+                return std::make_pair(user_time, system_time);
             }
         }
 
-        return {0.0, 0.0};
+        return std::make_pair(0.0, 0.0);
     }
 
     // etc
@@ -60,10 +61,8 @@ namespace
 namespace ai_edge_torch::custom::profiler
 {
     // Function to detect which cores the process is actually running on
-    std::vector<int> detect_active_cores()
+    void detect_active_cores(std::vector<int> &cores)
     {
-        std::vector<int> cores;
-
         // Try to read process affinity mask
         cpu_set_t mask;
         CPU_ZERO(&mask);
@@ -79,7 +78,13 @@ namespace ai_edge_torch::custom::profiler
             }
         }
 
-        return cores;
+        std::cout << "[INFO] Process is running on cores: ";
+        for (int core : cores)
+        {
+            std::cout << core << " ";
+        }
+        std::cout << std::endl;
+
     }
 
     IOStats get_io_stats()
@@ -130,13 +135,65 @@ namespace ai_edge_torch::custom::profiler
                   << sys_time_sec << " [sec] System time" << std::endl;
     }
 
-    void print_rusage_records(const std::vector<RUsageRecord> &records)
+    void print_rusage_records(const std::vector<RUsageRecord> &records, const std::string &phase_name_prefix)
     {
-        for (size_t i = 0; i < records.size(); i++)
+        if (records.empty()) {
+            std::cout << "[RUsage] No records to print.\n";
+            return;
+        }
+
+        double total_user_time = 0.0;
+        double total_sys_time  = 0.0;
+        double total_cpu_time  = 0.0;
+        double total_wall_time = 0.0;
+
+        for (const auto &rec : records)
         {
-            print_rusage(records[i].start, records[i].end, "Decode " + std::to_string(i));
+            double user_time_start = __timeval_to_sec(rec.start_.ru_utime);
+            double user_time_end   = __timeval_to_sec(rec.end_.ru_utime);
+            double sys_time_start  = __timeval_to_sec(rec.start_.ru_stime);
+            double sys_time_end    = __timeval_to_sec(rec.end_.ru_stime);
+
+            double user_time = user_time_end - user_time_start;
+            double sys_time  = sys_time_end  - sys_time_start;
+            double cpu_time  = user_time + sys_time;
+
+            total_user_time += user_time;
+            total_sys_time  += sys_time;
+            total_cpu_time  += cpu_time;
+            total_wall_time += rec.wall_time_ms;
+        }
+
+        size_t count = records.size();
+        double avg_user_time = total_user_time / count;
+        double avg_sys_time  = total_sys_time  / count;
+        double avg_cpu_time  = total_cpu_time  / count;
+        double avg_wall_time = total_wall_time / count;
+
+        // std::cout << std::fixed << std::setprecision(6);
+        std::cout << "\n" << COLOR_GREEN << "RUsage Records Report (" << phase_name_prefix << ")" << COLOR_RESET << "\n";
+        // 1. Total 출력
+        std::cout << "\n[INFO] "<< phase_name_prefix << " (total) took "<< total_wall_time << " ms\n"
+                << "- " << total_cpu_time  << " [sec] CPU time\n"
+                << "- " << total_user_time << " [sec] User time\n"
+                << "- " << total_sys_time  << " [sec] System time\n";
+
+        // 2. Average 출력
+        std::cout << "\n[INFO] "<< phase_name_prefix << " (avg) took "<< avg_wall_time << " ms\n"
+                << "- " << avg_cpu_time  << " [sec] CPU time\n"
+                << "- " << avg_user_time << " [sec] User time\n"
+                << "- " << avg_sys_time  << " [sec] System time\n";
+
+        // 3. 개별 출력
+        std::cout << "\n[INFO] Per Stage: \n\n";
+        for (size_t i = 0; i < records.size(); ++i)
+        {
+            const auto &rec = records[i];
+            std::string phase_name = phase_name_prefix + "_" + std::to_string(i);
+            print_rusage(rec.start_, rec.end_, phase_name);
         }
     }
+
 
     void upload_tensors_for_all_subgraphs(tflite::Interpreter *interpreter)
     {
@@ -327,10 +384,8 @@ namespace ai_edge_torch::custom::profiler
     }
 
     // End monitoring a phase and return statistics
-    PerfStats PerformanceMonitor::end_phase(const std::string &phase_name)
+    void PerformanceMonitor::end_phase(const std::string &phase_name, PerfStats &stats)
     {
-        PerfStats stats;
-
         // Check if the phase exists in all required maps
         auto time_it = phase_start_times.find(phase_name);
         auto rusage_it = phase_start_rusage.find(phase_name);
@@ -595,7 +650,6 @@ namespace ai_edge_torch::custom::profiler
             phase_core_timespec.erase(core_timespec_it);
         }
 
-        return stats;
     }
 
     // private
@@ -760,75 +814,38 @@ namespace ai_edge_torch::custom::profiler
     //////////////////////////////////////////////////////////////////////////
     /* class PerformanceMetrics: Class to collect and report performance metrics */
     // public:
-    void PerformanceMetrics::RecordStats(const std::string &phase, const PerfStats &stats)
-    {
-        if (phase_stats.find(phase) == phase_stats.end())
-        {
-            phase_stats[phase] = std::vector<PerfStats>();
-        }
-        phase_stats[phase].push_back(stats);
+    void PerformanceMetrics::RecordStats(const std::string &phase, const PerfStats &stats) {
+        phase_stats_.emplace_back(phase, stats);
     }
 
-    void PerformanceMetrics::PrintStats() const
-    {
-        for (const auto &[phase, stats_vec] : phase_stats)
-        {
-            if (stats_vec.empty())
-                continue;
+    void PerformanceMetrics::PrintStats() const {
+        std::unordered_map<std::string, std::vector<PerfStats>> grouped_stats;
+        std::unordered_set<std::string> printed;
 
-            std::cout << "\n=== Performance Statistics for Phase: " << phase << " ===\n";
+        // Group same phase names
+        for (const auto &[phase, stat] : phase_stats_) {
+            grouped_stats[phase].push_back(stat);
+        }
 
-            if (stats_vec.size() == 1)
-            {
-                const auto &stats = stats_vec[0];
-                PrintSinglePhaseStat(stats);
-            }
-            else
-            {
-                double avg_wall_time = 0;
-                double avg_user_time = 0;
-                double avg_system_time = 0;
-                double avg_cpu_time = 0;
-                double avg_io_wait_time = 0;
-                double avg_io_bytes_read = 0;
-                double avg_io_bytes_written = 0;
+        // Preserve insertion order
+        std::cout << "\n"<<COLOR_GREEN<<"Perf Report "<<COLOR_RESET<<"\n";
+        for (const auto &[phase, _] : phase_stats_) {
+            if (printed.count(phase)) continue;
+            printed.insert(phase);
 
-                for (const auto &stats : stats_vec)
-                {
-                    avg_wall_time += stats.wall_time_ms;
-                    avg_user_time += stats.user_time_sec;
-                    avg_system_time += stats.system_time_sec;
-                    avg_cpu_time += stats.cpu_time_sec;
-                    avg_io_wait_time += stats.io_wait_time_ms;
-                    avg_io_bytes_read += stats.io_bytes_read;
-                    avg_io_bytes_written += stats.io_bytes_written;
-                }
+            const auto &stats_vec = grouped_stats.at(phase);
+            if (stats_vec.empty()) continue;
 
-                size_t count = stats_vec.size();
-                avg_wall_time /= count;
-                avg_user_time /= count;
-                avg_system_time /= count;
-                avg_cpu_time /= count;
-                avg_io_wait_time /= count;
-                avg_io_bytes_read /= count;
-                avg_io_bytes_written /= count;
+            std::cout << "\n"<< COLOR_YELLOW << "=== Performance Statistics for Phase: " << phase << " ==="<< COLOR_RESET<<"\n";
 
-                std::cout << "Number of measurements: " << count << "\n"
-                          << "Average wall clock time: " << avg_wall_time << " ms\n"
-                          << "Average user time: " << avg_user_time << " sec\n"
-                          << "Average system time: " << avg_system_time << " sec\n"
-                          << "Average CPU time (user+system): " << avg_cpu_time << " sec\n"
-                          << "Average I/O wait time: " << avg_io_wait_time << " ms\n"
-                          << "Average I/O bytes read: " << avg_io_bytes_read / (1024.0 * 1024.0) << " MB\n"
-                          << "Average I/O bytes written: " << avg_io_bytes_written / (1024.0 * 1024.0) << " MB\n"
-                          << "CPU utilization: " << (avg_cpu_time * 1000 * 100) / avg_wall_time << "%\n";
+            if (stats_vec.size() == 1) {
+                PrintSinglePhaseStat(stats_vec[0]);
+            } else {
+                PrintAverageStats(stats_vec);
 
-                // Per-step details (if there aren't too many)
-                if (stats_vec.size() <= 10)
-                {
+                if (stats_vec.size() <= 10) {
                     std::cout << "\nPer-step details:\n";
-                    for (size_t i = 0; i < stats_vec.size(); i++)
-                    {
+                    for (size_t i = 0; i < stats_vec.size(); ++i) {
                         std::cout << "Step " << i << ":\n";
                         PrintSinglePhaseStat(stats_vec[i], "  ");
                     }
@@ -837,9 +854,42 @@ namespace ai_edge_torch::custom::profiler
         }
     }
 
-    // private:
-    void PerformanceMetrics::PrintSinglePhaseStat(const PerfStats &stats, const std::string &prefix) const
-    {
+    void PerformanceMetrics::PrintAverageStats(const std::vector<PerfStats>& stats_vec) const {
+        double avg_wall_time = 0, avg_user_time = 0, avg_system_time = 0;
+        double avg_cpu_time = 0, avg_io_wait_time = 0;
+        double avg_io_bytes_read = 0, avg_io_bytes_written = 0;
+
+        for (const auto& stats : stats_vec) {
+            avg_wall_time += stats.wall_time_ms;
+            avg_user_time += stats.user_time_sec;
+            avg_system_time += stats.system_time_sec;
+            avg_cpu_time += stats.cpu_time_sec;
+            avg_io_wait_time += stats.io_wait_time_ms;
+            avg_io_bytes_read += stats.io_bytes_read;
+            avg_io_bytes_written += stats.io_bytes_written;
+        }
+
+        size_t count = stats_vec.size();
+        avg_wall_time /= count;
+        avg_user_time /= count;
+        avg_system_time /= count;
+        avg_cpu_time /= count;
+        avg_io_wait_time /= count;
+        avg_io_bytes_read /= count;
+        avg_io_bytes_written /= count;
+
+        std::cout << "Number of measurements: " << count << "\n"
+                  << "Average wall clock time: " << avg_wall_time << " ms\n"
+                  << "Average user time: " << avg_user_time << " sec\n"
+                  << "Average system time: " << avg_system_time << " sec\n"
+                  << "Average CPU time (user+system): " << avg_cpu_time << " sec\n"
+                  << "Average I/O wait time: " << avg_io_wait_time << " ms\n"
+                  << "Average I/O bytes read: " << avg_io_bytes_read / (1024.0 * 1024.0) << " MB\n"
+                  << "Average I/O bytes written: " << avg_io_bytes_written / (1024.0 * 1024.0) << " MB\n"
+                  << "CPU utilization: " << (avg_cpu_time * 1000 * 100) / avg_wall_time << "%\n";
+    }
+
+    void PerformanceMetrics::PrintSinglePhaseStat(const PerfStats &stats, const std::string &prefix) const {
         std::cout << prefix << "Wall clock time: " << stats.wall_time_ms << " ms\n"
                   << prefix << "User time: " << stats.user_time_sec << " sec\n"
                   << prefix << "System time: " << stats.system_time_sec << " sec\n"
@@ -850,12 +900,9 @@ namespace ai_edge_torch::custom::profiler
                   << prefix << "I/O bytes written: " << stats.io_bytes_written / (1024.0 * 1024.0) << " MB\n"
                   << prefix << "CPU utilization: " << (stats.cpu_time_sec * 1000 * 100) / stats.wall_time_ms << "%\n";
 
-        // Print per-core stats if available
-        if (!stats.core_user_times.empty())
-        {
+        if (!stats.core_user_times.empty()) {
             std::cout << prefix << "Per-core statistics:\n";
-            for (size_t i = 0; i < stats.core_user_times.size(); i++)
-            {
+            for (size_t i = 0; i < stats.core_user_times.size(); ++i) {
                 std::cout << prefix << "  Core " << i << ": "
                           << "User=" << stats.core_user_times[i] << "s, "
                           << "System=" << stats.core_system_times[i] << "s, "
@@ -868,24 +915,17 @@ namespace ai_edge_torch::custom::profiler
     /* class DecodingMetrics: Class for measuring decoding metrics (time to first token, average times, etc.)*/
     // public:
     // Called before decoding loop starts
-    void DecodingMetrics::StartDecoding()
-    {
-        decode_start_ = std::chrono::high_resolution_clock::now();
-    }
 
-    void DecodingMetrics::RecordTimes(const std::chrono::high_resolution_clock::time_point &token_start,
-                                      double inference_time_ms, double sampling_time_ms)
+    void DecodingMetrics::RecordTimes(double inference_time_ms, double sampling_time_ms)
     {
-        auto token_end = std::chrono::high_resolution_clock::now();
-        double decoding_time_ms =
-            std::chrono::duration<double, std::milli>(token_end - token_start).count();
+        double decoding_time_ms = inference_time_ms + sampling_time_ms;
 
         // If this is the first token, record time to first token
         if (!first_token_recorded_)
         {
             first_token_recorded_ = true;
-            time_to_first_token_ms_ =
-                std::chrono::duration<double, std::milli>(token_end - decode_start_).count();
+            first_decoding_time_ms_ = decoding_time_ms;
+            return;
         }
 
         // Track inference time
@@ -900,7 +940,7 @@ namespace ai_edge_torch::custom::profiler
     }
 
     // Print out final decoding metrics
-    void DecodingMetrics::PrintMetrics()
+    void DecodingMetrics::PrintMetrics(int prefill_time_ms)
     {
         double avg_inference_time_ms = 0.0;
         double avg_sampling_time_ms = 0.0;
@@ -920,21 +960,25 @@ namespace ai_edge_torch::custom::profiler
             avg_decoding_speed = token_count_ / (total_decoding_time_ms_ / 1000);
         }
 
-        std::cout << "\n\n================================\n";
-        std::cout << "[INFO] Decoding stage completed\n";
+        std::cout << "\n" << COLOR_GREEN << "Decoding Metrics" << COLOR_RESET << "\n\n";
+
         std::cout << "[METRICS] Total Number of Generated Tokens : " << token_count_ << " tokens\n\n";
 
-        std::cout << "[METRICS] Total Inference Latency          : " << total_inference_time_ms_ << " ms\n";
-        std::cout << "[METRICS] Total Sampling Latency           : " << total_sampling_time_ms_ << " ms\n";
-        std::cout << "[METRICS] Total Decoding Latency           : " << total_decoding_time_ms_ << " ms\n\n";
+        std::cout << "[METRICS] Prefill Time                     : " << prefill_time_ms << " ms\n";
+        std::cout << "[METRICS] First Decoding Time              : " << first_decoding_time_ms_ << " ms\n";
+        std::cout << "[METRICS] Time to First Token              : " << prefill_time_ms + first_decoding_time_ms_ << " ms\n\n";
 
-        std::cout << "[METRICS] Time To First Token              : " << time_to_first_token_ms_ << " ms\n";
-        std::cout << "[METRICS] Average Inference Latency        : " << avg_inference_time_ms << " ms/tokens"
-                  << "(" << avg_inference_speed << " token/s )\n";
-        std::cout << "[METRICS] Average Sampling Latency         : " << avg_sampling_time_ms << " ms/tokens"
-                  << "(" << avg_sampling_speed << " token/s )\n";
-        std::cout << "[METRICS] Average Decoding Latency         : " << avg_decoding_time_ms << " ms/tokens"
-                  << "(" << avg_decoding_speed << " token/s )\n";
+        std::cout << "[METRICS] Total Inference Time             : " << total_inference_time_ms_ << " ms\n";
+        std::cout << "[METRICS] Total Sampling Time              : " << total_sampling_time_ms_ << " ms\n";
+        std::cout << "[METRICS] Total Decoding Time              : " << total_decoding_time_ms_ << " ms\n\n";
+
+        std::cout << "[METRICS] Average Inference Time per Token : " << avg_inference_time_ms << " ms"
+                << " (" << avg_inference_speed << " tokens/s)\n";
+        std::cout << "[METRICS] Average Sampling Time per Token  : " << avg_sampling_time_ms << " ms"
+                << " (" << avg_sampling_speed << " tokens/s)\n";
+        std::cout << "[METRICS] Average Decoding Time per Token  : " << avg_decoding_time_ms << " ms"
+                << " (" << avg_decoding_speed << " tokens/s)\n";
+
     }
     // private:
 

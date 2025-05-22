@@ -8,7 +8,7 @@
 ROOT_DIR      := $(shell pwd)
 SRC_DIR       := src
 OBJ_DIR       := obj
-TARGET        := text_generator_main
+TARGET        := text_generator_main_cpu
 TARGET_PATH   := output/$(TARGET)
 
 # 1. Compiler settings ────────────────────────────────────────────────────────

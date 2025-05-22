@@ -200,6 +200,8 @@ namespace
                 best_seq_size = seq_size;
                 delta = seq_size - static_cast<int>(num_input_tokens);
             }
+            std::cout << "Found prefill runner: " << *key << " with seq_size: " << seq_size
+                      << std::endl;
         }
 
         // If LoRA is enabled, use the LoRA-specific prefill runner
@@ -253,75 +255,106 @@ namespace
 // =======================================================================
 int main(int argc, char *argv[])
 {
-    //set precision
-    std::cout.precision(3);
-    std::cout.setf(std::ios::fixed, std::ios::floatfield);
-    std::cout << std::boolalpha;
-    std::cout << "[INFO] Text Generation App on LiteRT Interperter\n";
-
     // 0. Parse flags
-    std::cout << "[INFO] Preparing Required Components\n";
     absl::ParseCommandLine(argc, argv);
+    std::cout << "[INFO] Preparing Required Components\n";
 
     // Global variables
+    std::unique_ptr<tflite::FlatBufferModel> model;
+    std::unique_ptr<tflite::Interpreter> interpreter;
+    std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
+    std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
+    std::unique_ptr<ai_edge_torch::examples::LoRA> lora = nullptr;
     std::vector<int> prompt_tokens;
     std::string prompt, start_token, stop_token;
     int stop_token_id = -1;
 
     // 0-1. Perf monitor initialziation
     // Check which cores we're actually running on
-    std::vector<int> active_cores;
-    ai_edge_torch::custom::profiler::detect_active_cores(active_cores);
+    std::vector<int> active_cores = ai_edge_torch::custom::profiler::detect_active_cores();
+    std::cout << "Process is running on cores: ";
+    for (int core : active_cores)
+    {
+        std::cout << core << " ";
+    }
+    std::cout << std::endl;
 
     // Just monitor the cores we're allowed to run on (should be only core 0 with taskset)
     ai_edge_torch::custom::profiler::PerformanceMonitor perf_monitor(active_cores);
     ai_edge_torch::custom::profiler::PerformanceMetrics metrics;
+    ai_edge_torch::custom::profiler::PerfStats stats;
+
+    // Add some code to get I/O stats from /proc for better I/O measurement
+    double proc_io_wait_start = 0.0;
 
     // 0-2. Variable for CPU time only
     rusage usage_start, usage_end;
 
     // 1. Load Model
-    std::unique_ptr<tflite::FlatBufferModel> model;
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Model_Loading", perf_monitor, metrics, usage_start, usage_end);
+        ai_edge_torch::custom::profiler::ScopeTimer timer("Model Loading");
+        getrusage(RUSAGE_SELF, &usage_start);
+        perf_monitor.start_phase("Model_Loading");
         model = LoadModel();
+        stats = perf_monitor.end_phase("Model_Loading");
+        getrusage(RUSAGE_SELF, &usage_end);
     }
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Model Loading");
+    metrics.RecordStats("Model_Loading", stats);
 
     // 2. Build Interpreter
-    std::unique_ptr<tflite::Interpreter> interpreter;
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Interpreter_Building", perf_monitor, metrics, usage_start, usage_end);
+        ai_edge_torch::custom::profiler::ScopeTimer timer("Interpreter Building");
+        getrusage(RUSAGE_SELF, &usage_start);
+        perf_monitor.start_phase("Build_Interperter");
         interpreter = BuildInterpreter(model.get(), absl::GetFlag(FLAGS_num_threads));
+        stats = perf_monitor.end_phase("Build_Interperter");
+        getrusage(RUSAGE_SELF, &usage_end);
     }
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Interpreter Building");
+    metrics.RecordStats("Build_Interpreter", stats);
 
     // Tensor upload before prefill
-    /*
     {
-        ai_edge_torch::custom::profiler::ScopeTimer timer("Tensor Uploading", perf_monitor, metrics, usage_start, usage_end);
-        
+        ai_edge_torch::custom::profiler::ScopeTimer timer("Tensor Uploading");
+        getrusage(RUSAGE_SELF, &usage_start);
+        perf_monitor.start_phase("Upload_Tensor");
+
         // Uploading Here
         // upload_tensors_for_all_subgraphs(interpreter.get());
-       
+
+        stats = perf_monitor.end_phase("Upload_Tensor");
+        getrusage(RUSAGE_SELF, &usage_end);
     }
-    */
-    
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Tensor Uploading");
+    metrics.RecordStats("Upload_Tensor", stats);
+
     // 3. Load SentencePiece
-    std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("SentencePiece_Loading", perf_monitor, metrics, usage_start, usage_end);
+        ai_edge_torch::custom::profiler::ScopeTimer timer("SentencePiece Loading");
+        getrusage(RUSAGE_SELF, &usage_start);
+        perf_monitor.start_phase("Load_SentencePiece");
         sp_processor = LoadSentencePieceProcessor();
+        stats = perf_monitor.end_phase("Load_SentencePiece");
+        getrusage(RUSAGE_SELF, &usage_end);
     }
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Sentence Piece Loading");
+    metrics.RecordStats("Load_SentencePiece", stats);
 
     // 4. Build KV Cache
-    std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("KV_Cache_Building", perf_monitor, metrics, usage_start, usage_end);
+        ai_edge_torch::custom::profiler::ScopeTimer timer("KV Cache Building");
+        getrusage(RUSAGE_SELF, &usage_start);
+        perf_monitor.start_phase("Build_KVCache");
         kv_cache = BuildKVCache(interpreter.get());
         MINIMAL_CHECK(!kv_cache.empty());
+        stats = perf_monitor.end_phase("Build_KVCache");
+        getrusage(RUSAGE_SELF, &usage_end);
     }
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "KV Cache Building");
+    metrics.RecordStats("Build_KVCache", stats);
 
     // 5. Optionally load LoRA
-    // std::unique_ptr<ai_edge_torch::examples::LoRA> lora = nullptr;
     // {
     //     ai_edge_torch::custom::profiler::ScopeTimer timer("LoRA Loading");
     //     if (!absl::GetFlag(FLAGS_lora_path).empty())
@@ -336,8 +369,9 @@ int main(int argc, char *argv[])
      * *********************/
     // 6. Prepare Input Prompt
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Prompt_Preparation", perf_monitor, metrics, usage_start, usage_end);
-        
+        ai_edge_torch::custom::profiler::ScopeTimer timer("Input Prompt Preparation");
+        getrusage(RUSAGE_SELF, &usage_start);
+        perf_monitor.start_phase("Prepare_Prompt");
         prompt = absl::GetFlag(FLAGS_prompt);
         MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
 
@@ -352,23 +386,36 @@ int main(int argc, char *argv[])
         {
             stop_token_id = sp_processor->PieceToId(stop_token);
         }
-        
+        stats = perf_monitor.end_phase("Prepare_Prompt");
+        getrusage(RUSAGE_SELF, &usage_end);
     }
-    
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Input Prompt Preparation");
+    metrics.RecordStats("Prepare_Prompt", stats);
+
     // 7. Prepare Signature Runners
     tflite::SignatureRunner *prefill_runner = nullptr;
     tflite::SignatureRunner *decode_runner = nullptr;
-    std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Signature_Runners_Preparation", perf_monitor, metrics, usage_start, usage_end);
+        ai_edge_torch::custom::profiler::ScopeTimer timer("Signature Runners Preparation");
+        getrusage(RUSAGE_SELF, &usage_start);
+        perf_monitor.start_phase("Prepare_Runners");
+        std::size_t effective_prefill_token_size =
+            (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
 
-        prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
+        prefill_runner = GetPrefillRunner(
+            interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
+
         MINIMAL_CHECK(prefill_runner != nullptr);
 
         decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
+
         MINIMAL_CHECK(decode_runner != nullptr);
 
+        stats = perf_monitor.end_phase("Prepare_Runners");
+        getrusage(RUSAGE_SELF, &usage_end);
     }
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Signature Runner Preparation");
+    metrics.RecordStats("Prepare_Runners", stats);
 
     TfLiteTensor *prefill_input = nullptr;
     TfLiteTensor *prefill_input_pos = nullptr;
@@ -380,9 +427,10 @@ int main(int argc, char *argv[])
 
     // 8. Access Tensors
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Prefill_Input_Tensors_Access", perf_monitor, metrics, usage_start, usage_end);
-        
-        // Get the input tensors for prefill and decode
+        getrusage(RUSAGE_SELF, &usage_start);
+        ai_edge_torch::custom::profiler::ScopeTimer timer("Prefill Input Tensors Setup");
+        perf_monitor.start_phase("Prefill Input Tensors Setup");
+
         prefill_input = prefill_runner->input_tensor("tokens");
         prefill_input_pos = prefill_runner->input_tensor("input_pos");
         decode_input = decode_runner->input_tensor("tokens");
@@ -402,108 +450,142 @@ int main(int argc, char *argv[])
             prefill_input->data.i32[i] = prompt_tokens[i];
             prefill_input_pos->data.i32[i] = i;
         }
+        stats = perf_monitor.end_phase("Prefill Input Tensors Setup");
+        getrusage(RUSAGE_SELF, &usage_end);
     }
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Prefill Input Tensors Setup");
+    metrics.RecordStats("Prefill Input Tensors Setup", stats);
     /* *********************
      * PREFILL PREPROCESS END
      * *********************/
 
+}
+
     /* *********************
      * PREFILL START
      * *********************/
-    double prefill_time_ms = 0.0;
+    const TfLiteTensor* prefill_logits = nullptr;
+
     // 9. Prefill Stage
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Prefill", perf_monitor, metrics, usage_start, usage_end,
-            true, nullptr, &prefill_time_ms);
+        getrusage(RUSAGE_SELF, &usage_start);
+        ai_edge_torch::custom::profiler::ScopeTimer timer("Prefill");
+        perf_monitor.start_phase("Prefill");
 
-        // Execute the prefill runner
+        // Execute the prefill runner and store the logits
         MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk);
+        prefill_logits = prefill_runner->output_tensor("logits");
+        
+        stats = perf_monitor.end_phase("Prefill");
+        getrusage(RUSAGE_SELF, &usage_end);
     }
+    ai_edge_torch::custom::profiler::print_rusage(usage_start, usage_end, "Prefill");
+    metrics.RecordStats("Prefill", stats);
     /* *********************
      * PREFILL END
      * *********************/
+if(prefill_logits == nullptr){
+    std::cerr << "Prefill logits are null!" << std::endl;
+    return -1;
+}
+  
+     printf("Prefill logits: %s\n", prefill_logits);
 
-    /* *********************
-     * DECODE START
-     * *********************/
     // 10. Decoding Stage with separate metrics for inference and sampling
-    std::cout << "\nPrompt:\n" << prompt << "\n\nOutput Text:\n";
-    
-    // Determine how many tokens to generate
-    int max_decode_steps = (absl::GetFlag(FLAGS_max_decode_steps) == -1)
-        ? kv_cache_max_size
-        : absl::GetFlag(FLAGS_max_decode_steps);
-    
-    int prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
-    int next_token_id = prompt_tokens[prefill_seq_size - 1];
-    int next_position = prefill_seq_size - 1;
-    int decode_steps = std::min<int>(max_decode_steps, kv_cache_max_size - prefill_seq_size);
-    MINIMAL_CHECK(decode_steps > 0);
+    std::cout << "\nPrompt:\n"
+              << prompt << "\n\nOutput Text:\n";
 
     // Metrics object
-    std::vector<ai_edge_torch::custom::profiler::RUsageRecord> decode_rusage_records;
     ai_edge_torch::custom::profiler::DecodingMetrics decoding_metrics;
-    double inference_time_ms = 0.0;
-    double sampling_time_ms = 0.0;
+    decoding_metrics.StartDecoding();
+    std::vector<ai_edge_torch::custom::profiler::PerfStats> decode_stats_vec;
+    std::vector<ai_edge_torch::custom::profiler::RUsageRecord> rusageRecords;
+    struct ai_edge_torch::custom::profiler::RUsageRecord decode_record;
+    {
+        // Determine how many tokens to generate
+        int max_decode_steps = (absl::GetFlag(FLAGS_max_decode_steps) == -1)
+                                   ? kv_cache_max_size
+                                   : absl::GetFlag(FLAGS_max_decode_steps);
 
-    // Decoding loop
-    for (int i = 0; i < decode_steps; ++i) {
+        int prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
+        int decode_steps = std::min<int>(max_decode_steps, kv_cache_max_size - prefill_seq_size);
+        MINIMAL_CHECK(decode_steps > 0);
+
+        int next_token = 0;
+        int next_position = prefill_seq_size;
+        // logits
+        const TfLiteTensor* logits = nullptr;
+        double inference_time_ms = 0.0;
+        // Decoding loop
+        for (int i = 0; i < 1; ++i)
         {
-            ai_edge_torch::custom::profiler::ScopeLogger logger("Decode_" + std::to_string(i), 
-                perf_monitor, metrics, usage_start, usage_end, false, &decode_rusage_records);
-        
-            // 1) Model Inference
+            // Start time for this token
+            auto token_start = std::chrono::high_resolution_clock::now();
+            getrusage(RUSAGE_SELF, &decode_record.start);
+            perf_monitor.start_phase("Decode_Token_" + std::to_string(i));
+
+            if (i==0) // If first token, use the logits from prefill
             {
-                ai_edge_torch::custom::profiler::ScopeTimer timer(inference_time_ms);
-
-                decode_input->data.i32[0] = next_token_id;
-                decode_input_pos->data.i32[0] = next_position;
-                MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
+                logits = prefill_logits;
             }
+            // else
+            // {
+            //     // -----------------------
+            //     // 1) Model Inference
+            //     // -----------------------
+            //     auto inference_start = std::chrono::high_resolution_clock::now();
 
+            //     decode_input->data.i32[0] = next_token;
+            //     decode_input_pos->data.i32[0] = next_position;
+
+            //     MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
+            //     logits = decode_runner->output_tensor("logits");
+
+            //     auto inference_end = std::chrono::high_resolution_clock::now();
+            //     inference_time_ms =
+            //         std::chrono::duration<double, std::milli>(inference_end - inference_start).count();
+            // }
+            // -----------------------
             // 2) Token Sampling
-            {
-                ai_edge_torch::custom::profiler::ScopeTimer timer(sampling_time_ms);
-
-                next_token_id = ai_edge_torch::custom::sampler::temperature_top_k_top_p_sampler(
-                    decode_runner->output_tensor("logits"), 0.9f, 85, 0.9f);
-            }
+            // -----------------------
+            auto sampling_start = std::chrono::high_resolution_clock::now();
+            next_token = ai_edge_torch::custom::sampler::temperature_top_k_top_p_sampler(
+                logits, 0.9f, 85, 0.9f);
+            auto sampling_end = std::chrono::high_resolution_clock::now();
+            double sampling_time_ms =
+                std::chrono::duration<double, std::milli>(sampling_end - sampling_start).count();
 
             next_position++;
-            decoding_metrics.RecordTimes(inference_time_ms, sampling_time_ms);
-        }
 
-        // Check if the next token is a stop token
-        if (next_token_id == stop_token_id) {
-            break;
-        }
+            // Check stop token
+            if (next_token == stop_token_id)
+            {
+                break;
+            }
 
-        // Detokenize the single token to text
-        {
-            std::vector<int> next_token = {next_token_id};
+            // Detokenize the single token to text
+            std::vector<int> single_token_vec = {next_token};
             std::string single_decoded_text;
-            MINIMAL_CHECK(sp_processor->Decode(next_token, &single_decoded_text).ok());
+            MINIMAL_CHECK(sp_processor->Decode(single_token_vec, &single_decoded_text).ok());
             std::cout << single_decoded_text << std::flush;
+
+            // End perf recording
+            ai_edge_torch::custom::profiler::PerfStats token_stats = perf_monitor.end_phase("Decode_Token_" + std::to_string(i));
+            decode_stats_vec.push_back(token_stats);
+            metrics.RecordStats("Decode_Token", token_stats);
+            // Record metrics for this token
+            decoding_metrics.RecordTimes(token_start, inference_time_ms, sampling_time_ms);
+            getrusage(RUSAGE_SELF, &decode_record.end);
+            rusageRecords.push_back(decode_record);
         }
     }
-    /* *********************
-     * DECODE END
-     * *********************/
-     
-    std::cout << "[INFO] Decoding stage completed\n";
 
-    // 12. Print RUsage results
-    std::cout << "\n================================\n";
-    ai_edge_torch::custom::profiler::print_rusage_records(decode_rusage_records, "Decode");
-     
-    // 13. Print Perf results
-    std::cout << "\n================================\n";
+    // 11. Print decoding metrics (inference vs. sampling)
+    decoding_metrics.PrintMetrics();
+    // 12. Print Perf results
     metrics.PrintStats();
-
-    // 14. Print decoding metrics (inference vs. sampling)
-    std::cout << "\n================================\n";
-    decoding_metrics.PrintMetrics(prefill_time_ms);
-    std::cout << "\n================================\n";
+    // 13. Print RUsage results
+    ai_edge_torch::custom::profiler::print_rusage_records(rusageRecords);
 
     return 0;
 }

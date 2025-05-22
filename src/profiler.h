@@ -59,6 +59,14 @@
     }
 #endif
 
+// ANSI color codes
+#define COLOR_GREEN  "\033[1;32m"
+#define COLOR_YELLOW "\033[1;33m"
+#define COLOR_RESET  "\033[0m"
+#define COLOR_RED    "\033[1;31m"
+#define COLOR_BLUE   "\033[1;34m"
+#define COLOR_CYAN   "\033[1;36m"
+
 // /proc/stat에서 특정 코어의 user/system jiffies 읽기
 std::pair<double, double> get_core_cpu_time(int core_id);
 
@@ -109,8 +117,14 @@ namespace ai_edge_torch::custom::profiler
     // RUsage record structure
     struct RUsageRecord
     {
-        rusage start;
-        rusage end;
+        rusage start_;
+        rusage end_;
+        double wall_time_ms;
+
+        RUsageRecord() = default;
+
+        RUsageRecord(const struct rusage& start, const struct rusage& end, const double wall_time_ms)
+            : start_(start), end_(end), wall_time_ms(wall_time_ms) {}
     };
 
     //////////////////////////////////////////////////////////////
@@ -118,13 +132,14 @@ namespace ai_edge_torch::custom::profiler
     //////////////////////////////////////////////////////////////
 
     // 현재 프로세스가 실행 중인 CPU 코어 목록 반환
-    std::vector<int> detect_active_cores();
+    void detect_active_cores(std::vector<int> &cores);
+
     // /proc/self/io에서 I/O 통계 읽기
     IOStats get_io_stats();
 
     // RUsage 출력 헬퍼
     void print_rusage(rusage usage_start, rusage usage_end, const std::string phase_name);
-    void print_rusage_records(const std::vector<RUsageRecord> &records);
+    void print_rusage_records(const std::vector<RUsageRecord> &records, const std::string &phase_name_prefix);
 
     // Tensors 강제 페이지 폴트 (upload) 해주는 함수
     void upload_tensors_for_all_subgraphs(tflite::Interpreter *interpreter);
@@ -132,28 +147,7 @@ namespace ai_edge_torch::custom::profiler
     //////////////////////////////////////////////////////////////
     /* Classes */
     //////////////////////////////////////////////////////////////
-    // --------------------------------------------------------------------------
-    // A scoped timer class that prints the elapsed time when going out of scope
-    // --------------------------------------------------------------------------
-    class ScopeTimer
-    {
-    public:
-        explicit ScopeTimer(const std::string &name)
-            : name_(name),
-              start_(std::chrono::high_resolution_clock::now()) {}
 
-        ~ScopeTimer()
-        {
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration_ms =
-                std::chrono::duration_cast<std::chrono::milliseconds>(end - start_).count();
-            std::cout << "\n[INFO] " << name_ << " took " << duration_ms << " ms\n";
-        }
-
-    private:
-        std::string name_;
-        std::chrono::high_resolution_clock::time_point start_;
-    };
 
     // --------------------------------------------------------------------------
     // PerformanceMonitor
@@ -168,7 +162,7 @@ namespace ai_edge_torch::custom::profiler
             // If no cores specified, detect active cores
             if (monitored_cores.empty())
             {
-                monitored_cores = detect_active_cores();
+                detect_active_cores(monitored_cores);
 
                 // If still empty, default to core 0
                 if (monitored_cores.empty())
@@ -190,7 +184,7 @@ namespace ai_edge_torch::custom::profiler
         void start_phase(const std::string &phase_name);
 
         // 어떤 "phase"가 끝났을 때, PerfStats를 계산해 반환
-        PerfStats end_phase(const std::string &phase_name);
+        void end_phase(const std::string &phase_name, PerfStats &stats);
 
     private:
         // perf_event_open용
@@ -251,11 +245,12 @@ namespace ai_edge_torch::custom::profiler
         void PrintStats() const;
 
     private:
-        void PrintSinglePhaseStat(const PerfStats &stats,
-                                  const std::string &prefix = "") const;
+        std::vector<std::pair<std::string, PerfStats>> phase_stats_;
 
-    private:
-        std::unordered_map<std::string, std::vector<PerfStats>> phase_stats;
+        void PrintAverageStats(const std::vector<PerfStats>& stats_vec) const;
+        void PrintSinglePhaseStat(const PerfStats &stats, const std::string &prefix = "") const;
+
+
     };
 
     // --------------------------------------------------------------------------
@@ -267,22 +262,13 @@ namespace ai_edge_torch::custom::profiler
         DecodingMetrics() = default;
         ~DecodingMetrics() = default;
 
-        void StartDecoding();
-        // Record times for each token
-        //   - token_start: time point before inference/sampling starts for a token
-        //   - inference_time_ms: how many ms were spent in model inference
-        //   - sampling_time_ms : how many ms were spent in sampling the next token
-        void RecordTimes(const std::chrono::high_resolution_clock::time_point &token_start,
-                         double inference_time_ms, double sampling_time_ms);
+        void RecordTimes(double inference_time_ms, double sampling_time_ms);
         // Print out final decoding metrics
-        void PrintMetrics();
+        void PrintMetrics(int prefill_time);
 
     private:
-        // Decode start time
-        std::chrono::high_resolution_clock::time_point decode_start_;
-
         // Time to first token
-        double time_to_first_token_ms_ = 0.0;
+        double first_decoding_time_ms_ = 0.0;
         bool first_token_recorded_ = false;
 
         // Accumulators
@@ -290,6 +276,112 @@ namespace ai_edge_torch::custom::profiler
         double total_sampling_time_ms_ = 0.0;
         double total_decoding_time_ms_ = 0.0;
         int token_count_ = 0;
+    };
+
+ 
+
+    // --------------------------------------------------------------------------
+    // TimerUtility: basic timing utility (renamed from ScopeTimer)
+    // --------------------------------------------------------------------------
+    class TimerUtility {
+    protected:
+        std::string name_;
+        std::chrono::high_resolution_clock::time_point start_;
+
+    public:
+        explicit TimerUtility(const std::string &name)
+            : name_(name) {}
+
+        void Start() {
+            start_ = std::chrono::high_resolution_clock::now();
+        }
+
+        double Stop() const {
+            auto end_ = std::chrono::high_resolution_clock::now();
+            auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end_ - start_).count();
+            return static_cast<double>(duration_us) / 1000.0;  
+        }
+    };
+
+    // --------------------------------------------------------------------------
+    // A scoped timer class that log the elapsed time when going out of scope
+    // --------------------------------------------------------------------------
+    class ScopeTimer {
+    public:
+        explicit ScopeTimer(double& out_ref, const std::string &name="")
+            : out_ref_(out_ref), timer_(name) 
+        {
+            timer_.Start();
+        }
+
+        ~ScopeTimer() {
+            out_ref_ = static_cast<double>(timer_.Stop());
+        }
+
+    private:
+        double&      out_ref_;
+        TimerUtility timer_;
+    };
+
+
+    // --------------------------------------------------------------------------
+    // ScopeLogger: composed version with TimerUtility and profiling
+    // --------------------------------------------------------------------------
+    class ScopeLogger {
+    public:
+        ScopeLogger(const std::string &name,
+                    ai_edge_torch::custom::profiler::PerformanceMonitor &monitor,
+                    ai_edge_torch::custom::profiler::PerformanceMetrics &metrics,
+                    struct rusage &usage_start,
+                    struct rusage &usage_end,
+                    bool log_stdout=true,
+                    std::vector<ai_edge_torch::custom::profiler::RUsageRecord> *usage_records=nullptr,
+                    double *out_duration_ms=nullptr)
+            : timer_(name), name_(name), monitor_(monitor), metrics_(metrics),
+            usage_start_(usage_start), usage_end_(usage_end), 
+            log_stdout(log_stdout), usage_records_(usage_records), out_duration_ms_(out_duration_ms) {
+
+            timer_.Start();
+            getrusage(RUSAGE_SELF, &usage_start_);
+            monitor_.start_phase(name_);
+        }
+
+        ~ScopeLogger() {
+            duration_ms_ = timer_.Stop();
+            getrusage(RUSAGE_SELF, &usage_end_);
+            monitor_.end_phase(name_,stats_);
+
+            if(log_stdout)
+            {
+                std::cout << "\n[INFO] " << name_ << " took " << duration_ms_ << " ms\n";
+                ai_edge_torch::custom::profiler::print_rusage(usage_start_, usage_end_, name_);
+            }
+
+            if(usage_records_)
+            {
+                usage_records_->emplace_back(usage_start_, usage_end_, duration_ms_);
+            }
+
+            if(out_duration_ms_)
+            {
+                *out_duration_ms_ = duration_ms_;
+            }
+
+            metrics_.RecordStats(name_, stats_);
+        }
+        
+    private:
+        TimerUtility timer_;
+        std::string name_;
+        double duration_ms_;
+        PerformanceMonitor& monitor_;
+        PerformanceMetrics& metrics_;
+        PerfStats stats_;
+        struct rusage &usage_start_;
+        struct rusage &usage_end_;
+        bool log_stdout;
+        std::vector<RUsageRecord>* usage_records_;
+        double* out_duration_ms_;
     };
 
 } // namespace ai_edge_torch::custom::profiler
