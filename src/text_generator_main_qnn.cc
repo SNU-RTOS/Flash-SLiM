@@ -1,10 +1,10 @@
 // ============================================================================
-// Text generation example (LiteRT) – GPU Delegate version
+// Text generation example (LiteRT) – QNN Delegate version
 // ============================================================================
-//  * Default: GPU delegate (OpenCL/OpenGL  depending on runtime)
-//  * Fallback: XNNPACK delegate with optional weight cache
+//  * Default: QNN CPU / HTA / DSP delegate (depends on SoC & SDK)
+//  * Fallback: XNNPACK CPU delegate  (optional weight cache)
 // ----------------------------------------------------------------------------
-// 2025‑05‑22 – adapted from original CPU/XNNPACK example
+// 2025‑05‑22 – adapted from original GPU/XNNPACK example
 // ----------------------------------------------------------------------------
 
 // ----------------- C++ standard library -----------------
@@ -24,7 +24,6 @@
 #include <vector>
 #include <chrono>
 #include <random>
-#include <numeric>  
 
 // ----------------- AI_EDGE_TORCH -----------------
 #include "absl/flags/flag.h"
@@ -32,17 +31,17 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/match.h"
 #include "src/sentencepiece_processor.h"
-// ----------------- LiteRT -----------------
+// ----------------- LiteRT and Delegates -----------------
+// QNN (Qualcomm® Neural Network) delegate
+#include "TFLiteDelegate/QnnTFLiteDelegate.h" // for QNN delegate
 // XNNPACK for CPU fallback / weight‑cache path
-#include "tflite/delegates/xnnpack/xnnpack_delegate.h"
-// GPU delegate (OpenCL / OpenGL ES )
-#include "tflite/delegates/gpu/delegate.h"
-#include "tflite/experimental/genai/genai_ops.h"
-#include "tflite/interpreter.h"
-#include "tflite/interpreter_builder.h"
-#include "tflite/kernels/register.h"
-#include "tflite/model_builder.h"
-#include "tflite/signature_runner.h"
+#include "tensorflow/lite/delegates/xnnpack/xnnpack_delegate.h"
+#include "tensorflow/lite/experimental/genai/genai_ops.h"
+#include "tensorflow/lite/interpreter.h"
+#include "tensorflow/lite/interpreter_builder.h"
+#include "tensorflow/lite/kernels/register.h"
+#include "tensorflow/lite/model_builder.h"
+#include "tensorflow/lite/signature_runner.h"
 
 // ------------- Third‑party / project headers -------------
 #include "utils.h"
@@ -71,6 +70,29 @@ namespace
 {
     using ai_edge_torch::examples::AlignedAllocator;
     using ai_edge_torch::examples::LoRA;
+
+
+    // --------------------------------------------------------------------------
+    // QNN delegate helpers
+    // --------------------------------------------------------------------------
+    TfLiteDelegate* CreateQnnDelegate() {
+        // Build basic delegate options
+        TfLiteQnnDelegateOptions options = TfLiteQnnDelegateOptionsDefault();
+        
+        // Backend selection
+        options.backend_type = kHtpBackend; //	Qualcomm Hexagon Tensor Processor (HTP), 고성능 NPU backend
+        // options.backend_type = kGpuBackend; // GPU backend 
+        // options.backend_type = kDspBackend; // Hexagon DSP backend (HTP보다 일반적 DSP 오프로드용)
+
+        return TfLiteQnnDelegateCreate(&options);
+    }
+
+    void ApplyQnnDelegate(tflite::Interpreter* interp) {
+        auto* delegate = CreateQnnDelegate();
+        MINIMAL_CHECK(interp->ModifyGraphWithDelegate(
+            tflite::Interpreter::TfLiteDelegatePtr(
+                delegate, [](TfLiteDelegate* d){ TfLiteQnnDelegateDelete(d); })) == kTfLiteOk);
+    }
 
 
     // --------------------------------------------------------------------------
@@ -118,11 +140,7 @@ namespace
         MINIMAL_CHECK(interpreter != nullptr);
 
         
-        TfLiteGpuDelegateOptionsV2 opts = TfLiteGpuDelegateOptionsV2Default();
-        TfLiteDelegate *delegate = TfLiteGpuDelegateV2Create(&opts);
-        
-        interpreter->ModifyGraphWithDelegate(delegate); // ✅ GPU
-        MINIMAL_CHECK(delegate != nullptr);
+        ApplyQnnDelegate(interpreter.get());              // ✅ QNM
 
         if (!absl::GetFlag(FLAGS_weight_cache_path).empty()) {
             ApplyXNNPACKWeightCaching(interpreter.get());      // (fallback) CPU-XNNPACK
@@ -168,7 +186,8 @@ namespace
     // --------------------------------------------------------------------------
     // Sets custom memory allocations for the KV cache on the given runner
     // --------------------------------------------------------------------------
-    void PrepareRunner(tflite::SignatureRunner *runner, std::map<std::string, std::vector<float, AlignedAllocator<float>>> &kv_cache)
+    void PrepareRunner(tflite::SignatureRunner *runner,
+                       std::map<std::string, std::vector<float, AlignedAllocator<float>>> &kv_cache)
     {
         for (auto &[name, cache] : kv_cache)
         {
@@ -272,7 +291,7 @@ namespace
 int main(int argc, char *argv[])
 {
     //set precision
-    std::cout.precision(5);
+    std::cout.precision(3);
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout << std::boolalpha;
     std::cout << "[INFO] Text Generation App on LiteRT Interperter\n";
@@ -301,47 +320,18 @@ int main(int argc, char *argv[])
     // 1. Load Model
     std::unique_ptr<tflite::FlatBufferModel> model;
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Load_Model", perf_monitor, metrics, usage_start, usage_end);
+        ai_edge_torch::custom::profiler::ScopeLogger logger("Model_Loading", perf_monitor, metrics, usage_start, usage_end);
         model = LoadModel();
     }
 
- 
-    // 2. Load SentencePiece (Tokenizer)
-    std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
-    {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Load_Tokenizer", perf_monitor, metrics, usage_start, usage_end);
-        sp_processor = LoadSentencePieceProcessor();
-    }
-
-    
-    // 3. Build Interpreter -> build the interpreter from the model
+    // 2. Build Interpreter
     std::unique_ptr<tflite::Interpreter> interpreter;
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Build_Interpreter", perf_monitor, metrics, usage_start, usage_end);
+        ai_edge_torch::custom::profiler::ScopeLogger logger("Interpreter_Building", perf_monitor, metrics, usage_start, usage_end);
         interpreter = BuildInterpreter(model.get(), absl::GetFlag(FLAGS_num_threads));
     }
 
-    // 4. Build KV Cache -> allocate memory for KV cache
-    std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
-    {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Build_KV_Cache", perf_monitor, metrics, usage_start, usage_end);
-        kv_cache = BuildKVCache(interpreter.get());
-        MINIMAL_CHECK(!kv_cache.empty());
-    }
-    
-    // 5. Optionally load LoRA
-    // std::unique_ptr<ai_edge_torch::examples::LoRA> lora = nullptr;
-    // {
-    //     if (!absl::GetFlag(FLAGS_lora_path).empty())
-    //     {
-    //         lora = ai_edge_torch::examples::LoRA::FromFile(absl::GetFlag(FLAGS_lora_path));
-    //         MINIMAL_CHECK(lora != nullptr);
-    //     }
-    // }
-
-
-
-    // [Experimental] Tensor upload(pinning) before prefill
+    // Tensor upload before prefill
     /*
     {
         ai_edge_torch::custom::profiler::ScopeTimer timer("Tensor Uploading", perf_monitor, metrics, usage_start, usage_end);
@@ -351,26 +341,39 @@ int main(int argc, char *argv[])
        
     }
     */
-
-
-    // 6. Prepare Signature Runners -> get the prefill and decode runners and allocate tensors
-    tflite::SignatureRunner *prefill_runner = nullptr;
-    tflite::SignatureRunner *decode_runner = nullptr;
-    std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
+    
+    // 3. Load SentencePiece
+    std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Prepare_Signature_Runners", perf_monitor, metrics, usage_start, usage_end);
-
-        prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
-        MINIMAL_CHECK(prefill_runner != nullptr);
-
-        decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
-        MINIMAL_CHECK(decode_runner != nullptr);
-
+        ai_edge_torch::custom::profiler::ScopeLogger logger("SentencePiece_Loading", perf_monitor, metrics, usage_start, usage_end);
+        sp_processor = LoadSentencePieceProcessor();
     }
 
-    // 7. Prepare Prompt
+    // 4. Build KV Cache
+    std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Prepare_Prompt", perf_monitor, metrics, usage_start, usage_end);
+        ai_edge_torch::custom::profiler::ScopeLogger logger("KV_Cache_Building", perf_monitor, metrics, usage_start, usage_end);
+        kv_cache = BuildKVCache(interpreter.get());
+        MINIMAL_CHECK(!kv_cache.empty());
+    }
+
+    // 5. Optionally load LoRA
+    // std::unique_ptr<ai_edge_torch::examples::LoRA> lora = nullptr;
+    // {
+    //     ai_edge_torch::custom::profiler::ScopeTimer timer("LoRA Loading");
+    //     if (!absl::GetFlag(FLAGS_lora_path).empty())
+    //     {
+    //         lora = ai_edge_torch::examples::LoRA::FromFile(absl::GetFlag(FLAGS_lora_path));
+    //         MINIMAL_CHECK(lora != nullptr);
+    //     }
+    // }
+
+    /* *********************
+     * PREFILL PREPROCESS START
+     * *********************/
+    // 6. Prepare Input Prompt
+    {
+        ai_edge_torch::custom::profiler::ScopeLogger logger("Prompt_Preparation", perf_monitor, metrics, usage_start, usage_end);
         
         prompt = absl::GetFlag(FLAGS_prompt);
         MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
@@ -388,9 +391,22 @@ int main(int argc, char *argv[])
         }
         
     }
+    
+    // 7. Prepare Signature Runners
+    tflite::SignatureRunner *prefill_runner = nullptr;
+    tflite::SignatureRunner *decode_runner = nullptr;
+    std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
+    {
+        ai_edge_torch::custom::profiler::ScopeLogger logger("Signature_Runners_Preparation", perf_monitor, metrics, usage_start, usage_end);
 
+        prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
+        MINIMAL_CHECK(prefill_runner != nullptr);
 
-    // 8. Prepare Input Tensor
+        decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
+        MINIMAL_CHECK(decode_runner != nullptr);
+
+    }
+
     TfLiteTensor *prefill_input = nullptr;
     TfLiteTensor *prefill_input_pos = nullptr;
     TfLiteTensor *decode_input = nullptr;
@@ -398,37 +414,35 @@ int main(int argc, char *argv[])
     TfLiteTensor *kv_cache_k_0 = nullptr;
     int max_seq_size = 0;
     int kv_cache_max_size = 0;
-    int prefill_seq_size = 0;
+
+    // 8. Access Tensors
     {
-        ai_edge_torch::custom::profiler::ScopeLogger logger("Prepare_Input_Tensor", perf_monitor, metrics, usage_start, usage_end);
+        ai_edge_torch::custom::profiler::ScopeLogger logger("Prefill_Input_Tensors_Access", perf_monitor, metrics, usage_start, usage_end);
         
         // Get the input tensors for prefill and decode
         prefill_input = prefill_runner->input_tensor("tokens");
         prefill_input_pos = prefill_runner->input_tensor("input_pos");
         decode_input = decode_runner->input_tensor("tokens");
         decode_input_pos = decode_runner->input_tensor("input_pos");
-
-        // Use kv_cache_k_0 as representative to determine the max sequence size of KV cache.
-        // All kv_cache_k_* and kv_cache_v_* tensors share the same shape for [seq_len],
-        // so inspecting just one (e.g., kv_cache_k_0) is sufficient.
         kv_cache_k_0 = decode_runner->input_tensor("kv_cache_k_0");
         max_seq_size = prefill_input->dims->data[1];
         kv_cache_max_size = kv_cache_k_0->dims->data[1];
-        prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
+        int prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
 
         // Zero out the input tensors
         std::memset(prefill_input->data.i32, 0, prefill_input->bytes);
         std::memset(prefill_input_pos->data.i32, 0, prefill_input_pos->bytes);
 
         // Prefill uses all but the last token from the prompt
-        // Copy the prompt tokens to the prefill input tensor
-        // and set the input positions
         for (int i = 0; i < prefill_seq_size - 1; ++i)
         {
             prefill_input->data.i32[i] = prompt_tokens[i];
             prefill_input_pos->data.i32[i] = i;
         }
     }
+    /* *********************
+     * PREFILL PREPROCESS END
+     * *********************/
 
     /* *********************
      * PREFILL START
@@ -457,12 +471,13 @@ int main(int argc, char *argv[])
         ? kv_cache_max_size
         : absl::GetFlag(FLAGS_max_decode_steps);
     
+    int prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
     int next_token_id = prompt_tokens[prefill_seq_size - 1];
     int next_position = prefill_seq_size - 1;
     int decode_steps = std::min<int>(max_decode_steps, kv_cache_max_size - prefill_seq_size);
     MINIMAL_CHECK(decode_steps > 0);
 
-    // Metrics
+    // Metrics object
     std::vector<ai_edge_torch::custom::profiler::RUsageRecord> decode_rusage_records;
     ai_edge_torch::custom::profiler::DecodingMetrics decoding_metrics;
     double inference_time_ms = 0.0;

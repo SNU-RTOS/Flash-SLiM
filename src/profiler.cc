@@ -967,6 +967,7 @@ namespace ai_edge_torch::custom::profiler
         std::cout << "[METRICS] Prefill Time                     : " << prefill_time_ms << " ms\n";
         std::cout << "[METRICS] First Decoding Time              : " << first_decoding_time_ms_ << " ms\n";
         std::cout << "[METRICS] Time to First Token              : " << prefill_time_ms + first_decoding_time_ms_ << " ms\n\n";
+        std::cout << "[METRICS] [NOTE] First Decoding Time is excluded from Total Decoding Time \n\n";
 
         std::cout << "[METRICS] Total Inference Time             : " << total_inference_time_ms_ << " ms\n";
         std::cout << "[METRICS] Total Sampling Time              : " << total_sampling_time_ms_ << " ms\n";

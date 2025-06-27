@@ -125,8 +125,24 @@ fi
 # --------------------------------------------------------------------------- #
 # 3. Model, Binary and Prompt settings                                              #
 # --------------------------------------------------------------------------- #
-MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
-MODEL_NAME="llama_q8_ekv1024"
+# MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
+# MODEL_NAME="llama_q8_ekv1024"
+
+# MODEL_DIR="${MODEL_PATH}/Qwen2.5-3B-Instruct_multi-prefill-seq_q8_ekv1280"
+# MODEL_NAME="Qwen2.5-3B-Instruct_multi-prefill-seq_q8_ekv1280"
+
+# MODEL_DIR="${MODEL_PATH}/gemma3-1b-it-int4"
+# MODEL_NAME="gemma3"
+
+MODEL_DIR="${MODEL_PATH}/gemma3-1b-it-f32"
+MODEL_NAME="model"
+
+# MODEL_DIR="${MODEL_PATH}/llama-3.2-1b-it"
+# MODEL_NAME="Llama-3.2-1B-Instruct_multi-prefill-seq_f32_ekv1280"
+
+# MODEL_DIR="${MODEL_PATH}/Phi-4-mini-instruct"
+# MODEL_NAME="Phi-4-mini-instruct_multi-prefill-seq_q8_ekv1280"
+
 BIN="output/text_generator_main_${TARGET}"
 
 [[ -x "$BIN" ]]       || { echo "[ERROR] Binary not found: $BIN"; exit 1; }
@@ -181,7 +197,7 @@ while IFS= read -r line; do
         --num_threads "${NUM_THREADS}"
         --prompt "${PROMPT}"
         --weight_cache_path "${MODEL_DIR}/${MODEL_NAME}.xnnpack_cache"
-    )
+        )
     [[ "${CORE_LIST}" != "all" ]] && CMD=(taskset -c "${CORE_LIST}" "${CMD[@]}")
 
     if $LOG_ENABLED; then

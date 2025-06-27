@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 벤치마크 바이너리 경로 (수정 가능)
-OPS_BENCHMARK_BIN="./benchmark_model_aarch64"
+OPS_BENCHMARK_BIN="./util/benchmark_model_aarch64"
 
 # 결과 저장 디렉토리
 OPS_RESULT_DIR="./benchmark_ops_results"
@@ -10,7 +10,7 @@ if [ ! -d ${OPS_RESULT_DIR} ]; then
 fi
 
 # 모델 디렉토리
-MODEL_ROOT_PATH="/root/models/split"
+MODEL_ROOT_PATH="/home/rtos-rubik-2/workspace/OS-Supoort-for-on-device-LLM/models/Phi-4-mini-instruct"
 if [ ! -d ${MODEL_ROOT_PATH} ]; then
     echo "[INFO] INVAILD MODEL_ROOT_PATH"
     exit
@@ -22,7 +22,7 @@ for model_path in "$MODEL_ROOT_PATH"/*.tflite; do
     echo "Benchmarking model: $model_name"
 
     # 단일 쓰레드 실행, XNNPACK 사용
-    taskset -c 0 "$OPS_BENCHMARK_BIN" \
+    taskset -c 7 "$OPS_BENCHMARK_BIN" \
         --graph="$model_path" \
         --num_threads=1 \
         --enable_op_profiling=true \

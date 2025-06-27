@@ -20,14 +20,14 @@ source ./scripts/utils.sh
 source .env
 
 # ---------------------------------------------------------------------------
-# 1. Choose target (gpu|cpu)
+# 1. Choose target (gpu|cpu|qnn)
 # ---------------------------------------------------------------------------
 TARGET="${1:-gpu}"          # default = gpu
 
 case "${TARGET}" in
-  gpu|cpu) ;;
+  gpu|cpu|qnn) ;;
   *)
-    echo "Usage: $0 [gpu|cpu]" >&2
+    echo "Usage: $0 [gpu|cpu|qnn]" >&2
     exit 1
     ;;
 esac
@@ -44,8 +44,11 @@ echo "[INFO] Target accelerator: ${TARGET^^}"
 # ---------------------------------------------------------------------------
 # 2. Model & prompt settings
 # ---------------------------------------------------------------------------
-MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
-MODEL_NAME="llama_q8_ekv1024"
+# MODEL_DIR="${MODEL_PATH}/Gemma2-2B-it"
+# MODEL_NAME="Gemma2-2B-IT_multi-prefill-seq_q8_ekv1280"
+
+MODEL_DIR="${MODEL_PATH}/gemma3-1b-it-int4"
+MODEL_NAME="gemma3"
 
 PROMPT_FILE="./${PROMPT_PATH}/sample_prompt_8_1.txt"
 if [[ ! -f "${PROMPT_FILE}" ]]; then

@@ -8,7 +8,7 @@
 ROOT_DIR      := $(shell pwd)
 SRC_DIR       := src
 OBJ_DIR       := obj
-TARGET        := text_generator_main_gpu
+TARGET        := text_generator_main_qnn
 TARGET_PATH   := output/$(TARGET)
 
 # 1. Compiler settings ────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ GENAIOPS_GROUP := -Wl,--start-group -lgenai_ops -lcache_buffer -lflatbuffers -Wl
 # 4. External libraries ───────────────────────────────────────────────────────
 EXT_LIBS := \
 	-ltensorflowlite \
-	-ltensorflowlite_gpu_delegate -lEGL -lGLESv2 \
+	-lQnnTFLiteDelegate \
 	-lsentencepiece_processor -lsentencepiece_proto -lsentencepiece_model_proto \
 	-lprotobuf_lite \
 	-ldl -lrt -pthread          # required by Abseil & TF Lite
@@ -65,7 +65,7 @@ EXT_LIBS := \
 LDFLAGS := -Wl,-rpath=\$$ORIGIN/../lib:\$$ORIGIN/lib $(EXT_LIBS) $(ABSL_GROUP) $(GENAIOPS_GROUP) 
 
 # 6. Sources / objects ────────────────────────────────────────────────────────
-SRCS     := text_generator_main_gpu.cc profiler.cc sampler.cc utils.cc
+SRCS     := text_generator_main_qnn.cc profiler.cc sampler.cc utils.cc
 OBJS     := $(SRCS:%.cc=%.o)
 OBJECTS  := $(patsubst %.o,$(OBJ_DIR)/%.o,$(OBJS))
 DEPS     := $(OBJECTS:.o=.d)

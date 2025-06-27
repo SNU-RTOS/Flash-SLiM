@@ -29,6 +29,7 @@ OUT_DIR=output
 
 CPU_BIN="${OUT_DIR}/${APP_BASE}_cpu"
 GPU_BIN="${OUT_DIR}/${APP_BASE}_gpu"
+QNN_BIN="${OUT_DIR}/${APP_BASE}_qnn"  # QNN variant, if applicable
 
 # ---------------------------------------------------------------------------
 # 1. Parse argument
@@ -36,7 +37,7 @@ GPU_BIN="${OUT_DIR}/${APP_BASE}_gpu"
 BUILD_TARGET="${1:-gpu}"    # default = gpu
 
 case "${BUILD_TARGET}" in
-  cpu|gpu|all) ;;
+  cpu|gpu|qnn|all) ;;
   *)
     echo "Invalid target '${BUILD_TARGET}' (expected cpu|gpu|all)" >&2
     exit 1
@@ -65,11 +66,20 @@ do_cpu_build() {
   echo "[INFO] CPU binary -> ${CPU_BIN}"
 }
 
+do_qnn_build(){
+  echo "[INFO] Building QNN variant..."
+  run make -f Makefile-qnn -j"$(nproc)"
+  [[ -f "${OUT_DIR}/${APP_BASE}" ]] \
+      && mv -f "${OUT_DIR}/${APP_BASE}" "${QNN_BIN}"
+  echo "[INFO] QNN binary -> ${QNN_BIN}"
+}
+
 # ---------------------------------------------------------------------------
 # 3. Invoke builds
 # ---------------------------------------------------------------------------
 [[ "${BUILD_TARGET}" == gpu || "${BUILD_TARGET}" == all ]] && do_gpu_build
 [[ "${BUILD_TARGET}" == cpu || "${BUILD_TARGET}" == all ]] && do_cpu_build
+[[ "${BUILD_TARGET}" == qnn ]] && do_qnn_build
 
 echo "[SUCCESS] Finished build target='${BUILD_TARGET}'."
 
@@ -81,6 +91,7 @@ cd "${ROOT_PATH}"
 case "${BUILD_TARGET}" in
   gpu) TARGET_BIN="${GPU_BIN}" ;;
   cpu) TARGET_BIN="${CPU_BIN}" ;;
+  qnn) TARGET_BIN="${QNN_BIN}" ;;
   all) TARGET_BIN="${GPU_BIN}" ;;   # default symlink to GPU when building both
 esac
 

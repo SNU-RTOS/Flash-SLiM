@@ -21,13 +21,13 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/match.h"
 #include "src/sentencepiece_processor.h"
-#include "tensorflow/lite/delegates/xnnpack/xnnpack_delegate.h"
-#include "tensorflow/lite/experimental/genai/genai_ops.h"
-#include "tensorflow/lite/interpreter.h"
-#include "tensorflow/lite/interpreter_builder.h"
-#include "tensorflow/lite/kernels/register.h"
-#include "tensorflow/lite/model_builder.h"
-#include "tensorflow/lite/signature_runner.h"
+#include "tflite/delegates/xnnpack/xnnpack_delegate.h"
+#include "tflite/experimental/genai/genai_ops.h"
+#include "tflite/interpreter.h"
+#include "tflite/interpreter_builder.h"
+#include "tflite/kernels/register.h"
+#include "tflite/model_builder.h"
+#include "tflite/signature_runner.h"
 
 #include "utils.h"
 #include "sampler.h"
@@ -390,6 +390,9 @@ int main(int argc, char *argv[])
         kv_cache_k_0 = decode_runner->input_tensor("kv_cache_k_0");
         max_seq_size = prefill_input->dims->data[1];
         kv_cache_max_size = kv_cache_k_0->dims->data[1];
+        for (int i = 0; i < kv_cache_k_0->dims->size; ++i) {
+            std::cout << "kv_cache_k_0->dims->data[" << i << "] = " << kv_cache_k_0->dims->data[i] << std::endl;
+        }
         int prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
 
         // Zero out the input tensors
@@ -427,25 +430,27 @@ int main(int argc, char *argv[])
      * DECODE START
      * *********************/
     // 10. Decoding Stage with separate metrics for inference and sampling
-    std::cout << "\nPrompt:\n" << prompt << "\n\nOutput Text:\n";
     
     // Determine how many tokens to generate
     int max_decode_steps = (absl::GetFlag(FLAGS_max_decode_steps) == -1)
-        ? kv_cache_max_size
-        : absl::GetFlag(FLAGS_max_decode_steps);
+    ? kv_cache_max_size
+    : absl::GetFlag(FLAGS_max_decode_steps);
     
     int prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
     int next_token_id = prompt_tokens[prefill_seq_size - 1];
     int next_position = prefill_seq_size - 1;
     int decode_steps = std::min<int>(max_decode_steps, kv_cache_max_size - prefill_seq_size);
+    std::cout << "[INFO] Decoding " << decode_steps << " steps, max decode steps: " 
+    << max_decode_steps << ", kv_cache_max_size: " << kv_cache_max_size << "\n";
     MINIMAL_CHECK(decode_steps > 0);
-
+    
     // Metrics object
     std::vector<ai_edge_torch::custom::profiler::RUsageRecord> decode_rusage_records;
     ai_edge_torch::custom::profiler::DecodingMetrics decoding_metrics;
     double inference_time_ms = 0.0;
     double sampling_time_ms = 0.0;
-
+    
+    std::cout << "\nPrompt:\n" << prompt << "\n\nOutput Text:\n";
     // Decoding loop
     for (int i = 0; i < decode_steps; ++i) {
         {

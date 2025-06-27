@@ -8,7 +8,7 @@ echo "🔹 기존 swap 파일 삭제..."
 sudo rm -f /swap.img
 
 # 2. 새로운 swap 파일 생성 (예: 4GB)
-SWAP_SIZE_GB=8
+SWAP_SIZE_GB=16
 SWAP_SIZE=$((SWAP_SIZE_GB * 1024 * 1024))  # MB 단위 변환
 
 echo "🔹 새로운 ${SWAP_SIZE_GB}GB swap 파일 생성..."
