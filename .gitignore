@@ -36,3 +36,4 @@ inc/absl
 inc/sentencepiece
 inc/tensorflow
 inc/flatbuffers
+inc/litert

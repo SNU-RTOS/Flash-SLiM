@@ -18,15 +18,16 @@ else
 fi
 
 # ── paths ─────────────────────────────────────────────────────────────────────
-LITERT_LIB_PATH=${TENSORFLOW_PATH}/bazel-bin/tensorflow/lite
-GENAI_LIB_PATH=${TENSORFLOW_PATH}/bazel-bin/tensorflow/lite/experimental/genai
-RESOURCE_LIB_PATH=${TENSORFLOW_PATH}/bazel-bin/tensorflow/lite/experimental/resource
-CACHE_LIB_PATH=${TENSORFLOW_PATH}/bazel-bin/tensorflow/lite/experimental/resource
-FLATBUFFER_LIB_PATH=${TENSORFLOW_PATH}/bazel-bin/external/flatbuffers/src
+LITERT_LIB_PATH=${LITERT_PATH}/bazel-bin/tflite/libtensorflowlite.so
+GENAI_LIB_PATH=${LITERT_PATH}/bazel-bin/tflite/experimental/genai
+RESOURCE_LIB_PATH=${LITERT_PATH}/bazel-bin/tflite/experimental/resource
+CACHE_LIB_PATH=${LITERT_PATH}/bazel-bin/tflite/experimental/resource
+FLATBUFFER_LIB_PATH=${LITERT_PATH}/bazel-bin/external/flatbuffers/src
 
 
-FLATBUFFER_INC_PATH=${TENSORFLOW_PATH}/bazel-tensorflow/external/flatbuffers/include/flatbuffers
-LITERT_INC_PATH=${TENSORFLOW_PATH}/tensorflow
+TENSORFLOW_INC_PATH=${LITERT_PATH}/bazel-LiteRT/external/org_tensorflow/tensorflow
+FLATBUFFER_INC_PATH=${LITERT_PATH}/bazel-LiteRT/external/flatbuffers/include/flatbuffers
+LITERT_INC_PATH=${LITERT_PATH}/tflite
 
 echo "[INFO] Build LiteRT ($BUILD_MODE mode)…"
 echo "[INFO] Core:      ${LITERT_LIB_PATH}"
@@ -34,15 +35,16 @@ echo "[INFO] GenAI:     ${GENAI_LIB_PATH}"
 echo "[INFO] Resource:  ${RESOURCE_LIB_PATH}"
 echo "[INFO] CacheBuf:  ${CACHE_LIB_PATH}"
 
-cd "${TENSORFLOW_PATH}" || exit 1
+cd "${LITERT_PATH}" || exit 1
 pwd
 
 # 1) Build core + GenAI + Resource + CacheBuffer
 bazel build ${BAZEL_CONF} \
-    //tensorflow/lite:tensorflowlite \
-    //tensorflow/lite/experimental/genai:genai_ops \
-    //tensorflow/lite/experimental/resource:resource \
-    //tensorflow/lite/experimental/resource:cache_buffer \
+    //tflite:tf_lite_runtime \
+    //tflite/experimental/genai:genai_ops \
+    //tflite/experimental/resource:resource \
+    //tflite/experimental/resource:cache_buffer \
+    @flatbuffers//src:flatbuffers \
     ${COPT_FLAGS} \
     ${LINKOPTS}
 
@@ -51,7 +53,6 @@ bazel shutdown
 # ── symlinks ──────────────────────────────────────────────────────────────────
 echo "[INFO] Symlink LiteRT and auxiliary libs…"
 mkdir -p "${ROOT_PATH}/lib" "${ROOT_PATH}/inc"
-
 
 
 ## Selecet the correct library names based on the build mode
@@ -68,7 +69,7 @@ else
 fi
 
 ## ──────────── Libs ──────────────────────────────────────────────
-create_symlink_or_fail "${LITERT_LIB_PATH}/libtensorflowlite.so" \
+create_symlink_or_fail "${LITERT_LIB_PATH}" \
                        "${ROOT_PATH}/lib/libtensorflowlite.so" \
                        "libtensorflowlite.so"
 
@@ -91,11 +92,16 @@ create_symlink_or_fail "${FLATBUFFER_LIB_PATH}/${FLATBUF_A}" \
 ## ──────────── Headers ──────────────────────────────────────────────
 create_symlink_or_fail "${FLATBUFFER_INC_PATH}" \
                        "${ROOT_PATH}/inc/" \
-                       "flatbuffers header files"
+                       "Flatbuffers header files"
 
 create_symlink_or_fail "${LITERT_INC_PATH}" \
                        "${ROOT_PATH}/inc/" \
-                       "tensorflow header files"
+                       "LiteRT header files"
+
+create_symlink_or_fail "${TENSORFLOW_INC_PATH}" \
+                        "${ROOT_PATH}/inc/" \
+                        "Tensorflow header files"
+
 
 cd "${ROOT_PATH}/scripts" || exit 1
 pwd

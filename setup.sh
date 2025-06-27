@@ -23,7 +23,7 @@ set -euo pipefail
 source .env
 
 # --- Configuration ------------------------------------------------------------
-TF_COMMIT=117a62ac439ed87eb26f67208be60e01c21960de
+# TF_COMMIT=117a62ac439ed87eb26f67208be60e01c21960de
 BUILD_TYPE="${1:-release}"   # debug | release
 
 # --- Helpers ------------------------------------------------------------------
@@ -37,10 +37,10 @@ cat <<EOF
   ROOT_PATH          = ${ROOT_PATH}
   EXTERNAL_PATH      = ${EXTERNAL_PATH}
   AI_EDGE_TORCH_PATH = ${AI_EDGE_TORCH_PATH}
-  TENSORFLOW_PATH    = ${TENSORFLOW_PATH}
+  LITERT_PATH        = ${LITERT_PATH}
   BUILD_TYPE         = ${BUILD_TYPE}
 EOF
-
+# TENSORFLOW_PATH    = ${TENSORFLOW_PATH}
 # ------------------------------------------------------------------------------
 # 1. Ensure external directory exists
 # ------------------------------------------------------------------------------
@@ -51,38 +51,51 @@ ensure_dir "${EXTERNAL_PATH}"
 # ------------------------------------------------------------------------------
 banner "Installing ai-edge-torch"
 if [[ ! -d "${AI_EDGE_TORCH_PATH}" ]]; then
-  run git clone https://github.com/SNU-RTOS/ai-edge-torch.git "${AI_EDGE_TORCH_PATH}"
+#   run git clone https://github.com/SNU-RTOS/ai-edge-torch.git "${AI_EDGE_TORCH_PATH}"
 
-  # Link our app sources into examples/cpp
-  EX_CPP="${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp"
-  [[ -e "${EX_CPP}" ]] && run rm -rf "${EX_CPP}"
-  run ln -s "${LLM_APP_SRC}" "${EX_CPP}"
+#   # Link our app sources into examples/cpp
+#   EX_CPP="${AI_EDGE_TORCH_PATH}/ai_edge_torch/generative/examples/cpp"
+#   [[ -e "${EX_CPP}" ]] && run rm -rf "${EX_CPP}"
+#   run ln -s "${LLM_APP_SRC}" "${EX_CPP}"
 
-  # Update TensorFlow path in WORKSPACE
-  WORKSPACE="${AI_EDGE_TORCH_PATH}/WORKSPACE"
-  run sed -i "s|path = \".*\"|path = \"${TENSORFLOW_PATH}\"|" "${WORKSPACE}"
+#   # Update TensorFlow path in WORKSPACE
+#   WORKSPACE="${AI_EDGE_TORCH_PATH}/WORKSPACE"
+#   run sed -i "s|path = \".*\"|path = \"${TENSORFLOW_PATH}\"|" "${WORKSPACE}"
 else
   echo "[SKIP] ai-edge-torch already present."
 fi
 
 # ------------------------------------------------------------------------------
-# 3. Clone TensorFlow at the specified commit
+# 3. Clone LiteRT at the specified commit
 # ------------------------------------------------------------------------------
-banner "Installing TensorFlow (${TF_COMMIT})"
-if [[ ! -d "${TENSORFLOW_PATH}" ]]; then
-  ensure_dir "${TENSORFLOW_PATH}"
-  pushd "${TENSORFLOW_PATH}" >/dev/null
-  run git init .
-  run git remote add origin https://github.com/tensorflow/tensorflow.git
-  run git fetch --depth 1 origin "${TF_COMMIT}"
-  run git checkout FETCH_HEAD
-  echo "[INFO] Applying LiteRT patch ..."
-  run patch -p1 <"${AI_EDGE_TORCH_PATH}/bazel/org_tensorflow_system_python.diff"
+# banner "Installing TensorFlow (${TF_COMMIT})"
+# if [[ ! -d "${TENSORFLOW_PATH}" ]]; then
+#   ensure_dir "${TENSORFLOW_PATH}"
+#   pushd "${TENSORFLOW_PATH}" >/dev/null
+#   run git init .
+#   run git remote add origin https://github.com/tensorflow/tensorflow.git
+#   run git fetch --depth 1 origin "${TF_COMMIT}"
+#   run git checkout FETCH_HEAD
+#   echo "[INFO] Applying LiteRT patch ..."
+#   run patch -p1 <"${AI_EDGE_TORCH_PATH}/bazel/org_tensorflow_system_python.diff"
+#   popd >/dev/null
+# else
+#   echo "[SKIP] TensorFlow already present."
+# fi
+
+banner "Installing LiteRT"
+if [[ ! -d "${LITERT_PATH}" ]]; then
+  ensure_dir "${LITERT_PATH}"
+  pushd "${LITERT_PATH}" >/dev/null
+  pwd
+  run git clone https://github.com/google-ai-edge/litert.git
+  cd LiteRT
+  pwd
+  ./configure
   popd >/dev/null
 else
-  echo "[SKIP] TensorFlow already present."
+  echo "[SKIP] LiteRT already present."
 fi
-
 # ------------------------------------------------------------------------------
 # 4. Create local build directories (inc/lib/obj/output)
 # ------------------------------------------------------------------------------

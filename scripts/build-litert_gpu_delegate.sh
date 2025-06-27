@@ -18,17 +18,17 @@ else
 fi
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-GPU_DELEGATE_PATH=${TENSORFLOW_PATH}/bazel-bin/tensorflow/lite/delegates/gpu/libtensorflowlite_gpu_delegate.so
+GPU_DELEGATE_PATH=${LITERT_PATH}/bazel-bin/tflite/delegates/gpu/libtensorflowlite_gpu_delegate.so
 
 # ── Build GPU Delegate ────────────────────────────────────────────────────────
 echo "[INFO] Build GPU Delegate ($BUILD_MODE mode) .."
 echo "[INFO] Path: ${GPU_DELEGATE_PATH}"
 
-cd "${TENSORFLOW_PATH}" || exit 1
+cd "${LITERT_PATH}" || exit 1
 pwd
 
 bazel build ${BAZEL_CONF} \
-  //tensorflow/lite/delegates/gpu:libtensorflowlite_gpu_delegate.so \
+  //tflite/delegates/gpu:libtensorflowlite_gpu_delegate.so \
   ${COPT_FLAGS} ${LINKOPTS}
 
 # ── Symlinks ──────────────────────────────────────────────────────────────────
