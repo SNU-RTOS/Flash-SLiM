@@ -1,6 +1,5 @@
 #include "profiler.h"
 
-
 namespace
 {
     // Helper function to convert timeval to seconds
@@ -13,6 +12,16 @@ namespace
     double __timespec_to_sec(const struct timespec &ts)
     {
         return ts.tv_sec + (ts.tv_nsec / 1.0e9);
+    }
+
+    double __timeval_to_ms(const struct timeval &tv)
+    {
+        return (double)tv.tv_sec * 1000.0 + ((double)tv.tv_usec * 1e6) / 1e9;
+    }
+
+    double __timespec_to_ms(const struct timespec &ts)
+    {
+        return ts.tv_sec * 1e3 + (ts.tv_nsec * 1e3 / 1.0e9);
     }
 
     // Function to get CPU time for a specific core (if possible)
@@ -84,7 +93,6 @@ namespace ai_edge_torch::custom::profiler
             std::cout << core << " ";
         }
         std::cout << std::endl;
-
     }
 
     IOStats get_io_stats()
@@ -120,80 +128,138 @@ namespace ai_edge_torch::custom::profiler
         return stats;
     }
 
-    void print_rusage(rusage usage_start, rusage usage_end, const std::string phase_name)
+    void print_rusage(rusage usage_start, rusage usage_end, double wall_time_ms, const std::string phase_name)
     {
-        double user_time_start = __timeval_to_sec(usage_start.ru_utime);
-        double user_time_end = __timeval_to_sec(usage_end.ru_utime);
-        double sys_time_start = __timeval_to_sec(usage_start.ru_stime);
-        double sys_time_end = __timeval_to_sec(usage_end.ru_stime);
-        double cpu_time_sec = (user_time_end - user_time_start) + (sys_time_end - sys_time_start);
-        double user_time_sec = (user_time_end - user_time_start);
-        double sys_time_sec = (sys_time_end - sys_time_start);
-        std::cout << phase_name << " took \n- "
-                  << cpu_time_sec << " [sec] CPU time\n- "
-                  << user_time_sec << " [sec] User time\n- "
-                  << sys_time_sec << " [sec] System time" << std::endl;
+        double user_time_start = __timeval_to_ms(usage_start.ru_utime);
+        double user_time_end = __timeval_to_ms(usage_end.ru_utime);
+        double sys_time_start = __timeval_to_ms(usage_start.ru_stime);
+        double sys_time_end = __timeval_to_ms(usage_end.ru_stime);
+        double cpu_time_ms = (user_time_end - user_time_start) + (sys_time_end - sys_time_start);
+        double user_time_ms = (user_time_end - user_time_start);
+        double sys_time_ms = (sys_time_end - sys_time_start);
+
+        std::cout << "[INFO] " << phase_name << "\n"
+                  << "Time Statistics\n"  
+                  << "  " << wall_time_ms << " [ms] Wall Clock Time\n"
+                  << "  - " << cpu_time_ms << " [ms] Total CPU Time (user + system time across all threads)\n"
+                  << "      - " << user_time_ms << " [ms] User Time (time spent in user mode)\n"
+                  << "      - " << sys_time_ms << " [ms] System Time (time spent in kernel mode)\n";
+
+        double idle_time_ms = wall_time_ms - cpu_time_ms;
+        if (idle_time_ms > 0.0)
+        {
+            std::cout << "  - " << idle_time_ms << " [ms] Idle or Waiting time (CPU inactive)\n";
+        }
+
+        std::cout << "Memory Usage\n"
+                  << "  " << usage_end.ru_maxrss << " [kB] Maximum Resident Set Size (peak memory usage)\n";
+
+        std::cout << "Page Faults\n"
+                  << "  " << (usage_end.ru_minflt - usage_start.ru_minflt) << " Minor Page Faults\n"
+                  << "  " << (usage_end.ru_majflt - usage_start.ru_majflt) << " Major Page Faults\n";
+
+        std::cout << "Swap Activity\n"
+                  << "  " << (usage_end.ru_nswap - usage_start.ru_nswap) << " Swaps (process swapped out of RAM)\n";
+
+        std::cout << "Disk I/O\n"
+                  << "  " << (usage_end.ru_inblock - usage_start.ru_inblock) << " Block Input Operations (disk reads)\n"
+                  << "  " << (usage_end.ru_oublock - usage_start.ru_oublock) << " Block Output Operations (disk writes)\n";
+
+        std::cout << "Context Switches\n"
+                  << "  " << (usage_end.ru_nvcsw - usage_start.ru_nvcsw) << " Voluntary Context Switches (process yielded CPU)\n"
+                  << "  " << (usage_end.ru_nivcsw - usage_start.ru_nivcsw) << " Involuntary Context Switches (preempted by OS)\n";
+
+        std::cout << "\n";
     }
 
     void print_rusage_records(const std::vector<RUsageRecord> &records, const std::string &phase_name_prefix)
     {
-        if (records.empty()) {
+        if (records.empty())
+        {
             std::cout << "[RUsage] No records to print.\n";
             return;
         }
 
         double total_user_time = 0.0;
-        double total_sys_time  = 0.0;
-        double total_cpu_time  = 0.0;
+        double total_sys_time = 0.0;
+        double total_cpu_time = 0.0;
         double total_wall_time = 0.0;
 
-        for (const auto &rec : records)
-        {
-            double user_time_start = __timeval_to_sec(rec.start_.ru_utime);
-            double user_time_end   = __timeval_to_sec(rec.end_.ru_utime);
-            double sys_time_start  = __timeval_to_sec(rec.start_.ru_stime);
-            double sys_time_end    = __timeval_to_sec(rec.end_.ru_stime);
+        size_t count = records.size();
+        size_t valid_count = (count > 1) ? count - 1 : 0;
 
-            double user_time = user_time_end - user_time_start;
-            double sys_time  = sys_time_end  - sys_time_start;
-            double cpu_time  = user_time + sys_time;
+        for (size_t i = 1; i < records.size(); ++i) // i=1부터 합산: Decode_0 제외
+        {
+            const auto &rec = records[i];
+
+            double user_start_ms = __timeval_to_ms(rec.start_.ru_utime);
+            double user_end_ms = __timeval_to_ms(rec.end_.ru_utime);
+            double sys_start_ms = __timeval_to_ms(rec.start_.ru_stime);
+            double sys_end_ms = __timeval_to_ms(rec.end_.ru_stime);
+
+            double user_time = user_end_ms - user_start_ms;
+            double sys_time = sys_end_ms - sys_start_ms;
+            double cpu_time = user_time + sys_time;
 
             total_user_time += user_time;
-            total_sys_time  += sys_time;
-            total_cpu_time  += cpu_time;
+            total_sys_time += sys_time;
+            total_cpu_time += cpu_time;
             total_wall_time += rec.wall_time_ms;
         }
 
-        size_t count = records.size();
-        double avg_user_time = total_user_time / count;
-        double avg_sys_time  = total_sys_time  / count;
-        double avg_cpu_time  = total_cpu_time  / count;
-        double avg_wall_time = total_wall_time / count;
+        double avg_user_time = (valid_count > 0) ? (total_user_time / valid_count) : 0.0;
+        double avg_sys_time = (valid_count > 0) ? (total_sys_time / valid_count) : 0.0;
+        double avg_cpu_time = (valid_count > 0) ? (total_cpu_time / valid_count) : 0.0;
+        double avg_wall_time = (valid_count > 0) ? (total_wall_time / valid_count) : 0.0;
 
-        // std::cout << std::fixed << std::setprecision(6);
-        std::cout << "\n" << COLOR_GREEN << "RUsage Records Report (" << phase_name_prefix << ")" << COLOR_RESET << "\n";
-        // 1. Total 출력
-        std::cout << "\n[INFO] "<< phase_name_prefix << " (total) took "<< total_wall_time << " ms\n"
-                << "- " << total_cpu_time  << " [sec] CPU time\n"
-                << "- " << total_user_time << " [sec] User time\n"
-                << "- " << total_sys_time  << " [sec] System time\n";
+        std::cout << "\n"
+                  << COLOR_GREEN << "RUsage Records Report (" << phase_name_prefix << ")" << COLOR_RESET << "\n";
 
-        // 2. Average 출력
-        std::cout << "\n[INFO] "<< phase_name_prefix << " (avg) took "<< avg_wall_time << " ms\n"
-                << "- " << avg_cpu_time  << " [sec] CPU time\n"
-                << "- " << avg_user_time << " [sec] User time\n"
-                << "- " << avg_sys_time  << " [sec] System time\n";
+        if (valid_count > 0)
+        {
+            // 1) Total 출력
+            std::cout << "\n[INFO] " << phase_name_prefix << " (total, excluding first) took\n"
+                      << "  " << total_wall_time << " [ms] Wall Clock Time\n"
+                      << "  - " << total_cpu_time << " [ms] CPU Time\n"
+                      << "      - " << total_user_time << " [ms] User Time\n"
+                      << "      - " << total_sys_time << " [ms] System Time\n";
+            double total_idle_time_ms = total_wall_time - total_cpu_time;
+            if (total_idle_time_ms > 0.0)
+            {
+                std::cout << "  - " << total_idle_time_ms << " [ms] Idle or Waiting time (CPU inactive)\n";
+            }
 
-        // 3. 개별 출력
-        std::cout << "\n[INFO] Per Stage: \n\n";
-        for (size_t i = 0; i < records.size(); ++i)
+            // 2) Average 출력
+            std::cout << "\n[INFO] " << phase_name_prefix << " (avg, excluding first) took\n"
+                      << "  " << avg_wall_time << " ms Wall Clock Time\n"
+                      << "  - " << avg_cpu_time << " [ms] CPU Time\n"
+                      << "      - " << avg_user_time << " [ms] User Time\n"
+                      << "      - " << avg_sys_time << " [ms] System Time\n";
+            double avg_idle_time_ms = avg_wall_time - avg_cpu_time;
+            if (avg_idle_time_ms > 0.0)
+            {
+                std::cout << "  - " << avg_idle_time_ms << " [ms] Idle or Waiting time (CPU inactive)\n";
+            }
+        }
+        else
+        {
+            std::cout << "\n[INFO] Not enough records to calculate average excluding the first.\n";
+        }
+
+        std::cout << "\n";
+
+        // 0) 첫 번째 record (First decoding) 별도로 출력
+        const auto &first = records[0];
+        print_rusage(first.start_, first.end_, first.wall_time_ms, phase_name_prefix + "_0");
+
+        // 3) 나머지 개별 단계 출력
+        for (size_t i = 1; i < records.size(); ++i)
         {
             const auto &rec = records[i];
             std::string phase_name = phase_name_prefix + "_" + std::to_string(i);
-            print_rusage(rec.start_, rec.end_, phase_name);
+            print_rusage(rec.start_, rec.end_, rec.wall_time_ms, phase_name);
         }
     }
-
 
     void upload_tensors_for_all_subgraphs(tflite::Interpreter *interpreter)
     {
@@ -649,7 +715,6 @@ namespace ai_edge_torch::custom::profiler
             // Clean up
             phase_core_timespec.erase(core_timespec_it);
         }
-
     }
 
     // private
@@ -814,38 +879,51 @@ namespace ai_edge_torch::custom::profiler
     //////////////////////////////////////////////////////////////////////////
     /* class PerformanceMetrics: Class to collect and report performance metrics */
     // public:
-    void PerformanceMetrics::RecordStats(const std::string &phase, const PerfStats &stats) {
+    void PerformanceMetrics::RecordStats(const std::string &phase, const PerfStats &stats)
+    {
         phase_stats_.emplace_back(phase, stats);
     }
 
-    void PerformanceMetrics::PrintStats() const {
+    void PerformanceMetrics::PrintStats() const
+    {
         std::unordered_map<std::string, std::vector<PerfStats>> grouped_stats;
         std::unordered_set<std::string> printed;
 
         // Group same phase names
-        for (const auto &[phase, stat] : phase_stats_) {
+        for (const auto &[phase, stat] : phase_stats_)
+        {
             grouped_stats[phase].push_back(stat);
         }
 
         // Preserve insertion order
-        std::cout << "\n"<<COLOR_GREEN<<"Perf Report "<<COLOR_RESET<<"\n";
-        for (const auto &[phase, _] : phase_stats_) {
-            if (printed.count(phase)) continue;
+        std::cout << "\n"
+                  << COLOR_GREEN << "Perf Report " << COLOR_RESET << "\n";
+        for (const auto &[phase, _] : phase_stats_)
+        {
+            if (printed.count(phase))
+                continue;
             printed.insert(phase);
 
             const auto &stats_vec = grouped_stats.at(phase);
-            if (stats_vec.empty()) continue;
+            if (stats_vec.empty())
+                continue;
 
-            std::cout << "\n"<< COLOR_YELLOW << "=== Performance Statistics for Phase: " << phase << " ==="<< COLOR_RESET<<"\n";
+            std::cout << "\n"
+                      << COLOR_YELLOW << "=== Performance Statistics for Phase: " << phase << " ===" << COLOR_RESET << "\n";
 
-            if (stats_vec.size() == 1) {
+            if (stats_vec.size() == 1)
+            {
                 PrintSinglePhaseStat(stats_vec[0]);
-            } else {
+            }
+            else
+            {
                 PrintAverageStats(stats_vec);
 
-                if (stats_vec.size() <= 10) {
+                if (stats_vec.size() <= 10)
+                {
                     std::cout << "\nPer-step details:\n";
-                    for (size_t i = 0; i < stats_vec.size(); ++i) {
+                    for (size_t i = 0; i < stats_vec.size(); ++i)
+                    {
                         std::cout << "Step " << i << ":\n";
                         PrintSinglePhaseStat(stats_vec[i], "  ");
                     }
@@ -854,12 +932,14 @@ namespace ai_edge_torch::custom::profiler
         }
     }
 
-    void PerformanceMetrics::PrintAverageStats(const std::vector<PerfStats>& stats_vec) const {
+    void PerformanceMetrics::PrintAverageStats(const std::vector<PerfStats> &stats_vec) const
+    {
         double avg_wall_time = 0, avg_user_time = 0, avg_system_time = 0;
         double avg_cpu_time = 0, avg_io_wait_time = 0;
         double avg_io_bytes_read = 0, avg_io_bytes_written = 0;
 
-        for (const auto& stats : stats_vec) {
+        for (const auto &stats : stats_vec)
+        {
             avg_wall_time += stats.wall_time_ms;
             avg_user_time += stats.user_time_sec;
             avg_system_time += stats.system_time_sec;
@@ -889,7 +969,8 @@ namespace ai_edge_torch::custom::profiler
                   << "CPU utilization: " << (avg_cpu_time * 1000 * 100) / avg_wall_time << "%\n";
     }
 
-    void PerformanceMetrics::PrintSinglePhaseStat(const PerfStats &stats, const std::string &prefix) const {
+    void PerformanceMetrics::PrintSinglePhaseStat(const PerfStats &stats, const std::string &prefix) const
+    {
         std::cout << prefix << "Wall clock time: " << stats.wall_time_ms << " ms\n"
                   << prefix << "User time: " << stats.user_time_sec << " sec\n"
                   << prefix << "System time: " << stats.system_time_sec << " sec\n"
@@ -900,9 +981,11 @@ namespace ai_edge_torch::custom::profiler
                   << prefix << "I/O bytes written: " << stats.io_bytes_written / (1024.0 * 1024.0) << " MB\n"
                   << prefix << "CPU utilization: " << (stats.cpu_time_sec * 1000 * 100) / stats.wall_time_ms << "%\n";
 
-        if (!stats.core_user_times.empty()) {
+        if (!stats.core_user_times.empty())
+        {
             std::cout << prefix << "Per-core statistics:\n";
-            for (size_t i = 0; i < stats.core_user_times.size(); ++i) {
+            for (size_t i = 0; i < stats.core_user_times.size(); ++i)
+            {
                 std::cout << prefix << "  Core " << i << ": "
                           << "User=" << stats.core_user_times[i] << "s, "
                           << "System=" << stats.core_system_times[i] << "s, "
@@ -936,7 +1019,7 @@ namespace ai_edge_torch::custom::profiler
         total_decoding_time_ms_ += decoding_time_ms;
 
         // Track total tokens
-        ++token_count_;
+        ++token_count_excluding_first_;
     }
 
     // Print out final decoding metrics
@@ -949,20 +1032,21 @@ namespace ai_edge_torch::custom::profiler
         double avg_sampling_speed = 0.0;
         double avg_decoding_speed = 0.0;
 
-        if (token_count_ > 0)
+        if (token_count_excluding_first_ > 0)
         {
-            avg_inference_time_ms = total_inference_time_ms_ / token_count_;
-            avg_sampling_time_ms = total_sampling_time_ms_ / token_count_;
-            avg_decoding_time_ms = (total_sampling_time_ms_ + total_inference_time_ms_) / token_count_;
+            avg_inference_time_ms = total_inference_time_ms_ / token_count_excluding_first_;
+            avg_sampling_time_ms = total_sampling_time_ms_ / token_count_excluding_first_;
+            avg_decoding_time_ms = (total_sampling_time_ms_ + total_inference_time_ms_) / token_count_excluding_first_;
 
-            avg_inference_speed = token_count_ / (total_inference_time_ms_ / 1000);
-            avg_sampling_speed = token_count_ / (total_sampling_time_ms_ / 1000);
-            avg_decoding_speed = token_count_ / (total_decoding_time_ms_ / 1000);
+            avg_inference_speed = token_count_excluding_first_ / (total_inference_time_ms_ / 1000);
+            avg_sampling_speed = token_count_excluding_first_ / (total_sampling_time_ms_ / 1000);
+            avg_decoding_speed = token_count_excluding_first_ / (total_decoding_time_ms_ / 1000);
         }
 
-        std::cout << "\n" << COLOR_GREEN << "Decoding Metrics" << COLOR_RESET << "\n\n";
+        std::cout << "\n"
+                  << COLOR_GREEN << "Decoding Metrics" << COLOR_RESET << "\n\n";
 
-        std::cout << "[METRICS] Total Number of Generated Tokens : " << token_count_ << " tokens\n\n";
+        std::cout << "[METRICS] Total Number of Generated Tokens : " << token_count_excluding_first_ + 1 << " tokens\n\n";
 
         std::cout << "[METRICS] Prefill Time                     : " << prefill_time_ms << " ms\n";
         std::cout << "[METRICS] First Decoding Time              : " << first_decoding_time_ms_ << " ms\n";
@@ -974,12 +1058,11 @@ namespace ai_edge_torch::custom::profiler
         std::cout << "[METRICS] Total Decoding Time              : " << total_decoding_time_ms_ << " ms\n\n";
 
         std::cout << "[METRICS] Average Inference Time per Token : " << avg_inference_time_ms << " ms"
-                << " (" << avg_inference_speed << " tokens/s)\n";
+                  << " (" << avg_inference_speed << " tokens/s)\n";
         std::cout << "[METRICS] Average Sampling Time per Token  : " << avg_sampling_time_ms << " ms"
-                << " (" << avg_sampling_speed << " tokens/s)\n";
+                  << " (" << avg_sampling_speed << " tokens/s)\n";
         std::cout << "[METRICS] Average Decoding Time per Token  : " << avg_decoding_time_ms << " ms"
-                << " (" << avg_decoding_speed << " tokens/s)\n";
-
+                  << " (" << avg_decoding_speed << " tokens/s)\n";
     }
     // private:
 

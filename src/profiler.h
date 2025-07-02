@@ -28,38 +28,24 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-// included by nclee
-#include <iostream>
 #include <sys/mman.h>
-#include <linux/perf_event.h> // For perf_event_attr and PERF_* constants
-#include <sys/syscall.h>      // For syscall and __NR_perf_event_open
-#include <unistd.h>           // For syscall wrapper and pid_t
+#include <linux/perf_event.h>
 #include <sys/ioctl.h>
-#include <unordered_map>
 #include <stdexcept>
-#include <sys/time.h>
-#include <sys/resource.h>
+#include <errno.h>
+
 #ifndef __NR_perf_event_open
-#define __NR_perf_event_open 241 // Syscall number for aarch64
+#define __NR_perf_event_open 241
 #endif
 
-#include "tensorflow/lite/interpreter.h"
-#include "tensorflow/lite/kernels/register.h"
-#include "tensorflow/lite/model.h"
-#include "tensorflow/lite/c/common.h"
+#include "tflite/interpreter.h"
+#include "tflite/kernels/register.h"
+#include "tflite/model.h"
+#include "tflite/c/common.h"
 
-// 예: 프로젝트 내에 정의된 매크로라 가정
-#ifndef MINIMAL_CHECK
-#define MINIMAL_CHECK(x)                       \
-    if (!(x))                                  \
-    {                                          \
-        std::cerr << "Check failed: " #x "\n"; \
-        std::abort();                          \
-    }
-#endif
+#include "utils.h"
 
-// ANSI color codes
+
 #define COLOR_GREEN  "\033[1;32m"
 #define COLOR_YELLOW "\033[1;33m"
 #define COLOR_RESET  "\033[0m"
@@ -67,7 +53,6 @@
 #define COLOR_BLUE   "\033[1;34m"
 #define COLOR_CYAN   "\033[1;36m"
 
-// /proc/stat에서 특정 코어의 user/system jiffies 읽기
 std::pair<double, double> get_core_cpu_time(int core_id);
 
 namespace ai_edge_torch::custom::profiler
@@ -131,17 +116,10 @@ namespace ai_edge_torch::custom::profiler
     /* Functions */
     //////////////////////////////////////////////////////////////
 
-    // 현재 프로세스가 실행 중인 CPU 코어 목록 반환
     void detect_active_cores(std::vector<int> &cores);
-
-    // /proc/self/io에서 I/O 통계 읽기
     IOStats get_io_stats();
-
-    // RUsage 출력 헬퍼
-    void print_rusage(rusage usage_start, rusage usage_end, const std::string phase_name);
+    void print_rusage(rusage usage_start, rusage usage_end, double wall_time_ms, const std::string phase_name);
     void print_rusage_records(const std::vector<RUsageRecord> &records, const std::string &phase_name_prefix);
-
-    // Tensors 강제 페이지 폴트 (upload) 해주는 함수
     void upload_tensors_for_all_subgraphs(tflite::Interpreter *interpreter);
 
     //////////////////////////////////////////////////////////////
@@ -164,20 +142,19 @@ namespace ai_edge_torch::custom::profiler
             {
                 detect_active_cores(monitored_cores);
 
-                // If still empty, default to core 0
-                if (monitored_cores.empty())
-                {
-                    monitored_cores.push_back(0);
-                }
             }
+            MINIMAL_CHECK(!monitored_cores.size() < 2);
+            // 모니터 스레드 전용 코어는 활성 코어 중 첫 번째로 설정
+            monitor_core_id_ = monitored_cores[0];
 
+            std::cout << "\n[INFO] Monitor thread will use core " << monitor_core_id_ << "\n";
             std::cout << "Performance monitor tracking cores: ";
-            for (int core : monitored_cores)
-            {
-                std::cout << core << " ";
+            for (int i=1; i<monitored_cores.size(); ++i){
+                std::cout << monitored_cores[i] << " ";
             }
             std::cout << std::endl;
         }
+
         ~PerformanceMonitor() = default;
 
         // 어떤 "phase"가 시작될 때 기록
@@ -185,6 +162,8 @@ namespace ai_edge_torch::custom::profiler
 
         // 어떤 "phase"가 끝났을 때, PerfStats를 계산해 반환
         void end_phase(const std::string &phase_name, PerfStats &stats);
+
+        int get_monitor_core() const { return monitor_core_id_; }
 
     private:
         // perf_event_open용
@@ -216,7 +195,6 @@ namespace ai_edge_torch::custom::profiler
         };
         std::unordered_map<std::string, CoreTimespec> phase_core_timespec;
 
-        // perf_event fd들 저장
         struct CoreEventFds
         {
             std::vector<int> user_time_fds;
@@ -230,7 +208,9 @@ namespace ai_edge_torch::custom::profiler
 
         // 모니터링할 코어 목록
         std::vector<int> monitored_cores;
-    };
+        // 모니터링 스레드가 사용할 코어 ID
+        int monitor_core_id_;  
+        };
 
     // --------------------------------------------------------------------------
     // PerformanceMetrics
@@ -246,11 +226,8 @@ namespace ai_edge_torch::custom::profiler
 
     private:
         std::vector<std::pair<std::string, PerfStats>> phase_stats_;
-
         void PrintAverageStats(const std::vector<PerfStats>& stats_vec) const;
         void PrintSinglePhaseStat(const PerfStats &stats, const std::string &prefix = "") const;
-
-
     };
 
     // --------------------------------------------------------------------------
@@ -275,7 +252,7 @@ namespace ai_edge_torch::custom::profiler
         double total_inference_time_ms_ = 0.0;
         double total_sampling_time_ms_ = 0.0;
         double total_decoding_time_ms_ = 0.0;
-        int token_count_ = 0;
+        int token_count_excluding_first_ = 0;
     };
 
  
@@ -298,8 +275,8 @@ namespace ai_edge_torch::custom::profiler
 
         double Stop() const {
             auto end_ = std::chrono::high_resolution_clock::now();
-            auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end_ - start_).count();
-            return static_cast<double>(duration_us) / 1000.0;  
+            auto duration_us = std::chrono::duration_cast<std::chrono::nanoseconds>(end_ - start_).count();
+            return static_cast<double>(duration_us) / 1000000.0;
         }
     };
 
@@ -338,38 +315,31 @@ namespace ai_edge_torch::custom::profiler
                     std::vector<ai_edge_torch::custom::profiler::RUsageRecord> *usage_records=nullptr,
                     double *out_duration_ms=nullptr)
             : timer_(name), name_(name), monitor_(monitor), metrics_(metrics),
-            usage_start_(usage_start), usage_end_(usage_end), 
-            log_stdout(log_stdout), usage_records_(usage_records), out_duration_ms_(out_duration_ms) {
-
+              usage_start_(usage_start), usage_end_(usage_end), log_stdout(log_stdout),
+              usage_records_(usage_records), out_duration_ms_(out_duration_ms)
+        {
             timer_.Start();
             getrusage(RUSAGE_SELF, &usage_start_);
-            monitor_.start_phase(name_);
+            // monitor_.start_phase(name_);
         }
 
         ~ScopeLogger() {
             duration_ms_ = timer_.Stop();
             getrusage(RUSAGE_SELF, &usage_end_);
-            monitor_.end_phase(name_,stats_);
+            // monitor_.end_phase(name_, stats_);
 
             if(log_stdout)
             {
-                std::cout << "\n[INFO] " << name_ << " took " << duration_ms_ << " ms\n";
-                ai_edge_torch::custom::profiler::print_rusage(usage_start_, usage_end_, name_);
+                // std::cout << "\n[INFO] " << name_ << " took " << duration_ms_ << " ms\n";
+                ai_edge_torch::custom::profiler::print_rusage(usage_start_, usage_end_, duration_ms_, name_);
             }
-
             if(usage_records_)
-            {
                 usage_records_->emplace_back(usage_start_, usage_end_, duration_ms_);
-            }
-
             if(out_duration_ms_)
-            {
                 *out_duration_ms_ = duration_ms_;
-            }
-
             metrics_.RecordStats(name_, stats_);
         }
-        
+
     private:
         TimerUtility timer_;
         std::string name_;

@@ -24,18 +24,19 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
-#include "tensorflow/lite/interpreter.h"
-#include "tensorflow/lite/signature_runner.h"
-#include "tensorflow/lite/util.h"
-
-namespace ai_edge_torch::examples {
+#include "tflite/interpreter.h"
+#include "tflite/signature_runner.h"
+#include "tflite/util.h"
 
 // A minimal check macro.
+#ifndef MINIMAL_CHECK
 #define MINIMAL_CHECK(x)                                     \
   if (!(x)) {                                                \
     fprintf(stderr, "Error at %s:%d\n", __FILE__, __LINE__); \
     exit(1);                                                 \
   }
+#endif  // MINIMAL_CHECK
+namespace ai_edge_torch::examples {
 
 // TF Lite requires all buffers (including external buffers used for KV cache
 // here) be `tflite::kDefaultTensorAlignment` aligned. To ensure that, we use

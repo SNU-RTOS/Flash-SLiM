@@ -254,7 +254,7 @@ namespace
 int main(int argc, char *argv[])
 {
     //set precision
-    std::cout.precision(3);
+    std::cout.precision(5);
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout << std::boolalpha;
     std::cout << "[INFO] Text Generation App on LiteRT Interperter\n";
@@ -495,15 +495,15 @@ int main(int argc, char *argv[])
      * DECODE END
      * *********************/
      
-    std::cout << "[INFO] Decoding stage completed\n";
+    std::cout << "\n[INFO] Decoding stage completed\n\n";
 
     // 12. Print RUsage results
     std::cout << "\n================================\n";
     ai_edge_torch::custom::profiler::print_rusage_records(decode_rusage_records, "Decode");
      
     // 13. Print Perf results
-    std::cout << "\n================================\n";
-    metrics.PrintStats();
+    // std::cout << "\n================================\n";
+    // metrics.PrintStats();
 
     // 14. Print decoding metrics (inference vs. sampling)
     std::cout << "\n================================\n";
