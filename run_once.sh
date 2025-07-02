@@ -44,11 +44,11 @@ echo "[INFO] Target accelerator: ${TARGET^^}"
 # ---------------------------------------------------------------------------
 # 2. Model & prompt settings
 # ---------------------------------------------------------------------------
-# MODEL_DIR="${MODEL_PATH}/Gemma2-2B-it"
-# MODEL_NAME="Gemma2-2B-IT_multi-prefill-seq_q8_ekv1280"
+MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
+MODEL_NAME="llama_q8_ekv1024"
 
-MODEL_DIR="${MODEL_PATH}/gemma3-1b-it-int4"
-MODEL_NAME="gemma3"
+# MODEL_DIR="${MODEL_PATH}/gemma3-1b-it-int4"
+# MODEL_NAME="gemma3"
 
 PROMPT_FILE="./${PROMPT_PATH}/sample_prompt_8_1.txt"
 if [[ ! -f "${PROMPT_FILE}" ]]; then

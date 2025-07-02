@@ -65,7 +65,7 @@ EXT_LIBS := \
 LDFLAGS := -Wl,-rpath=\$$ORIGIN/../lib:\$$ORIGIN/lib $(EXT_LIBS) $(ABSL_GROUP) $(GENAIOPS_GROUP) 
 
 # 6. Sources / objects ────────────────────────────────────────────────────────
-SRCS     := text_generator_main.cc profiler.cc sampler.cc utils.cc
+SRCS     := text_generator_main_cpu.cc profiler.cc sampler.cc utils.cc
 OBJS     := $(SRCS:%.cc=%.o)
 OBJECTS  := $(patsubst %.o,$(OBJ_DIR)/%.o,$(OBJS))
 DEPS     := $(OBJECTS:.o=.d)

@@ -51,6 +51,7 @@ ensure_dir "${EXTERNAL_PATH}"
 # ------------------------------------------------------------------------------
 banner "Installing ai-edge-torch"
 if [[ ! -d "${AI_EDGE_TORCH_PATH}" ]]; then
+    run git clone https://github.com/google-ai-edge/ai-edge-torch.git "${AI_EDGE_TORCH_PATH}"
 #   run git clone https://github.com/SNU-RTOS/ai-edge-torch.git "${AI_EDGE_TORCH_PATH}"
 
 #   # Link our app sources into examples/cpp
@@ -88,7 +89,7 @@ if [[ ! -d "${LITERT_PATH}" ]]; then
   ensure_dir "${LITERT_PATH}"
   pushd "${LITERT_PATH}" >/dev/null
   pwd
-  run git clone https://github.com/google-ai-edge/litert.git
+  run git clone https://github.com/google-ai-edge/litert.git ${LITERT_PATH}
   cd LiteRT
   pwd
   ./configure
