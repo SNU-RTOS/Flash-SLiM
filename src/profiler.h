@@ -34,6 +34,9 @@
 #include <stdexcept>
 #include <errno.h>
 
+#include <mutex>
+#include <condition_variable>
+
 #ifndef __NR_perf_event_open
 #define __NR_perf_event_open 241
 #endif
@@ -45,13 +48,12 @@
 
 #include "utils.h"
 
-
-#define COLOR_GREEN  "\033[1;32m"
+#define COLOR_GREEN "\033[1;32m"
 #define COLOR_YELLOW "\033[1;33m"
-#define COLOR_RESET  "\033[0m"
-#define COLOR_RED    "\033[1;31m"
-#define COLOR_BLUE   "\033[1;34m"
-#define COLOR_CYAN   "\033[1;36m"
+#define COLOR_RESET "\033[0m"
+#define COLOR_RED "\033[1;31m"
+#define COLOR_BLUE "\033[1;34m"
+#define COLOR_CYAN "\033[1;36m"
 
 std::pair<double, double> get_core_cpu_time(int core_id);
 
@@ -108,7 +110,7 @@ namespace ai_edge_torch::custom::profiler
 
         RUsageRecord() = default;
 
-        RUsageRecord(const struct rusage& start, const struct rusage& end, const double wall_time_ms)
+        RUsageRecord(const struct rusage &start, const struct rusage &end, const double wall_time_ms)
             : start_(start), end_(end), wall_time_ms(wall_time_ms) {}
     };
 
@@ -126,7 +128,6 @@ namespace ai_edge_torch::custom::profiler
     /* Classes */
     //////////////////////////////////////////////////////////////
 
-
     // --------------------------------------------------------------------------
     // PerformanceMonitor
     // --------------------------------------------------------------------------
@@ -141,15 +142,14 @@ namespace ai_edge_torch::custom::profiler
             if (monitored_cores.empty())
             {
                 detect_active_cores(monitored_cores);
-
             }
-            MINIMAL_CHECK(!monitored_cores.size() < 2);
-            // 모니터 스레드 전용 코어는 활성 코어 중 첫 번째로 설정
-            monitor_core_id_ = monitored_cores[0];
+            MINIMAL_CHECK(!monitored_cores.size() < 1);
 
-            std::cout << "\n[INFO] Monitor thread will use core " << monitor_core_id_ << "\n";
-            std::cout << "Performance monitor tracking cores: ";
-            for (int i=1; i<monitored_cores.size(); ++i){
+            // monitor_core_id_ = monitored_cores[0];
+            // std::cout << "\n[INFO] Monitor thread will use core " << monitor_core_id_ << "\n";
+            std::cout << "\n[INFO] Performance monitor tracking cores: ";
+            for (int i = 0; i < monitored_cores.size(); ++i)
+            {
                 std::cout << monitored_cores[i] << " ";
             }
             std::cout << std::endl;
@@ -208,9 +208,10 @@ namespace ai_edge_torch::custom::profiler
 
         // 모니터링할 코어 목록
         std::vector<int> monitored_cores;
+
         // 모니터링 스레드가 사용할 코어 ID
-        int monitor_core_id_;  
-        };
+        int monitor_core_id_;
+    };
 
     // --------------------------------------------------------------------------
     // PerformanceMetrics
@@ -226,7 +227,7 @@ namespace ai_edge_torch::custom::profiler
 
     private:
         std::vector<std::pair<std::string, PerfStats>> phase_stats_;
-        void PrintAverageStats(const std::vector<PerfStats>& stats_vec) const;
+        void PrintAverageStats(const std::vector<PerfStats> &stats_vec) const;
         void PrintSinglePhaseStat(const PerfStats &stats, const std::string &prefix = "") const;
     };
 
@@ -255,12 +256,11 @@ namespace ai_edge_torch::custom::profiler
         int token_count_excluding_first_ = 0;
     };
 
- 
-
     // --------------------------------------------------------------------------
     // TimerUtility: basic timing utility (renamed from ScopeTimer)
     // --------------------------------------------------------------------------
-    class TimerUtility {
+    class TimerUtility
+    {
     protected:
         std::string name_;
         std::chrono::high_resolution_clock::time_point start_;
@@ -269,11 +269,13 @@ namespace ai_edge_torch::custom::profiler
         explicit TimerUtility(const std::string &name)
             : name_(name) {}
 
-        void Start() {
+        void Start()
+        {
             start_ = std::chrono::high_resolution_clock::now();
         }
 
-        double Stop() const {
+        double Stop() const
+        {
             auto end_ = std::chrono::high_resolution_clock::now();
             auto duration_us = std::chrono::duration_cast<std::chrono::nanoseconds>(end_ - start_).count();
             return static_cast<double>(duration_us) / 1000000.0;
@@ -283,37 +285,39 @@ namespace ai_edge_torch::custom::profiler
     // --------------------------------------------------------------------------
     // A scoped timer class that log the elapsed time when going out of scope
     // --------------------------------------------------------------------------
-    class ScopeTimer {
+    class ScopeTimer
+    {
     public:
-        explicit ScopeTimer(double& out_ref, const std::string &name="")
-            : out_ref_(out_ref), timer_(name) 
+        explicit ScopeTimer(double &out_ref, const std::string &name = "")
+            : out_ref_(out_ref), timer_(name)
         {
             timer_.Start();
         }
 
-        ~ScopeTimer() {
+        ~ScopeTimer()
+        {
             out_ref_ = static_cast<double>(timer_.Stop());
         }
 
     private:
-        double&      out_ref_;
+        double &out_ref_;
         TimerUtility timer_;
     };
-
 
     // --------------------------------------------------------------------------
     // ScopeLogger: composed version with TimerUtility and profiling
     // --------------------------------------------------------------------------
-    class ScopeLogger {
+    class ScopeLogger
+    {
     public:
         ScopeLogger(const std::string &name,
                     ai_edge_torch::custom::profiler::PerformanceMonitor &monitor,
                     ai_edge_torch::custom::profiler::PerformanceMetrics &metrics,
                     struct rusage &usage_start,
                     struct rusage &usage_end,
-                    bool log_stdout=true,
-                    std::vector<ai_edge_torch::custom::profiler::RUsageRecord> *usage_records=nullptr,
-                    double *out_duration_ms=nullptr)
+                    bool log_stdout = true,
+                    std::vector<ai_edge_torch::custom::profiler::RUsageRecord> *usage_records = nullptr,
+                    double *out_duration_ms = nullptr)
             : timer_(name), name_(name), monitor_(monitor), metrics_(metrics),
               usage_start_(usage_start), usage_end_(usage_end), log_stdout(log_stdout),
               usage_records_(usage_records), out_duration_ms_(out_duration_ms)
@@ -323,35 +327,77 @@ namespace ai_edge_torch::custom::profiler
             // monitor_.start_phase(name_);
         }
 
-        ~ScopeLogger() {
+        ~ScopeLogger()
+        {
             duration_ms_ = timer_.Stop();
             getrusage(RUSAGE_SELF, &usage_end_);
             // monitor_.end_phase(name_, stats_);
 
-            if(log_stdout)
+            if (log_stdout)
             {
                 // std::cout << "\n[INFO] " << name_ << " took " << duration_ms_ << " ms\n";
                 ai_edge_torch::custom::profiler::print_rusage(usage_start_, usage_end_, duration_ms_, name_);
             }
-            if(usage_records_)
+            if (usage_records_)
                 usage_records_->emplace_back(usage_start_, usage_end_, duration_ms_);
-            if(out_duration_ms_)
+            if (out_duration_ms_)
                 *out_duration_ms_ = duration_ms_;
-            metrics_.RecordStats(name_, stats_);
+            // metrics_.RecordStats(name_, stats_);
         }
 
     private:
         TimerUtility timer_;
         std::string name_;
         double duration_ms_;
-        PerformanceMonitor& monitor_;
-        PerformanceMetrics& metrics_;
+        PerformanceMonitor &monitor_;
+        PerformanceMetrics &metrics_;
         PerfStats stats_;
         struct rusage &usage_start_;
         struct rusage &usage_end_;
         bool log_stdout;
-        std::vector<RUsageRecord>* usage_records_;
-        double* out_duration_ms_;
+        std::vector<RUsageRecord> *usage_records_;
+        double *out_duration_ms_;
+    };
+
+    // 모니터 쓰레드와 공유할 전역 변수
+    extern std::mutex monitor_signal_mutex;
+    extern std::condition_variable monitor_signal_cv;
+    extern std::atomic<bool> monitor_log_requested;
+    extern std::atomic<bool> monitor_generation_done;
+    extern std::string current_phase_name;
+    extern int phase_status; // 0 for start, 1 for end
+    
+
+    // --------------------------------------------------------------------------
+    // ScopeEventPrefetcher: signals phase start/end events but doesn't log time
+    // --------------------------------------------------------------------------
+
+    class ScopeEventPrefetcher
+    {
+    public:
+        explicit ScopeEventPrefetcher(const std::string &name)
+            : name_(name), lock_(monitor_signal_mutex)
+        {
+            current_phase_name = name_;
+            monitor_log_requested.store(true);
+            phase_status = 0; // 0 for start
+            monitor_signal_cv.notify_all();
+            monitor_signal_cv.wait(lock_, []()
+                           { return !monitor_log_requested.load(); });
+        }
+
+        ~ScopeEventPrefetcher()
+        {
+            monitor_log_requested.store(true);
+            phase_status = 1; // 1 for End
+            monitor_signal_cv.notify_all();
+            monitor_signal_cv.wait(lock_, []()
+                           { return !monitor_log_requested.load(); });
+        }
+
+    private:
+        std::string name_;
+        std::unique_lock<std::mutex> lock_;
     };
 
 } // namespace ai_edge_torch::custom::profiler

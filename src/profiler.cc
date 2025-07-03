@@ -139,7 +139,7 @@ namespace ai_edge_torch::custom::profiler
         double sys_time_ms = (sys_time_end - sys_time_start);
 
         std::cout << "[INFO] " << phase_name << "\n"
-                  << "Time Statistics\n"  
+                  << "Time Statistics\n"
                   << "  " << wall_time_ms << " [ms] Wall Clock Time\n"
                   << "  - " << cpu_time_ms << " [ms] Total CPU Time (user + system time across all threads)\n"
                   << "      - " << user_time_ms << " [ms] User Time (time spent in user mode)\n"
@@ -1066,4 +1066,10 @@ namespace ai_edge_torch::custom::profiler
     }
     // private:
 
+    std::mutex monitor_signal_mutex;
+    std::condition_variable monitor_signal_cv;
+    std::atomic<bool> monitor_log_requested{false};
+    std::atomic<bool> monitor_generation_done{false};
+    std::string current_phase_name;
+    int phase_status; // 0 for start, 1 for end
 }; // ai_edge_torch::custom::profiler
