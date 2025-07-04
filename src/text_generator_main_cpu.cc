@@ -253,7 +253,7 @@ namespace
 
 } // end anonymous namespace
 
-void set_affinity_to_cores(const std::vector<int> &cores)
+void __set_affinity_to_cores(const std::vector<int> &cores)
 {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -267,9 +267,9 @@ void set_affinity_to_cores(const std::vector<int> &cores)
     }
 }
 
-void run()
+void __run_main(ai_edge_torch::custom::profiler::PhaseContext &phase_ctx,
+                ai_edge_torch::custom::profiler::GenerationMetrics &generation_metrics)
 {
-
     // Global variables
     std::vector<int> prompt_tokens;
     std::string prompt, start_token, stop_token;
@@ -278,14 +278,14 @@ void run()
     // 1. Load Model
     std::unique_ptr<tflite::FlatBufferModel> model;
     {
-        ai_edge_torch::custom::profiler::ScopeEventPrefetcher e_prefetcher("Model_Loading");
+        ai_edge_torch::custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Model");
         model = LoadModel();
     }
 
     // 2. Build Interpreter
     std::unique_ptr<tflite::Interpreter> interpreter;
     {
-        ai_edge_torch::custom::profiler::ScopeEventPrefetcher e_prefetcher("Interpreter_Building");
+        ai_edge_torch::custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_Interpreter");
         interpreter = BuildInterpreter(model.get(), absl::GetFlag(FLAGS_num_threads));
     }
     // Tensor upload before prefill
@@ -302,14 +302,14 @@ void run()
     // 3. Load SentencePiece
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
-        ai_edge_torch::custom::profiler::ScopeEventPrefetcher e_prefetcher("SentencePiece_Loading");
+        ai_edge_torch::custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Tokenizer");
         sp_processor = LoadSentencePieceProcessor();
     }
 
     // 4. Build KV Cache
     std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
     {
-        ai_edge_torch::custom::profiler::ScopeEventPrefetcher e_prefetcher("KV_Cache_Building");
+        ai_edge_torch::custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_KV_Cache");
         kv_cache = BuildKVCache(interpreter.get());
         MINIMAL_CHECK(!kv_cache.empty());
     }
@@ -326,7 +326,7 @@ void run()
 
     // 6. Prepare Input Prompt
     {
-        ai_edge_torch::custom::profiler::ScopeEventPrefetcher e_prefetcher("Input_Prompt_Preparation");
+        ai_edge_torch::custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Prompt");
         prompt = absl::GetFlag(FLAGS_prompt);
         MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
 
@@ -348,7 +348,7 @@ void run()
     tflite::SignatureRunner *decode_runner = nullptr;
     std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
     {
-        ai_edge_torch::custom::profiler::ScopeEventPrefetcher e_prefetcher("Signature_Runner_Preparation");
+        ai_edge_torch::custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Signature_Runners");
         prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
         MINIMAL_CHECK(prefill_runner != nullptr);
 
@@ -368,7 +368,7 @@ void run()
     // 8. Access Tensors
     // Get the input tensors for prefill and decode
     {
-        ai_edge_torch::custom::profiler::ScopeEventPrefetcher e_prefetcher("Prefill_Input_Tensors_Access");
+        ai_edge_torch::custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Input_Tensor");
 
         prefill_input = prefill_runner->input_tensor("tokens");
         prefill_input_pos = prefill_runner->input_tensor("input_pos");
@@ -395,9 +395,11 @@ void run()
     // 9. Prefill Stage
     double prefill_time_ms = 0.0;
     {
-        ai_edge_torch::custom::profiler::ScopeEventPrefetcher e_prefetcher("Prefill");
+        ai_edge_torch::custom::profiler::ScopeTimer prefill_timer(prefill_time_ms);
+        ai_edge_torch::custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prefill");
         MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk); // Execute the prefill runner
     }
+    generation_metrics.RecordPrefillTime(prefill_time_ms);
 
     // 10. Decoding Stage with separate metrics for inference and sampling
     // Determine how many tokens to generate
@@ -408,109 +410,62 @@ void run()
     int next_token_id = prompt_tokens[prefill_seq_size - 1];
     int next_position = prefill_seq_size - 1;
     int decode_steps = std::min<int>(max_decode_steps, kv_cache_max_size - prefill_seq_size);
-    std::cout << "[INFO] Decoding " << decode_steps << " steps, max decode steps: "
-              << max_decode_steps << ", kv_cache_max_size: " << kv_cache_max_size << "\n";
-    MINIMAL_CHECK(decode_steps > 0);
-
-    // Metrics object
-    std::vector<ai_edge_torch::custom::profiler::RUsageRecord> decode_rusage_records;
-    ai_edge_torch::custom::profiler::DecodingMetrics decoding_metrics;
     double inference_time_ms = 0.0;
     double sampling_time_ms = 0.0;
+    double detok_time_ms = 0.0;
 
+    MINIMAL_CHECK(decode_steps > 0);
+
+    std::cout << "[INFO] Tokens in Prompt: " << prompt_tokens.size() << "\n";
+    std::cout << "[INFO] Tokens to Generate: " << decode_steps << "\n";
+    std::cout << "[INFO] Limits of Tokens to Generate: " << kv_cache_max_size << "\n";
     std::cout << "\nPrompt:\n"
-              << prompt << "\n\nOutput Text:\n";
+              << prompt
+              << "\n\nOutput Text:\n";
+
     // Decoding loop
     for (int i = 0; i < decode_steps; ++i)
     {
-        // {
-        //     ai_edge_torch::custom::profiler::ScopeLogger logger("Decode_" + std::to_string(i),
-        //                                                         perf_monitor, metrics, usage_start, usage_end, false, &decode_rusage_records);
+        std::string single_decoded_text;
+        {
+            ai_edge_torch::custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Decode_" + std::to_string(i));
 
-        // 1) Model Inference
-        // {
-        //     ai_edge_torch::custom::profiler::ScopeTimer timer(inference_time_ms);
+            // 1) Model Inference
+            {
+                ai_edge_torch::custom::profiler::ScopeTimer timer(inference_time_ms);
 
-        decode_input->data.i32[0] = next_token_id;
-        decode_input_pos->data.i32[0] = next_position;
-        MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
+                decode_input->data.i32[0] = next_token_id;
+                decode_input_pos->data.i32[0] = next_position;
+                MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
+            }
 
-        // }
+            // 2) Token Sampling
+            {
+                ai_edge_torch::custom::profiler::ScopeTimer timer(sampling_time_ms);
+                next_token_id = ai_edge_torch::custom::sampler::temperature_top_k_top_p_sampler(decode_runner->output_tensor("logits"), 0.9f, 85, 0.9f);
+            }
 
-        // 2) Token Sampling
-        // {
-        //     ai_edge_torch::custom::profiler::ScopeTimer timer(sampling_time_ms);
-
-        next_token_id = ai_edge_torch::custom::sampler::temperature_top_k_top_p_sampler(
-            decode_runner->output_tensor("logits"), 0.9f, 85, 0.9f);
-        // }
-
-        next_position++;
-        decoding_metrics.RecordTimes(inference_time_ms, sampling_time_ms);
-        // }
+            // 3) Token Detokenization
+            {
+                ai_edge_torch::custom::profiler::ScopeTimer timer(detok_time_ms);
+                std::vector<int> next_token = {next_token_id};
+                MINIMAL_CHECK(sp_processor->Decode(next_token, &single_decoded_text).ok());
+            }
+        }
+        generation_metrics.RecordDecodingTime(inference_time_ms,
+                                              sampling_time_ms,
+                                              detok_time_ms);
 
         // Check if the next token is a stop token
         if (next_token_id == stop_token_id)
-        {
             break;
-        }
-
-        // Detokenize the single token to text
-        {
-            std::vector<int> next_token = {next_token_id};
-            std::string single_decoded_text;
-            MINIMAL_CHECK(sp_processor->Decode(next_token, &single_decoded_text).ok());
-            std::cout << single_decoded_text << std::flush;
-        }
+        std::cout << single_decoded_text << std::flush;
+        next_position++;
     }
-    /* *********************
-     * DECODE END
-     * *********************/
 
     std::cout << "\n[INFO] Decoding stage completed\n\n";
 }
 
-namespace ai_edge_torch::custom::profiler
-{
-
-    void MonitorPhaseLoop()
-    {
-
-        ai_edge_torch::custom::profiler::TimerUtility timer("MonitorPhaseLoop");
-        std::unique_lock<std::mutex> lock(monitor_signal_mutex);
-        double duration_ms = 0.0;
-
-        while (!monitor_generation_done.load())
-        {
-            monitor_signal_cv.wait(lock, [&]()
-                                   { return monitor_log_requested.load() || monitor_generation_done.load(); });
-
-            if (monitor_generation_done.load())
-            {
-                std::cout << "[INFO] Monitoring thread exiting...\n";
-                break;
-            }
-
-            if (phase_status == 1) // End Phase
-            {
-
-                duration_ms = timer.Stop();
-                std::cout << "[INFO] " << current_phase_name << " took " << duration_ms << " ms\n"
-                          << std::endl;
-            }
-
-            monitor_log_requested.store(false);
-            monitor_signal_cv.notify_all(); // Notify the waiting thread that the log has been processed
-
-            if (phase_status == 0) // Start phase
-            {
-                timer.Start();
-                std::cout << "[INFO] " << current_phase_name << " started" << std::endl;
-            }
-        }
-        std::cout << "[INFO] Monitoring finished\n";
-    }
-}
 // =======================================================================
 // main() entry
 // =======================================================================
@@ -540,41 +495,51 @@ int main(int argc, char *argv[])
     // 메인 스레드 코어 설정
     std::vector<int> monitor_core = {active_cores[0]};
     std::vector<int> worker_cores(active_cores.begin() + 1, active_cores.end());
-
+    std::cout << "[INFO] Core used for logging and monitoring: " << monitor_core[0] << "\n";
+    std::cout << "[INFO] Cores used for text generation: ";
+    for (const auto &core : worker_cores)
+    {
+        std::cout << core << " ";
+    }
+    std::cout << "\n";
+    std::cout << "---------------------------------------------------\n";
+    std::cout << "Start Generating Text" << std::endl;
     // Just monitor the cores we're allowed to run on (should be only core 0 with taskset)
     // ai_edge_torch::custom::profiler::PerformanceMonitor perf_monitor(monitor_core);
     // ai_edge_torch::custom::profiler::PerformanceMetrics metrics;
 
-    // 0-2. Variable for CPU time only
-    rusage usage_start, usage_end;
+    ai_edge_torch::custom::profiler::PhaseContext profile_ctx;
+    std::vector<ai_edge_torch::custom::profiler::RUsageRecord> rusage_records;
+    ai_edge_torch::custom::profiler::GenerationMetrics generation_metrics;
 
     std::thread monitor_thread([&]()
                                {
-        set_affinity_to_cores(monitor_core);
-        ai_edge_torch::custom::profiler::MonitorPhaseLoop(); });
+        __set_affinity_to_cores(monitor_core);
+        ai_edge_torch::custom::profiler::ScopeEventListener listener(profile_ctx, false, &rusage_records);
+        listener.Run(); });
 
     std::thread generate_thread([&]()
                                 {
-        set_affinity_to_cores(worker_cores);
-        run(); });
+        __set_affinity_to_cores(worker_cores);
+        __run_main(profile_ctx, generation_metrics); });
 
     generate_thread.join(); // Wait for the generate thread to finish
-    ai_edge_torch::custom::profiler::monitor_generation_done.store(true);
-    ai_edge_torch::custom::profiler::monitor_signal_cv.notify_all();
+    profile_ctx.generation_done.store(true);
+    profile_ctx.signal_cv.notify_all();
     monitor_thread.join(); // Wait for the monitor thread to finish
 
     // 12. Print RUsage results
-    // std::cout << "\n================================\n";
-    // ai_edge_torch::custom::profiler::print_rusage_records(decode_rusage_records, "Decode");
+    ai_edge_torch::custom::profiler::print_rusage_records(rusage_records);
 
     // 13. Print Perf results
     // std::cout << "\n================================\n";
     // metrics.PrintStats();
 
     // 14. Print decoding metrics (inference vs. sampling)
-    // std::cout << "\n================================\n";
-    // decoding_metrics.PrintMetrics(prefill_time_ms);
-    // std::cout << "\n================================\n";
+    generation_metrics.PrintMetrics();
+
+    std::cout << "\n[INFO] Text Generation App completed successfully.\n";
+    std::cout << "---------------------------------------------------\n\n";
 
     return 0;
 }

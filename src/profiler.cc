@@ -57,14 +57,6 @@ namespace
 
         return std::make_pair(0.0, 0.0);
     }
-
-    // etc
-    // inline double GetParallelEfficiency(const  &stats)
-    // {
-    //     if (stats.wall_time_ms <= 0)
-    //         return 0.0;
-    //     return (stats.cpu_time_sec * 1000.0) / stats.wall_time_ms;
-    // }
 }
 
 namespace ai_edge_torch::custom::profiler
@@ -138,7 +130,7 @@ namespace ai_edge_torch::custom::profiler
         double user_time_ms = (user_time_end - user_time_start);
         double sys_time_ms = (sys_time_end - sys_time_start);
 
-        std::cout << "[INFO] " << phase_name << "\n"
+        std::cout << "[INFO] " << phase_name << " -------------------------------------\n"
                   << "Time Statistics\n"
                   << "  " << wall_time_ms << " [ms] Wall Clock Time\n"
                   << "  - " << cpu_time_ms << " [ms] Total CPU Time (user + system time across all threads)\n"
@@ -174,93 +166,123 @@ namespace ai_edge_torch::custom::profiler
 
     void print_rusage_records(const std::vector<RUsageRecord> &records, const std::string &phase_name_prefix)
     {
-        if (records.empty())
+        std::vector<RUsageRecord> filtered;
+        for (const auto &rec : records)
         {
-            std::cout << "[RUsage] No records to print.\n";
+            if (phase_name_prefix.empty() ||
+                rec.phase_name_.find(phase_name_prefix) == 0)
+            {
+                filtered.push_back(rec);
+            }
+        }
+
+        if (filtered.empty())
+        {
+            std::cout << "[RUsage] No records to print for prefix: " << phase_name_prefix << "\n";
             return;
         }
 
-        double total_user_time = 0.0;
-        double total_sys_time = 0.0;
-        double total_cpu_time = 0.0;
-        double total_wall_time = 0.0;
-
-        size_t count = records.size();
-        size_t valid_count = (count > 1) ? count - 1 : 0;
-
-        for (size_t i = 1; i < records.size(); ++i) // i=1부터 합산: Decode_0 제외
-        {
-            const auto &rec = records[i];
-
-            double user_start_ms = __timeval_to_ms(rec.start_.ru_utime);
-            double user_end_ms = __timeval_to_ms(rec.end_.ru_utime);
-            double sys_start_ms = __timeval_to_ms(rec.start_.ru_stime);
-            double sys_end_ms = __timeval_to_ms(rec.end_.ru_stime);
-
-            double user_time = user_end_ms - user_start_ms;
-            double sys_time = sys_end_ms - sys_start_ms;
-            double cpu_time = user_time + sys_time;
-
-            total_user_time += user_time;
-            total_sys_time += sys_time;
-            total_cpu_time += cpu_time;
-            total_wall_time += rec.wall_time_ms;
-        }
-
-        double avg_user_time = (valid_count > 0) ? (total_user_time / valid_count) : 0.0;
-        double avg_sys_time = (valid_count > 0) ? (total_sys_time / valid_count) : 0.0;
-        double avg_cpu_time = (valid_count > 0) ? (total_cpu_time / valid_count) : 0.0;
-        double avg_wall_time = (valid_count > 0) ? (total_wall_time / valid_count) : 0.0;
-
-        std::cout << "\n"
-                  << COLOR_GREEN << "RUsage Records Report (" << phase_name_prefix << ")" << COLOR_RESET << "\n";
-
-        if (valid_count > 0)
-        {
-            // 1) Total 출력
-            std::cout << "\n[INFO] " << phase_name_prefix << " (total, excluding first) took\n"
-                      << "  " << total_wall_time << " [ms] Wall Clock Time\n"
-                      << "  - " << total_cpu_time << " [ms] CPU Time\n"
-                      << "      - " << total_user_time << " [ms] User Time\n"
-                      << "      - " << total_sys_time << " [ms] System Time\n";
-            double total_idle_time_ms = total_wall_time - total_cpu_time;
-            if (total_idle_time_ms > 0.0)
-            {
-                std::cout << "  - " << total_idle_time_ms << " [ms] Idle or Waiting time (CPU inactive)\n";
-            }
-
-            // 2) Average 출력
-            std::cout << "\n[INFO] " << phase_name_prefix << " (avg, excluding first) took\n"
-                      << "  " << avg_wall_time << " ms Wall Clock Time\n"
-                      << "  - " << avg_cpu_time << " [ms] CPU Time\n"
-                      << "      - " << avg_user_time << " [ms] User Time\n"
-                      << "      - " << avg_sys_time << " [ms] System Time\n";
-            double avg_idle_time_ms = avg_wall_time - avg_cpu_time;
-            if (avg_idle_time_ms > 0.0)
-            {
-                std::cout << "  - " << avg_idle_time_ms << " [ms] Idle or Waiting time (CPU inactive)\n";
-            }
-        }
-        else
-        {
-            std::cout << "\n[INFO] Not enough records to calculate average excluding the first.\n";
-        }
-
+        std::cout << "\n---------------------------------------------------\n";
+        std::cout << COLOR_GREEN << "RUsage Records Report (" << phase_name_prefix << ")" << COLOR_RESET << "\n";
         std::cout << "\n";
 
-        // 0) 첫 번째 record (First decoding) 별도로 출력
-        const auto &first = records[0];
-        print_rusage(first.start_, first.end_, first.wall_time_ms, phase_name_prefix + "_0");
-
-        // 3) 나머지 개별 단계 출력
-        for (size_t i = 1; i < records.size(); ++i)
+        for (const auto &rec : filtered)
         {
-            const auto &rec = records[i];
-            std::string phase_name = phase_name_prefix + "_" + std::to_string(i);
-            print_rusage(rec.start_, rec.end_, rec.wall_time_ms, phase_name);
+            // Print each record
+            print_rusage(rec.start_, rec.end_, rec.wall_time_ms_, rec.phase_name_);
         }
     }
+    /*
+        void print_rusage_records_decode(const std::vector<RUsageRecord> &records, const std::string &phase_name_prefix)
+        {
+            if (records.empty())
+            {
+                std::cout << "[RUsage] No records to print.\n";
+                return;
+            }
 
+            double total_user_time = 0.0;
+            double total_sys_time = 0.0;
+            double total_cpu_time = 0.0;
+            double total_wall_time = 0.0;
+
+            size_t count = records.size();
+            size_t valid_count = (count > 1) ? count - 1 : 0;
+
+            for (size_t i = 1; i < records.size(); ++i) // i=1부터 합산: Decode_0 제외
+            {
+                const auto &rec = records[i];
+
+                double user_start_ms = __timeval_to_ms(rec.start_.ru_utime);
+                double user_end_ms = __timeval_to_ms(rec.end_.ru_utime);
+                double sys_start_ms = __timeval_to_ms(rec.start_.ru_stime);
+                double sys_end_ms = __timeval_to_ms(rec.end_.ru_stime);
+
+                double user_time = user_end_ms - user_start_ms;
+                double sys_time = sys_end_ms - sys_start_ms;
+                double cpu_time = user_time + sys_time;
+
+                total_user_time += user_time;
+                total_sys_time += sys_time;
+                total_cpu_time += cpu_time;
+                total_wall_time += rec.wall_time_ms_;
+            }
+
+            double avg_user_time = (valid_count > 0) ? (total_user_time / valid_count) : 0.0;
+            double avg_sys_time = (valid_count > 0) ? (total_sys_time / valid_count) : 0.0;
+            double avg_cpu_time = (valid_count > 0) ? (total_cpu_time / valid_count) : 0.0;
+            double avg_wall_time = (valid_count > 0) ? (total_wall_time / valid_count) : 0.0;
+
+            std::cout << "\n================================\n\n"
+                      << std::endl;
+            std::cout << COLOR_GREEN << "RUsage Records Report" << COLOR_RESET << std::endl;
+
+            if (valid_count > 0)
+            {
+                // 1) Total 출력
+                std::cout << "\n[INFO] " << phase_name_prefix << " (total, excluding first) took\n"
+                          << "  " << total_wall_time << " [ms] Wall Clock Time\n"
+                          << "  - " << total_cpu_time << " [ms] CPU Time\n"
+                          << "      - " << total_user_time << " [ms] User Time\n"
+                          << "      - " << total_sys_time << " [ms] System Time\n";
+                double total_idle_time_ms = total_wall_time - total_cpu_time;
+                if (total_idle_time_ms > 0.0)
+                {
+                    std::cout << "  - " << total_idle_time_ms << " [ms] Idle or Waiting time (CPU inactive)\n";
+                }
+
+                // 2) Average 출력
+                std::cout << "\n[INFO] " << phase_name_prefix << " (avg, excluding first) took\n"
+                          << "  " << avg_wall_time << " ms Wall Clock Time\n"
+                          << "  - " << avg_cpu_time << " [ms] CPU Time\n"
+                          << "      - " << avg_user_time << " [ms] User Time\n"
+                          << "      - " << avg_sys_time << " [ms] System Time\n";
+                double avg_idle_time_ms = avg_wall_time - avg_cpu_time;
+                if (avg_idle_time_ms > 0.0)
+                {
+                    std::cout << "  - " << avg_idle_time_ms << " [ms] Idle or Waiting time (CPU inactive)\n";
+                }
+            }
+            else
+            {
+                std::cout << "\n[INFO] Not enough records to calculate average excluding the first.\n";
+            }
+
+            std::cout << "\n";
+
+            // 0) 첫 번째 record (First decoding) 별도로 출력
+            const auto &first = records[0];
+            print_rusage(first.start_, first.end_, first.wall_time_ms_, phase_name_prefix + "_0");
+
+            // 3) 나머지 개별 단계 출력
+            for (size_t i = 1; i < records.size(); ++i)
+            {
+                const auto &rec = records[i];
+                std::string phase_name = phase_name_prefix + "_" + std::to_string(i);
+                print_rusage(rec.start_, rec.end_, rec.wall_time_ms_, phase_name);
+            }
+        }
+    */
     void upload_tensors_for_all_subgraphs(tflite::Interpreter *interpreter)
     {
         if (!interpreter)
@@ -998,10 +1020,15 @@ namespace ai_edge_torch::custom::profiler
     /* class DecodingMetrics: Class for measuring decoding metrics (time to first token, average times, etc.)*/
     // public:
     // Called before decoding loop starts
-
-    void DecodingMetrics::RecordTimes(double inference_time_ms, double sampling_time_ms)
+    void GenerationMetrics::RecordPrefillTime(double prefill_time_ms)
     {
-        double decoding_time_ms = inference_time_ms + sampling_time_ms;
+        prefill_time_ms_ = prefill_time_ms;
+    }
+    void GenerationMetrics::RecordDecodingTime(double inference_time_ms,
+                                               double sampling_time_ms,
+                                               double detok_time_ms)
+    {
+        double decoding_time_ms = inference_time_ms + sampling_time_ms + detok_time_ms;
 
         // If this is the first token, record time to first token
         if (!first_token_recorded_)
@@ -1015,6 +1042,8 @@ namespace ai_edge_torch::custom::profiler
         total_inference_time_ms_ += inference_time_ms;
         // Track sampling time
         total_sampling_time_ms_ += sampling_time_ms;
+        // Track detokenization time
+        total_detokenization_time_ms_ += detok_time_ms;
         // Track total decoding time
         total_decoding_time_ms_ += decoding_time_ms;
 
@@ -1023,53 +1052,53 @@ namespace ai_edge_torch::custom::profiler
     }
 
     // Print out final decoding metrics
-    void DecodingMetrics::PrintMetrics(int prefill_time_ms)
+    void GenerationMetrics::PrintMetrics()
     {
         double avg_inference_time_ms = 0.0;
         double avg_sampling_time_ms = 0.0;
+        double avg_detokenization_time_ms = 0.0;
         double avg_decoding_time_ms = 0.0;
+
         double avg_inference_speed = 0.0;
         double avg_sampling_speed = 0.0;
+        double avg_detokenization_speed = 0.0;
         double avg_decoding_speed = 0.0;
 
         if (token_count_excluding_first_ > 0)
         {
             avg_inference_time_ms = total_inference_time_ms_ / token_count_excluding_first_;
             avg_sampling_time_ms = total_sampling_time_ms_ / token_count_excluding_first_;
-            avg_decoding_time_ms = (total_sampling_time_ms_ + total_inference_time_ms_) / token_count_excluding_first_;
+            avg_detokenization_time_ms = total_detokenization_time_ms_ / token_count_excluding_first_;
+            avg_decoding_time_ms = total_decoding_time_ms_ / token_count_excluding_first_;
 
             avg_inference_speed = token_count_excluding_first_ / (total_inference_time_ms_ / 1000);
             avg_sampling_speed = token_count_excluding_first_ / (total_sampling_time_ms_ / 1000);
+            avg_detokenization_speed = token_count_excluding_first_ / (total_detokenization_time_ms_ / 1000);
             avg_decoding_speed = token_count_excluding_first_ / (total_decoding_time_ms_ / 1000);
         }
-
-        std::cout << "\n"
-                  << COLOR_GREEN << "Decoding Metrics" << COLOR_RESET << "\n\n";
+        std::cout << "---------------------------------------------------\n";
+        std::cout << COLOR_GREEN << "Generation Metrics" << COLOR_RESET << "\n\n";
 
         std::cout << "[METRICS] Total Number of Generated Tokens : " << token_count_excluding_first_ + 1 << " tokens\n\n";
 
-        std::cout << "[METRICS] Prefill Time                     : " << prefill_time_ms << " ms\n";
+        std::cout << "[METRICS] Prefill Time                     : " << prefill_time_ms_ << " ms\n";
         std::cout << "[METRICS] First Decoding Time              : " << first_decoding_time_ms_ << " ms\n";
-        std::cout << "[METRICS] Time to First Token              : " << prefill_time_ms + first_decoding_time_ms_ << " ms\n\n";
+        std::cout << "[METRICS] Time to First Token              : " << prefill_time_ms_ + first_decoding_time_ms_ << " ms\n\n";
         std::cout << "[METRICS] [NOTE] First Decoding Time is excluded from Total Decoding Time \n\n";
 
         std::cout << "[METRICS] Total Inference Time             : " << total_inference_time_ms_ << " ms\n";
         std::cout << "[METRICS] Total Sampling Time              : " << total_sampling_time_ms_ << " ms\n";
+        std::cout << "[METRICS] Total Detokenization Time        : " << total_detokenization_time_ms_ << " ms\n";
         std::cout << "[METRICS] Total Decoding Time              : " << total_decoding_time_ms_ << " ms\n\n";
 
-        std::cout << "[METRICS] Average Inference Time per Token : " << avg_inference_time_ms << " ms"
+        std::cout << "[METRICS] Average Inference Time per Token        : " << avg_inference_time_ms << " ms"
                   << " (" << avg_inference_speed << " tokens/s)\n";
-        std::cout << "[METRICS] Average Sampling Time per Token  : " << avg_sampling_time_ms << " ms"
+        std::cout << "[METRICS] Average Sampling Time per Token         : " << avg_sampling_time_ms << " ms"
                   << " (" << avg_sampling_speed << " tokens/s)\n";
-        std::cout << "[METRICS] Average Decoding Time per Token  : " << avg_decoding_time_ms << " ms"
+        std::cout << "[METRICS] Average Detokenization Time per Token   : " << avg_detokenization_time_ms << " ms"
+                  << " (" << avg_detokenization_speed << " tokens/s)\n";
+        std::cout << "[METRICS] Average Decoding Time per Token         : " << avg_decoding_time_ms << " ms"
                   << " (" << avg_decoding_speed << " tokens/s)\n";
     }
-    // private:
 
-    std::mutex monitor_signal_mutex;
-    std::condition_variable monitor_signal_cv;
-    std::atomic<bool> monitor_log_requested{false};
-    std::atomic<bool> monitor_generation_done{false};
-    std::string current_phase_name;
-    int phase_status; // 0 for start, 1 for end
 }; // ai_edge_torch::custom::profiler

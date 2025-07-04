@@ -484,7 +484,7 @@ int main(int argc, char *argv[])
 
     // Metrics object
     std::vector<ai_edge_torch::custom::profiler::RUsageRecord> decode_rusage_records;
-    ai_edge_torch::custom::profiler::DecodingMetrics decoding_metrics;
+    ai_edge_torch::custom::profiler::GenerationMetrics decoding_metrics;
     double inference_time_ms = 0.0;
     double sampling_time_ms = 0.0;
 
@@ -516,7 +516,7 @@ int main(int argc, char *argv[])
             }
 
             next_position++;
-            decoding_metrics.RecordTimes(inference_time_ms, sampling_time_ms);
+            decoding_metrics.RecordDecodingTime(inference_time_ms, sampling_time_ms);
         }
 
         // Check if the next token is a stop token
