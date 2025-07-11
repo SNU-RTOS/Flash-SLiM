@@ -2,14 +2,13 @@
   {
     "tokens": 512,
     "prompt": [
-      "Continue the story below with a poetic and cinematic narrative style.",
-      "Maintain the descriptive, atmospheric tone of cyberpunk and sci-fi noir.",
-      "Introduce a central character or event that pushes the story forward,",
-      "while preserving the blend of futuristic technology and traditional aesthetics.",
-      "Do not summarize — write immersive prose as if it were a direct continuation of the previous paragraph.",
-      "",
-      "-----------------",
-      "",
+      "[Prompt] Write the story following with a poetic and cinematic narrative style.",
+      "And maintain the descriptive, atmospheric tone of cyberpunk and sci-fi noir.",
+      "Use vivid imagery and sensory details to create a rich, immersive experience.",
+      "Incorporate elements of mystery, intrigue, and a sense of wonder about the future.",
+        "Explore themes of technology, humanity.",
+      "---------------------------------------------------------------",
+      "[Chapter 1: Neon Dreams]",
       "City at night, neon lights blaze brightly, reflecting on wet streets below.",
       "Rain falls softly, washing away dust, cleansing tired face of the city.",
       "Cars swish by in streams, headlights cutting through darkness, taillights glow red.",
@@ -44,12 +43,14 @@
       "question mark of the fate of the humanity hanging in the digital air,",
       "a struggle for autonomy in a world increasingly dominated by artificial intelligence,",
       "a captivating blend of tradition and innovation constantly pushing the boundaries",
-      "of what it means to be human in a hyper-connected, technologically advanced future."
+      "of what it means to be human in a hyper-connected, technologically advanced future.",
+      "",
+      "[Chapter 2: The Last Samurai]"
     ],
-    "temperature": 0.95,
-    "top_k": 40,
-    "top_p": 0.85,
-    "repetition_penalty": 0.5,
+    "temperature": 1.0,
+    "top_k": 50,
+    "top_p": 0.95,
+    "repetition_penalty": 1.5,
     "enable_repetition_penalty": true,
     "description": "창의적인 스토리 생성"
   }

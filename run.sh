@@ -190,6 +190,12 @@ run_with_memlimit() {
 MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
 MODEL_NAME="llama_q8_ekv1024"
 
+# MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
+# MODEL_NAME="model.q8"
+
+# MODEL_DIR="${MODEL_PATH}/SmolLM"
+# MODEL_NAME="model.q8"
+
 BIN="output/text_generator_main_${TARGET}"
 
 # Validate prerequisites

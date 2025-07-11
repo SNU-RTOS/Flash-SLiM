@@ -30,73 +30,88 @@ limitations under the License.
 
 // A minimal check macro.
 #ifndef MINIMAL_CHECK
-#define MINIMAL_CHECK(x)                                     \
-  if (!(x)) {                                                \
-    fprintf(stderr, "Error at %s:%d\n", __FILE__, __LINE__); \
-    exit(1);                                                 \
-  }
-#endif  // MINIMAL_CHECK
-namespace ai_edge_torch::examples {
-
-// TF Lite requires all buffers (including external buffers used for KV cache
-// here) be `tflite::kDefaultTensorAlignment` aligned. To ensure that, we use
-// this custom allocator. Please use with caution as different platforms may
-// have different alignment requirements.
-template <typename T>
-class AlignedAllocator {
- public:
-  using value_type = T;
-
-  T* allocate(std::size_t n) {
-    void* ptr;
-    std::size_t size = n * sizeof(T);
-    std::size_t padding = tflite::kDefaultTensorAlignment -
-                          (size % tflite::kDefaultTensorAlignment);
-    size += padding;
-    int ret = posix_memalign(&ptr, tflite::kDefaultTensorAlignment, size);
-    if (ret != 0) {
-      return nullptr;
+#define MINIMAL_CHECK(x)                                         \
+    if (!(x))                                                    \
+    {                                                            \
+        fprintf(stderr, "Error at %s:%d\n", __FILE__, __LINE__); \
+        exit(1);                                                 \
     }
-    return static_cast<T*>(ptr);
-  };
+#endif // MINIMAL_CHECK
+namespace ai_edge_torch
+{
+    namespace examples
+    {
 
-  void deallocate(T* ptr, std::size_t n) { free(ptr); }
-};
+        // TF Lite requires all buffers (including external buffers used for KV cache
+        // here) be `tflite::kDefaultTensorAlignment` aligned. To ensure that, we use
+        // this custom allocator. Please use with caution as different platforms may
+        // have different alignment requirements.
+        template <typename T>
+        class AlignedAllocator
+        {
+        public:
+            using value_type = T;
 
-// An example implementation of LoRA adapters manager for TFLite interpreter.
-// The class loads an adapter from a flatbuffers files and provides helper
-// methods for finding the right signature and setting the appropriate input
-// tensors. Please note the use of CustomAllocator to ensure zero-copy loading
-// and potentially hot-swapping between multiple adapters with minimal cost.
-class LoRA {
- public:
-  static std::unique_ptr<LoRA> FromFile(absl::string_view path);
+            T *allocate(std::size_t n)
+            {
+                void *ptr;
+                std::size_t size = n * sizeof(T);
+                std::size_t padding = tflite::kDefaultTensorAlignment -
+                                      (size % tflite::kDefaultTensorAlignment);
+                size += padding;
+                int ret = posix_memalign(&ptr, tflite::kDefaultTensorAlignment, size);
+                if (ret != 0)
+                {
+                    return nullptr;
+                }
+                return static_cast<T *>(ptr);
+            };
 
-  tflite::SignatureRunner* GetPrefillRunner(tflite::Interpreter* interpreter,
-                                            int matched_sequence_length) const;
-  tflite::SignatureRunner* GetDecodeRunner(
-      tflite::Interpreter* interpreter) const;
+            void deallocate(T *ptr, std::size_t n) { free(ptr); }
+        };
 
-  int rank() const { return rank_; };
+        // An example implementation of LoRA adapters manager for TFLite interpreter.
+        // The class loads an adapter from a flatbuffers files and provides helper
+        // methods for finding the right signature and setting the appropriate input
+        // tensors. Please note the use of CustomAllocator to ensure zero-copy loading
+        // and potentially hot-swapping between multiple adapters with minimal cost.
+        class LoRA
+        {
+        public:
+            static std::unique_ptr<LoRA> FromFile(absl::string_view path);
 
- private:
-  explicit LoRA(int rank,
-                absl::flat_hash_map<std::string,
-                                    std::vector<float, AlignedAllocator<float>>>
-                    tensors)
-      : rank_(rank), tensors_(std::move(tensors)) {}
+            tflite::SignatureRunner *GetPrefillRunner(tflite::Interpreter *interpreter,
+                                                      int matched_sequence_length) const;
+            tflite::SignatureRunner *GetDecodeRunner(
+                tflite::Interpreter *interpreter) const;
 
-  tflite::SignatureRunner* GetRunnerHelper(
-      tflite::Interpreter* interpreter, absl::string_view signature_name) const;
+            int rank() const { return rank_; };
 
-  // The rank of the LoRA adapter.
-  const int rank_;
-  // A Map of names to LoRA tensors.
-  const absl::flat_hash_map<std::string,
-                            std::vector<float, AlignedAllocator<float>>>
-      tensors_;
-};
+        private:
+            explicit LoRA(int rank,
+                          absl::flat_hash_map<std::string,
+                                              std::vector<float, AlignedAllocator<float>>>
+                              tensors)
+                : rank_(rank), tensors_(std::move(tensors)) {}
 
-}  // namespace ai_edge_torch::examples
+            tflite::SignatureRunner *GetRunnerHelper(
+                tflite::Interpreter *interpreter, absl::string_view signature_name) const;
 
-#endif  // THIRD_PARTY_PY_AI_EDGE_TORCH_GENERATIVE_EXAMPLES_CPP_UTILS_H_
+            // The rank of the LoRA adapter.
+            const int rank_;
+            // A Map of names to LoRA tensors.
+            const absl::flat_hash_map<std::string,
+                                      std::vector<float, AlignedAllocator<float>>>
+                tensors_;
+        };
+    } // namespace examples
+    namespace custom::util
+    {
+
+        const char *TfLiteTypeToString(TfLiteType type);
+        void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name);
+        void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter);
+    } // namespace custom::util
+} // namespace ai_edge_torch
+
+#endif // THIRD_PARTY_PY_AI_EDGE_TORCH_GENERATIVE_EXAMPLES_CPP_UTILS_H_

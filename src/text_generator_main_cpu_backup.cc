@@ -20,14 +20,6 @@
 
 #include <mutex>
 #include <condition_variable>
-#include <sys/sdt.h>
-
-// USDT Probes for eBPF tracing with stage index
-// Stage indices: 0=Load_Model, 1=Build_Interpreter, 2=Load_Tokenizer, 3=Build_KV_Cache, 4=Prepare_Prompt, 5=Prepare_Signature_Runners, 6=Prefill, 7=Decode_Generation
-#define TRACE_LOGIC_START(stage_idx) DTRACE_PROBE1(tflite_gen, logic_start, stage_idx)
-#define TRACE_LOGIC_END(stage_idx) DTRACE_PROBE1(tflite_gen, logic_end, stage_idx)
-#define TRACE_IO_START(stage_idx) DTRACE_PROBE1(tflite_gen, io_start, stage_idx)
-#define TRACE_IO_END(stage_idx) DTRACE_PROBE1(tflite_gen, io_end, stage_idx)
 
 // AI EDGE TORCH
 #include "absl/flags/flag.h"
@@ -74,6 +66,107 @@ namespace
 {
     using ai_edge_torch::examples::AlignedAllocator;
     using ai_edge_torch::examples::LoRA;
+
+    // --------------------------------------------------------------------------
+    // Helper functions to print tensor details.
+    // --------------------------------------------------------------------------
+    const char *TfLiteTypeToString(TfLiteType type)
+    {
+        switch (type)
+        {
+        case kTfLiteNoType:
+            return "NoType";
+        case kTfLiteFloat32:
+            return "Float32";
+        case kTfLiteInt32:
+            return "Int32";
+        case kTfLiteUInt8:
+            return "UInt8";
+        case kTfLiteInt64:
+            return "Int64";
+        case kTfLiteString:
+            return "String";
+        case kTfLiteBool:
+            return "Bool";
+        case kTfLiteInt16:
+            return "Int16";
+        case kTfLiteComplex64:
+            return "Complex64";
+        case kTfLiteInt8:
+            return "Int8";
+        case kTfLiteFloat16:
+            return "Float16";
+        case kTfLiteFloat64:
+            return "Float64";
+        case kTfLiteComplex128:
+            return "Complex128";
+        case kTfLiteUInt64:
+            return "UInt64";
+        case kTfLiteResource:
+            return "Resource";
+        case kTfLiteVariant:
+            return "Variant";
+        case kTfLiteUInt32:
+            return "UInt32";
+        default:
+            return "Unknown";
+        }
+    }
+
+    void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name)
+    {
+        if (tensor == nullptr)
+            return;
+        std::cout << "    - " << tensor_name
+                  << " (Type: " << TfLiteTypeToString(tensor->type)
+                  << ", Dims: [";
+        for (int i = 0; i < tensor->dims->size; ++i)
+        {
+            std::cout << tensor->dims->data[i] << (i == tensor->dims->size - 1 ? "" : ", ");
+        }
+        std::cout << "])\n";
+    }
+
+    // --------------------------------------------------------------------------
+    // Prints information about all signature runners in the interpreter.
+    // --------------------------------------------------------------------------
+    void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter)
+    {
+        std::cout << "\n[INFO] Dumping Signature Runner Information...\n";
+        std::cout << "==================================================\n";
+
+        const auto &signature_keys = interpreter->signature_keys();
+        for (const auto *key : signature_keys)
+        {
+            tflite::SignatureRunner *runner = interpreter->GetSignatureRunner(key->c_str());
+            if (runner == nullptr)
+                continue;
+
+            std::cout << "Signature: \"" << *key << "\"\n";
+
+            // Print Inputs
+            std::cout << "  Inputs:\n";
+            const auto &inputs = runner->input_names();
+            for (const auto &input_name : inputs)
+            {
+                // std::cout << "    - " << input_name << ": "<< std::endl;
+                TfLiteTensor *input_tensor = runner->input_tensor(input_name);
+                PrintTensorInfo(input_tensor, input_name);
+            }
+
+            // Print Outputs
+            std::cout << "  Outputs:\n";
+            const auto &outputs = runner->output_names();
+            for (const auto &output_name : outputs)
+            {
+                // std::cout << "    - " << output_name << ": "<< std::endl;
+                TfLiteTensor *output_tensor = runner->input_tensor(output_name);
+                PrintTensorInfo(output_tensor, output_name);
+            }
+            std::cout << "--------------------------------------------------\n";
+        }
+        std::cout << "==================================================\n\n";
+    }
 
     // --------------------------------------------------------------------------
     // Utility for applying XNNPACK weight caching
@@ -282,7 +375,7 @@ namespace
         }
 
         // Print tensor dimensions for debugging
-        std::cout << "[INFO] KV Cache tensor dims: [";
+        std::cout << "[DEBUG] KV Cache tensor dims: [";
         for (int i = 0; i < num_dims; ++i)
         {
             std::cout << kv_cache_tensor->dims->data[i] << (i == num_dims - 1 ? "" : ", ");
@@ -295,19 +388,19 @@ namespace
             // Pattern 1: [batch, seq_len, num_heads, head_dim] - e.g., [1, 1280, 3, 64]
             if (kv_cache_tensor->dims->data[1] > 100 && kv_cache_tensor->dims->data[2] < 20)
             {
-                std::cout << "[INFO] Detected pattern [batch, seq_len, num_heads, head_dim]\n";
+                std::cout << "[DEBUG] Detected pattern [batch, seq_len, num_heads, head_dim]\n";
                 return 1; // sequence dimension is at index 1
             }
-            // Pattern 2: [batch, batch, seq_len, hidden_dim,] - e.g., [1, 1, 1280, 256,]
-            else if (kv_cache_tensor->dims->data[1] == 1 && kv_cache_tensor->dims->data[2] > 100)
+            // Pattern 2: [batch, batch, seq_len, hidden_dim,] - e.g., [1, 1, 1280, 256, ]
+            else if (kv_cache_tensor->dims->data[1] == 1 && kv_cache_tensor->dims->data[3] > 100)
             {
-                std::cout << "[INFO] Detected pattern [batch, batch, seq_len, hidden_dim,]\n";
+                std::cout << "[DEBUG] Detected pattern [batch, batch, seq_len, hidden_dim,]\n";
                 return 2; // sequence dimension is at index 2
             }
         }
 
         // Default fallback: assume sequence dimension is at index 1
-        std::cout << "[INFO] Using default: sequence dimension at index 1\n";
+        std::cout << "[DEBUG] Using default: sequence dimension at index 1\n";
         return 1;
     }
 
@@ -330,63 +423,43 @@ void __set_affinity_to_cores(const std::vector<int> &cores)
 void __run_main(custom::profiler::PhaseContext &phase_ctx,
                 custom::profiler::GenerationMetrics &generation_metrics)
 {
-
     // Global variables
     std::vector<int> prompt_tokens;
     std::string prompt, start_token, stop_token;
     int stop_token_id = -1;
     std::unordered_set<int> previously_generated_tokens;
 
-
     // 1. Load Model
     std::unique_ptr<tflite::FlatBufferModel> model;
-    TRACE_LOGIC_START(0);  // Load_Model
-    TRACE_IO_START(0);
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Model");
-
         model = LoadModel();
     }
-    TRACE_IO_END(0);
-    TRACE_LOGIC_END(0);
 
     // 2. Build Interpreter
-    TRACE_LOGIC_START(1);  // Build_Interpreter
-    TRACE_IO_START(1);
     std::unique_ptr<tflite::Interpreter> interpreter;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_Interpreter");
         interpreter = BuildInterpreter(model.get(), absl::GetFlag(FLAGS_num_threads));
     }
-    TRACE_IO_END(1);
-    TRACE_LOGIC_END(1);
 
     // Print signature runner info
     // PrintSignatureRunnersInfo(interpreter.get());
 
     // 3. Load SentencePiece
-    TRACE_LOGIC_START(2);  // Load_Tokenizer
-    TRACE_IO_START(2);
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Tokenizer");
         sp_processor = LoadSentencePieceProcessor();
     }
-    TRACE_IO_END(2);
-    TRACE_LOGIC_END(2);
 
     // 4. Build KV Cache
-    TRACE_LOGIC_START(3);  // Build_KV_Cache
-    TRACE_IO_START(3);
     std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_KV_Cache");
         kv_cache = BuildKVCache(interpreter.get());
         MINIMAL_CHECK(!kv_cache.empty());
     }
-    TRACE_IO_END(3);
-    TRACE_LOGIC_END(3);
-
     // 5. Optionally load LoRA
     // std::unique_ptr<ai_edge_torch::examples::LoRA> lora = nullptr;
     // {
@@ -399,8 +472,6 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     // }
 
     // 6. Prepare Input Prompt
-    TRACE_LOGIC_START(4);  // Prepare_Prompt
-    TRACE_IO_START(4);
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Prompt");
         prompt = absl::GetFlag(FLAGS_prompt);
@@ -428,12 +499,8 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
             }
         }
     }
-    TRACE_IO_END(4);
-    TRACE_LOGIC_END(4);
 
     // 7. Prepare Signature Runners
-    TRACE_LOGIC_START(5);  // Prepare_Signature_Runners
-    TRACE_IO_START(5);
     tflite::SignatureRunner *prefill_runner = nullptr;
     tflite::SignatureRunner *decode_runner = nullptr;
     std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
@@ -445,8 +512,6 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
         MINIMAL_CHECK(decode_runner != nullptr);
     }
-    TRACE_IO_END(5);
-    TRACE_LOGIC_END(5);
 
     TfLiteTensor *prefill_input = nullptr;
     TfLiteTensor *prefill_input_pos = nullptr;
@@ -498,8 +563,6 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     }
 
     // 9. Prefill Stage
-    TRACE_LOGIC_START(6);  // Prefill
-    TRACE_IO_START(6);
     double prefill_time_ms = 0.0;
     {
         custom::profiler::ScopeTimer prefill_timer(prefill_time_ms);
@@ -507,11 +570,8 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk); // Execute the prefill runner
     }
     generation_metrics.RecordPrefillTime(prefill_time_ms);
-    TRACE_IO_END(6);
-    TRACE_LOGIC_END(6);
 
     // 10. Decoding Stage with separate metrics for inference and sampling
-
     // Determine how many tokens to generate
     int max_decode_steps = (absl::GetFlag(FLAGS_max_decode_steps) == -1)
                                ? kv_cache_max_size
@@ -534,17 +594,12 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 
     MINIMAL_CHECK(decode_steps > 0);
 
-
     // Decoding loop
     for (int i = 0; i < decode_steps; ++i)
     {
-        std::string stage_name = "Decode_" + std::to_string(i);
-
-        TRACE_LOGIC_START(7);  // Decode_Generation
-        TRACE_IO_START(7);
         std::string single_decoded_text;
         {
-            custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, stage_name);
+            custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Decode_" + std::to_string(i));
 
             // 1) Model Inference
             {
@@ -585,9 +640,6 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
                 MINIMAL_CHECK(sp_processor->Decode(next_token, &single_decoded_text).ok());
             }
         }
-        TRACE_IO_END(7);
-        TRACE_LOGIC_END(7);
-        
         generation_metrics.RecordDecodingTime(inference_time_ms,
                                               sampling_time_ms,
                                               detok_time_ms);
@@ -607,7 +659,6 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     }
 
     std::cout << "\n[INFO] Decoding stage completed\n\n";
-
 }
 
 // =======================================================================
@@ -652,6 +703,7 @@ int main(int argc, char *argv[])
     custom::profiler::PhaseContext profile_ctx;
     std::vector<custom::profiler::RUsageRecord> rusage_records;
     custom::profiler::GenerationMetrics generation_metrics;
+
     std::thread monitor_thread([&]()
                                {
         __set_affinity_to_cores(monitor_core);
@@ -667,10 +719,11 @@ int main(int argc, char *argv[])
     profile_ctx.generation_done.store(true);
     profile_ctx.signal_cv.notify_all();
     monitor_thread.join(); // Wait for the monitor thread to finish
-    // Print RUsage results
-    // custom::profiler::print_rusage_records(rusage_records);
 
-    // Print genenration metrics (inference vs. sampling)
+    // 12. Print RUsage results
+    custom::profiler::print_rusage_records(rusage_records);
+
+    // 13. Print decoding metrics (inference vs. sampling)
     generation_metrics.PrintMetrics();
 
     std::cout << "\n[INFO] Text Generation App completed successfully.\n";

@@ -59,7 +59,7 @@ EXT_LIBS := \
 	-ltensorflowlite_gpu_delegate -lEGL -lGLESv2 \
 	-lsentencepiece_processor -lsentencepiece_proto -lsentencepiece_model_proto \
 	-lprotobuf_lite \
-	-ldl -lrt -pthread          # required by Abseil & TF Lite
+	-ldl -lrt -pthread 
 
 # 5. Linker flags ─────────────────────────────────────────────────────────────
 LDFLAGS := -Wl,-rpath=\$$ORIGIN/../lib:\$$ORIGIN/lib $(EXT_LIBS) $(ABSL_GROUP) $(GENAIOPS_GROUP) 
