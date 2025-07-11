@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <limits>
 #include <cmath>
+#include <unordered_set>
 #include "tensorflow/lite/interpreter.h"
 
 namespace ai_edge_torch::custom::sampler
@@ -22,6 +23,12 @@ namespace ai_edge_torch::custom::sampler
     // Temperature + Top-K + Top-P Sampler
     int temperature_top_k_top_p_sampler(const TfLiteTensor *logits, float temperature, int k, float p);
 
-} // namespace ai_edge_torch::custom_util
+    // Temperature + Top-K + Top-P + Repetition Penalty Sampler
+    int temperature_top_k_top_p_repetition_sampler(const TfLiteTensor *logits, 
+                                                  float temperature, int k, float p,
+                                                  const std::unordered_set<int>& previously_generated_tokens,
+                                                  float repetition_penalty = 1.2f);
+
+} // namespace ai_edge_torch::custom::sampler
 
 #endif // AI_EDGE_TORCH_GENERATIVE_CUSTOM_SAMPLER_H_

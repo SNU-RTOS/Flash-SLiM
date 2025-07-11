@@ -1,0 +1,19 @@
+[
+  {
+    "tokens": 128,
+    "prompt": [
+      "Tranquil village nestled in green valley, clear river meandering through wildflower meadows.",
+      "Ancient stone bridge, weathered by time, stands as sentinel, arches reflecting in calm water below.",
+      "Generations have passed, lovers whispers heard, childrens songs sung, travelers footsteps echoed.",
+      "River gurgles beneath, water cool and clear, revealing mossy stones on riverbed.",
+      "Dragonflies dance in sunlit air, iridescent wings like jewels flashing.",
+      "Sweet scent of honeysuckle, gentle buzz of bees collecting nectar from clover fields."
+    ],
+    "temperature": 0.7,
+    "top_k": 40,
+    "description": "평화로운 마을과 자연 풍경",
+    "top_p": 0.9,
+    "repetition_penalty": 1.0,
+    "enable_repetition_penalty": false
+  }
+]

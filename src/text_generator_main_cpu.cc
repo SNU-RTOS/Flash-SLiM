@@ -16,6 +16,7 @@
 #include <random>
 #include <thread>
 #include <iostream>
+#include <unordered_set>
 
 #include <mutex>
 #include <condition_variable>
@@ -55,11 +56,117 @@ ABSL_FLAG(int, num_threads, 4, "Number of threads to use. Defaults to 4.");
 ABSL_FLAG(std::string, weight_cache_path, "",
           "Path for XNNPACK weight caching, e.g., /tmp/model.xnnpack_cache.");
 ABSL_FLAG(std::string, lora_path, "", "Optional path to a LoRA artifact.");
+ABSL_FLAG(float, temperature, 0.8f, "Temperature for sampling. Higher values make output more random. Defaults to 0.8");
+ABSL_FLAG(int, top_k, 40, "Top-k sampling parameter. Only consider the top k tokens. Defaults to 40.");
+ABSL_FLAG(float, top_p, 0.9f, "Top-p (nucleus) sampling parameter. Only consider tokens with cumulative probability <= top_p. Defaults to 0.9.");
+ABSL_FLAG(float, repetition_penalty, 1.2f, "Repetition penalty for sampling. Higher values reduce repetition. Defaults to 1.2.");
+ABSL_FLAG(bool, enable_repetition_penalty, false, "Enable repetition penalty. Defaults to false.");
 
 namespace
 {
     using ai_edge_torch::examples::AlignedAllocator;
     using ai_edge_torch::examples::LoRA;
+
+    // --------------------------------------------------------------------------
+    // Helper functions to print tensor details.
+    // --------------------------------------------------------------------------
+    const char *TfLiteTypeToString(TfLiteType type)
+    {
+        switch (type)
+        {
+        case kTfLiteNoType:
+            return "NoType";
+        case kTfLiteFloat32:
+            return "Float32";
+        case kTfLiteInt32:
+            return "Int32";
+        case kTfLiteUInt8:
+            return "UInt8";
+        case kTfLiteInt64:
+            return "Int64";
+        case kTfLiteString:
+            return "String";
+        case kTfLiteBool:
+            return "Bool";
+        case kTfLiteInt16:
+            return "Int16";
+        case kTfLiteComplex64:
+            return "Complex64";
+        case kTfLiteInt8:
+            return "Int8";
+        case kTfLiteFloat16:
+            return "Float16";
+        case kTfLiteFloat64:
+            return "Float64";
+        case kTfLiteComplex128:
+            return "Complex128";
+        case kTfLiteUInt64:
+            return "UInt64";
+        case kTfLiteResource:
+            return "Resource";
+        case kTfLiteVariant:
+            return "Variant";
+        case kTfLiteUInt32:
+            return "UInt32";
+        default:
+            return "Unknown";
+        }
+    }
+
+    void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name)
+    {
+        if (tensor == nullptr)
+            return;
+        std::cout << "    - " << tensor_name
+                  << " (Type: " << TfLiteTypeToString(tensor->type)
+                  << ", Dims: [";
+        for (int i = 0; i < tensor->dims->size; ++i)
+        {
+            std::cout << tensor->dims->data[i] << (i == tensor->dims->size - 1 ? "" : ", ");
+        }
+        std::cout << "])\n";
+    }
+
+    // --------------------------------------------------------------------------
+    // Prints information about all signature runners in the interpreter.
+    // --------------------------------------------------------------------------
+    void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter)
+    {
+        std::cout << "\n[INFO] Dumping Signature Runner Information...\n";
+        std::cout << "==================================================\n";
+
+        const auto &signature_keys = interpreter->signature_keys();
+        for (const auto *key : signature_keys)
+        {
+            tflite::SignatureRunner *runner = interpreter->GetSignatureRunner(key->c_str());
+            if (runner == nullptr)
+                continue;
+
+            std::cout << "Signature: \"" << *key << "\"\n";
+
+            // Print Inputs
+            std::cout << "  Inputs:\n";
+            const auto &inputs = runner->input_names();
+            for (const auto &input_name : inputs)
+            {
+                // std::cout << "    - " << input_name << ": "<< std::endl;
+                TfLiteTensor *input_tensor = runner->input_tensor(input_name);
+                PrintTensorInfo(input_tensor, input_name);
+            }
+
+            // Print Outputs
+            std::cout << "  Outputs:\n";
+            const auto &outputs = runner->output_names();
+            for (const auto &output_name : outputs)
+            {
+                // std::cout << "    - " << output_name << ": "<< std::endl;
+                TfLiteTensor *output_tensor = runner->input_tensor(output_name);
+                PrintTensorInfo(output_tensor, output_name);
+            }
+            std::cout << "--------------------------------------------------\n";
+        }
+        std::cout << "==================================================\n\n";
+    }
 
     // --------------------------------------------------------------------------
     // Utility for applying XNNPACK weight caching
@@ -251,6 +358,52 @@ namespace
         return processor;
     }
 
+    // --------------------------------------------------------------------------
+    // Helper function to detect the sequence dimension in KV cache tensor
+    // --------------------------------------------------------------------------
+    int DetectKVCacheSequenceDimension(TfLiteTensor *kv_cache_tensor)
+    {
+        if (kv_cache_tensor == nullptr || kv_cache_tensor->dims == nullptr)
+        {
+            return -1;
+        }
+
+        int num_dims = kv_cache_tensor->dims->size;
+        if (num_dims < 2)
+        {
+            return -1;
+        }
+
+        // Print tensor dimensions for debugging
+        std::cout << "[DEBUG] KV Cache tensor dims: [";
+        for (int i = 0; i < num_dims; ++i)
+        {
+            std::cout << kv_cache_tensor->dims->data[i] << (i == num_dims - 1 ? "" : ", ");
+        }
+        std::cout << "]\n";
+
+        // Check different known patterns
+        if (num_dims == 4)
+        {
+            // Pattern 1: [batch, seq_len, num_heads, head_dim] - e.g., [1, 1280, 3, 64]
+            if (kv_cache_tensor->dims->data[1] > 100 && kv_cache_tensor->dims->data[2] < 20)
+            {
+                std::cout << "[DEBUG] Detected pattern [batch, seq_len, num_heads, head_dim]\n";
+                return 1; // sequence dimension is at index 1
+            }
+            // Pattern 2: [batch, batch, seq_len, hidden_dim,] - e.g., [1, 1, 1280, 256, ]
+            else if (kv_cache_tensor->dims->data[1] == 1 && kv_cache_tensor->dims->data[3] > 100)
+            {
+                std::cout << "[DEBUG] Detected pattern [batch, batch, seq_len, hidden_dim,]\n";
+                return 2; // sequence dimension is at index 2
+            }
+        }
+
+        // Default fallback: assume sequence dimension is at index 1
+        std::cout << "[DEBUG] Using default: sequence dimension at index 1\n";
+        return 1;
+    }
+
 } // end anonymous namespace
 
 void __set_affinity_to_cores(const std::vector<int> &cores)
@@ -274,6 +427,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     std::vector<int> prompt_tokens;
     std::string prompt, start_token, stop_token;
     int stop_token_id = -1;
+    std::unordered_set<int> previously_generated_tokens;
 
     // 1. Load Model
     std::unique_ptr<tflite::FlatBufferModel> model;
@@ -288,16 +442,9 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_Interpreter");
         interpreter = BuildInterpreter(model.get(), absl::GetFlag(FLAGS_num_threads));
     }
-    // Tensor upload before prefill
-    /*
-    {
-        custom::profiler::ScopeTimer timer("Tensor Uploading", perf_monitor, metrics, usage_start, usage_end);
 
-        // Uploading Here
-        // upload_tensors_for_all_subgraphs(interpreter.get());
-
-    }
-    */
+    // Print signature runner info
+    // PrintSignatureRunnersInfo(interpreter.get());
 
     // 3. Load SentencePiece
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
@@ -340,6 +487,16 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         if (!stop_token.empty())
         {
             stop_token_id = sp_processor->PieceToId(stop_token);
+            std::cout << "[INFO] Stop token ID: " << stop_token_id << " for token: " << stop_token << "\n";
+        }
+
+        // Initialize previously generated tokens with prompt tokens for repetition penalty
+        if (absl::GetFlag(FLAGS_enable_repetition_penalty))
+        {
+            for (int token : prompt_tokens)
+            {
+                previously_generated_tokens.insert(token);
+            }
         }
     }
 
@@ -376,7 +533,20 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         decode_input_pos = decode_runner->input_tensor("input_pos");
         kv_cache_k_0 = decode_runner->input_tensor("kv_cache_k_0");
         max_seq_size = prefill_input->dims->data[1];
-        kv_cache_max_size = kv_cache_k_0->dims->data[1];
+
+        // Detect KV cache sequence dimension and set max size accordingly
+        int seq_dim_index = DetectKVCacheSequenceDimension(kv_cache_k_0);
+        if (seq_dim_index >= 0 && seq_dim_index < kv_cache_k_0->dims->size)
+        {
+            kv_cache_max_size = kv_cache_k_0->dims->data[seq_dim_index];
+        }
+        else
+        {
+            // Fallback to default behavior
+            kv_cache_max_size = kv_cache_k_0->dims->data[1];
+        }
+
+        std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")\n";
 
         prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
 
@@ -414,14 +584,15 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     double sampling_time_ms = 0.0;
     double detok_time_ms = 0.0;
 
-    MINIMAL_CHECK(decode_steps > 0);
-
     std::cout << "[INFO] Tokens in Prompt: " << prompt_tokens.size() << "\n";
     std::cout << "[INFO] Tokens to Generate: " << decode_steps << "\n";
     std::cout << "[INFO] Limits of Tokens to Generate: " << kv_cache_max_size << "\n";
     std::cout << "\nPrompt:\n"
               << prompt
-              << "\n\nOutput Text:\n";
+              << "\n\nOutput Text:\n"
+              << std::endl;
+
+    MINIMAL_CHECK(decode_steps > 0);
 
     // Decoding loop
     for (int i = 0; i < decode_steps; ++i)
@@ -442,7 +613,24 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
             // 2) Token Sampling
             {
                 custom::profiler::ScopeTimer timer(sampling_time_ms);
-                next_token_id = ai_edge_torch::custom::sampler::temperature_top_k_top_p_sampler(decode_runner->output_tensor("logits"), 0.9f, 85, 0.9f);
+                if (absl::GetFlag(FLAGS_enable_repetition_penalty))
+                {
+                    next_token_id = ai_edge_torch::custom::sampler::temperature_top_k_top_p_repetition_sampler(
+                        decode_runner->output_tensor("logits"),
+                        absl::GetFlag(FLAGS_temperature),
+                        absl::GetFlag(FLAGS_top_k),
+                        absl::GetFlag(FLAGS_top_p),
+                        previously_generated_tokens,
+                        absl::GetFlag(FLAGS_repetition_penalty));
+                }
+                else
+                {
+                    next_token_id = ai_edge_torch::custom::sampler::temperature_top_k_top_p_sampler(
+                        decode_runner->output_tensor("logits"),
+                        absl::GetFlag(FLAGS_temperature),
+                        absl::GetFlag(FLAGS_top_k),
+                        absl::GetFlag(FLAGS_top_p));
+                }
             }
 
             // 3) Token Detokenization
@@ -459,6 +647,13 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         // Check if the next token is a stop token
         if (next_token_id == stop_token_id)
             break;
+
+        // Add the generated token to previously generated tokens for repetition penalty
+        if (absl::GetFlag(FLAGS_enable_repetition_penalty))
+        {
+            previously_generated_tokens.insert(next_token_id);
+        }
+
         std::cout << single_decoded_text << std::flush;
         next_position++;
     }

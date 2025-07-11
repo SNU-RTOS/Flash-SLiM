@@ -1,0 +1,52 @@
+[
+  {
+    "tokens": 8,
+    "prompt": "Green leaves sway gently in summer breeze.",
+    "temperature": 0.7,
+    "top_k": 40,
+    "description": "여름바람과 나뭇잎",
+    "top_p": 0.9,
+    "repetition_penalty": 1.0,
+    "enable_repetition_penalty": false
+  },
+  {
+    "tokens": 8,
+    "prompt": "Really? The sky is... blue?",
+    "temperature": 0.7,
+    "top_k": 40,
+    "description": "하늘의 색깔에 대한 의문",
+    "top_p": 0.9,
+    "repetition_penalty": 1.0,
+    "enable_repetition_penalty": false
+  },
+  {
+    "tokens": 8,
+    "prompt": "Hey! What is... that?!",
+    "temperature": 0.7,
+    "top_k": 40,
+    "description": "놀라운 발견",
+    "top_p": 0.9,
+    "repetition_penalty": 1.0,
+    "enable_repetition_penalty": false
+  },
+  {
+    "tokens": 8,
+    "prompt": "Should I take an umbrella?",
+    "temperature": 0.7,
+    "top_k": 40,
+    "description": "우산을 가져갈까요?",
+    "top_p": 0.9,
+    "repetition_penalty": 1.0,
+    "enable_repetition_penalty": false
+  },
+  {
+    "tokens": 8,
+    "prompt": "Puppy? is not it cute?",
+    "temperature": 0.7,
+    "top_k": 40,
+    "description": "귀여운 강아지",
+    "top_p": 0.9,
+    "repetition_penalty": 1.0,
+    "enable_repetition_penalty": false
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "tokens": 8,
+    "prompt": "Sun rises, birds sing, day begins",
+    "temperature": 0.7,
+    "top_k": 40,
+    "description": "새벽의 시작",
+    "top_p": 0.9,
+    "repetition_penalty": 1.0,
+    "enable_repetition_penalty": false
+  },
+  {
+    "tokens": 8,
+    "prompt": "Wind whispers secrets through tall grass.",
+    "temperature": 0.7,
+    "top_k": 40,
+    "description": "바람의 속삭임",
+    "top_p": 0.9,
+    "repetition_penalty": 1.0,
+    "enable_repetition_penalty": false
+  },
+  {
+    "tokens": 8,
+    "prompt": "Green leaves sway gently in summer breeze.",
+    "temperature": 0.7,
+    "top_k": 40,
+    "description": "여름바람과 나뭇잎",
+    "top_p": 0.9,
+    "repetition_penalty": 1.0,
+    "enable_repetition_penalty": false
+  }
+]

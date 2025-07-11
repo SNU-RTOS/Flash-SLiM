@@ -99,5 +99,6 @@ if [[ -L "${APP_BASE}" || -e "${APP_BASE}" ]]; then
   rm -f "${APP_BASE}"
 fi
 
-ln -s "${TARGET_BIN}" "${APP_BASE}"
-echo "[INFO] Symlink ${APP_BASE} → ${TARGET_BIN}"
+# ln -s "${TARGET_BIN}" "${APP_BASE}"
+# echo "[INFO] Symlink ${APP_BASE} → ${TARGET_BIN}"
+echo "[IFNO] BUILD COMPLETE"
