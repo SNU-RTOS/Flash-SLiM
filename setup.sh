@@ -90,7 +90,7 @@ if [[ ! -d "${LITERT_PATH}" ]]; then
   pushd "${LITERT_PATH}" >/dev/null
   pwd
   run git clone https://github.com/google-ai-edge/litert.git ${LITERT_PATH}
-  cd LiteRT
+  cd litert
   pwd
   ./configure
   popd >/dev/null

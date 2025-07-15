@@ -25,8 +25,8 @@ CACHE_LIB_PATH=${LITERT_PATH}/bazel-bin/tflite/experimental/resource
 FLATBUFFER_LIB_PATH=${LITERT_PATH}/bazel-bin/external/flatbuffers/src
 
 
-TENSORFLOW_INC_PATH=${LITERT_PATH}/bazel-LiteRT/external/org_tensorflow/tensorflow
-FLATBUFFER_INC_PATH=${LITERT_PATH}/bazel-LiteRT/external/flatbuffers/include/flatbuffers
+TENSORFLOW_INC_PATH=${LITERT_PATH}/bazel-litert/external/org_tensorflow/tensorflow
+FLATBUFFER_INC_PATH=${LITERT_PATH}/bazel-litert/external/flatbuffers/include/flatbuffers
 LITERT_INC_PATH=${LITERT_PATH}/tflite
 
 echo "[INFO] Build LiteRT ($BUILD_MODE mode)…"

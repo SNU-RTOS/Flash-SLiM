@@ -69,10 +69,20 @@ get_pagefault_stats() {
 
 
 clear_caches() {
-    echo "[INFO] Dropping OS Page Caches.."
+    echo "[INFO] Start: Dropping OS Page Caches.."
     sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-    echo "[INFO] Clearing CPU Caches"
+    echo "[INFO] Waiting for caches to clear..."
+    # sleep for a brief moment to ensure caches are cleared
+    sleep 1
+    echo "[INFO] DONE: Dropping OS Page Caches"
 
+    echo "Dropping swapped memory..."
+    # sudo swapoff -a
+    # sudo swapon -a
+    sleep 1
+    echo "[INFO] DONE: Dropping Swapped Memory"
+
+    echo "[INFO] Clearing CPU Caches"
     ARCH=$(uname -m)
 
     case "$ARCH" in

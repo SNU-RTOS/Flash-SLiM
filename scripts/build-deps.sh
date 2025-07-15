@@ -48,6 +48,10 @@ echo "[INFO] Symlink abseil and sentencepiece .."
 
 
 ## ──────────── abseil ──────────────────────────────────────────────
+if [ ! -d "${ROOT_PATH}/lib/absl" ]; then
+  mkdir -p "${ROOT_PATH}/lib/absl"
+fi
+
 find -L "${ABSEIL_LIB_PATH}" -type f -name "lib*.${USE_PIC_SUFFIX}" | while read -r libfile; do
   base="$(basename "$libfile")"
   link_name="${base%.$USE_PIC_SUFFIX}.a"

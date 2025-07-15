@@ -20,14 +20,22 @@
 
 #include <mutex>
 #include <condition_variable>
-#include <sys/sdt.h>
 
 // USDT Probes for eBPF tracing with stage index
 // Stage indices: 0=Load_Model, 1=Build_Interpreter, 2=Load_Tokenizer, 3=Build_KV_Cache, 4=Prepare_Prompt, 5=Prepare_Signature_Runners, 6=Prefill, 7=Decode_Generation
+#ifdef EBPF_TRACE_ENABLED
+
+#include <sys/sdt.h>
 #define TRACE_LOGIC_START(stage_idx) DTRACE_PROBE1(tflite_gen, logic_start, stage_idx)
 #define TRACE_LOGIC_END(stage_idx) DTRACE_PROBE1(tflite_gen, logic_end, stage_idx)
 #define TRACE_IO_START(stage_idx) DTRACE_PROBE1(tflite_gen, io_start, stage_idx)
 #define TRACE_IO_END(stage_idx) DTRACE_PROBE1(tflite_gen, io_end, stage_idx)
+#else
+#define TRACE_LOGIC_START(stage_idx)
+#define TRACE_LOGIC_END(stage_idx)
+#define TRACE_IO_START(stage_idx)
+#define TRACE_IO_END(stage_idx)
+#endif
 
 // AI EDGE TORCH
 #include "absl/flags/flag.h"
