@@ -1,9 +1,9 @@
-usdt:./output/text_generator_main_cpu:tflite_gen:logic_start
+usdt:./output/text_generator_main:tflite_gen:logic_start
 {
     @logic_start[tid] = nsecs;
 }
 
-usdt:./output/text_generator_main_cpu:tflite_gen:logic_end
+usdt:./output/text_generator_main:tflite_gen:logic_end
 /@logic_start[tid]/
 {
     $logic_duration_ms = (nsecs - @logic_start[tid]) / 1000000;
@@ -78,12 +78,12 @@ usdt:./output/text_generator_main_cpu:tflite_gen:logic_end
     delete(@block_write_bytes_total[tid]); delete(@cpu_runtime_us[tid]);
 }
 
-usdt:./output/text_generator_main_cpu:tflite_gen:io_start
+usdt:./output/text_generator_main:tflite_gen:io_start
 {
     @start[tid] = nsecs;
 }
 
-usdt:./output/text_generator_main_cpu:tflite_gen:io_end
+usdt:./output/text_generator_main:tflite_gen:io_end
 /@start[tid]/
 {
     $io_duration_ms = (nsecs - @start[tid]) / 1000000;

@@ -17,8 +17,15 @@ set -euo pipefail
 # --------------------------------------------------------------------------- #
 # 0. Load environment and helpers                                            #
 # --------------------------------------------------------------------------- #
-source .env                              # contains PROMPT_PATH, MODEL_PATH, …
-source ./scripts/utils.sh               # provides clear_caches()
+if [[ ! -f .env ]]; then
+    echo "[ERROR] .env file not found. Please run from project root directory." >&2
+    exit 1
+fi
+
+source .env
+source ./scripts/utils.sh
+
+banner "LLM Inference Script"
 
 # ------------------------------------------------------------------------------
 # 1. Defaults & CLI parsing
@@ -34,6 +41,7 @@ MEMORY_LIMITS=()       # array of memory limits for cgroup testing
 ENABLE_CGROUP=false    # enable memory-constrained benchmarking
 
 usage() {
+    banner "Usage Information"
     cat <<'EOF'
     Usage: run.sh [OPTIONS]
 
@@ -129,6 +137,7 @@ done
 
 # Validate target
 [[ "${TARGET}" =~ ^(gpu|cpu)$ ]] || {
+    banner "Invalid target argument"
     echo "Invalid --target ${TARGET}" >&2
     exit 1
 }
@@ -147,7 +156,6 @@ fi
 # ------------------------------------------------------------------------------
 # 2. Logging helper
 # ------------------------------------------------------------------------------
-log() { echo "$@"; }
 if $LOG_ENABLED; then
     log() { echo "$@" | tee -a "$OUTPUT_FILE"; }
 fi
@@ -159,23 +167,23 @@ run_with_memlimit() {
     local mmax="$1"
     shift
     local cmd=("$@")
+    
+    if [[ -f /sys/fs/cgroup/cgroup.controllers ]]; then
+        banner "cgroup v2 detected: systemd-run"
 
-    if mount | grep -q "cgroup2"; then
         # Use systemd-run for cgroup v2
         systemd-run --quiet --scope \
             -p MemoryMax="$mmax" -p MemoryHigh="$mmax" -p MemorySwapMax=0 \
             -- "${cmd[@]}"
     else
         # Use cgexec for cgroup v1
-        local cg="/sys/fs/cgroup/memory/llmbench"
+        banner "cgroup v1 detected: cgexec"
         
-        # Create cgroup if it doesn't exist
+        local cg="/sys/fs/cgroup/memory/llmbench"
         if [[ ! -d "$cg" ]]; then
             echo "Creating cgroup: $cg" >&2
             sudo mkdir -p "$cg"
         fi
-        
-        # Set memory limit (always update to current limit)
         echo 0 | sudo tee "$cg/memory.force_empty" >/dev/null || true
         echo "$(($(numfmt --from=iec "$mmax")))" | sudo tee "$cg/memory.limit_in_bytes" >/dev/null
         
@@ -196,7 +204,9 @@ MODEL_NAME="llama_q8_ekv1024"
 # MODEL_DIR="${MODEL_PATH}/SmolLM"
 # MODEL_NAME="model.q8"
 
-BIN="output/text_generator_main_${TARGET}"
+# Use the unified Bazel-built binary
+BIN="output/text_generator_main"
+
 
 # Validate prerequisites
 [[ -x "$BIN" ]] || { 
@@ -209,7 +219,6 @@ BIN="output/text_generator_main_${TARGET}"
     exit 1 
 }
 
-# Validate file format
 [[ "$PROMPT_FILE" =~ \.(json)$ ]] || {
     echo "[ERROR] Prompt file must be .json format" >&2
     exit 1
@@ -229,9 +238,8 @@ run_single_prompt() {
     local TOP_P="$6"
     local REPETITION_PENALTY="$7"
     local ENABLE_REPETITION_PENALTY="$8"
-    local MEMORY_LIMIT="${9:-}"  # Optional memory limit
-    
-    log "------ LLM inference start (${TARGET^^}) ------"
+    local MEMORY_LIMIT="${9:-}"
+    banner "LLM inference start (${TARGET^^})"
     log "Model            : ${MODEL_NAME}"
     log "Tokens requested : ${TOKENS}"
     # log "Prompt           : ${PROMPT}"
@@ -287,7 +295,7 @@ run_single_prompt() {
     else
         # Normal execution
         if $LOG_ENABLED; then
-            sudo "${CMD[@]}" 2>&1 | tee -a "${OUTPUT_FILE}"
+           sudo "${CMD[@]}" 2>&1 | tee -a "${OUTPUT_FILE}"
             log "Results saved to ${OUTPUT_FILE}"
         else
             sudo "${CMD[@]}"
@@ -420,16 +428,17 @@ execute_benchmarks() {
     # Setup results directory
     if [[ -n "$memory_limit" ]]; then
         RESULTS_DIR="result_${memory_limit}"
-        echo "[INFO] === Memory Limit: $memory_limit ==="
+        banner "Memory Limit: $memory_limit"
     else
         RESULTS_DIR="result_run_once"
+        banner "Normal run (no memory limit)"
     fi
     
     if [[ -d "${RESULTS_DIR}" ]]; then
-        echo "Warning: ${RESULTS_DIR} already exists. Results will be appended."
+        banner "Results directory exists: ${RESULTS_DIR} (appending)"
     else
-        echo "Creating results directory: ${RESULTS_DIR}"
-        mkdir -p "${RESULTS_DIR}"
+        ensure_dir "${RESULTS_DIR}"
+        banner "Created results directory: ${RESULTS_DIR}"
     fi
     
     # Execute for each repeat
@@ -519,7 +528,7 @@ process_multiple_prompts() {
 process_single_prompt() {
     local parse_result="$1"
     local memory_limit="${2:-}"
-    local iteration="${3:-1}"
+    local iteration="${3:-}"
     
     # Parse: SINGLE tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
     local first_line tokens temperature top_k top_p repetition_penalty enable_repetition_penalty

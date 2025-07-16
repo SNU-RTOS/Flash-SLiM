@@ -16,7 +16,6 @@ set -euo pipefail
 # --------------------------------------------------------------------------- #
 # 0. Load environment and helpers                                            #
 # --------------------------------------------------------------------------- #
-# Check if we're in the project root
 if [[ ! -f .env ]]; then
     echo "[ERROR] .env file not found. Please run from project root directory." >&2
     exit 1
@@ -25,6 +24,7 @@ fi
 source .env                              # Load environment variables
 source ./scripts/utils.sh               # Load utility functions
 
+banner "Build TensorFlow Lite Model Benchmarking Utility"
 # --------------------------------------------------------------------------- #
 # 1. Configuration                                                           #
 # --------------------------------------------------------------------------- #

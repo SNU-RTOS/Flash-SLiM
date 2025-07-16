@@ -1,46 +1,60 @@
 #!/usr/bin/env bash
 # build.sh
 #
-# Build the LLM sample in CPU and/or GPU flavours.
+# Build the LLM sample using Bazel build system.
 #
 # Usage:
-#   ./build.sh            # defaults to "gpu"
-#   ./build.sh cpu        # CPU-only build
-#   ./build.sh gpu        # GPU-only build
-#   ./build.sh all        # build both variants
+#   ./build.sh            # defaults to "main"
+#   ./build.sh main       # build main text generator
+#   ./build.sh clean      # clean build artifacts
+#   ./build.sh test       # run tests
+#   ./build.sh all        # build all targets
 #
 # Resulting binaries:
-#   output/text_generator_main_gpu
-#   output/text_generator_main_cpu
+#   bazel-bin/flash-slim/text_generator_main
 #
-# A convenience symlink ${ROOT_PATH}/text_generator_main will point to
-# the most recently built variant.
+# The binary will be copied to output/ directory for convenience.
 
 set -euo pipefail
 
+
 # ---------------------------------------------------------------------------
-# 0. Environment
+# 0. Environment & Build Config
 # ---------------------------------------------------------------------------
 source .env
+source ./scripts/utils.sh
+source ./scripts/common.sh
 : "${ROOT_PATH:?ROOT_PATH must be set in .env}"
 
-APP_BASE=text_generator_main         # basename without suffix
-OUT_DIR=output
+# Apply build configuration (release by default)
+setup_build_config
 
-CPU_BIN="${OUT_DIR}/${APP_BASE}_cpu"
-GPU_BIN="${OUT_DIR}/${APP_BASE}_gpu"
-QNN_BIN="${OUT_DIR}/${APP_BASE}_qnn"  # QNN variant, if applicable
+# ---------------------------------------------------------------------------
+# Print build configuration
+# ---------------------------------------------------------------------------
+banner "Bazel Build Configuration"
+log "  BAZEL_CONF: $BAZEL_CONF"
+log "  COPT_FLAGS: $COPT_FLAGS"
+log "  LINKOPTS: $LINKOPTS"
+log "  GPU_FLAGS: $GPU_FLAGS"
+log "  GPU_COPT_FLAGS: $GPU_COPT_FLAGS"
+
+APP_BASE=text_generator_main
+OUT_DIR=output
+BAZEL_BIN="bazel-bin/flash-slim/${APP_BASE}"
+OUTPUT_BIN="${OUT_DIR}/${APP_BASE}"
 
 # ---------------------------------------------------------------------------
 # 1. Parse argument
 # ---------------------------------------------------------------------------
-BUILD_TARGET="${1:-gpu}"    # default = gpu
+BUILD_TARGET="${1:-main}"    # default = main
 
 case "${BUILD_TARGET}" in
-  cpu|gpu|qnn|all) ;;
-  *)
-    echo "Invalid target '${BUILD_TARGET}' (expected cpu|gpu|all)" >&2
-    exit 1
+    main|clean|test|all) ;;
+    *)
+        echo "Invalid target '${BUILD_TARGET}' (expected main|clean|test|all)" >&2
+        echo "Usage: $0 [main|clean|test|all]" >&2
+        exit 1
     ;;
 esac
 
@@ -49,56 +63,92 @@ esac
 # ---------------------------------------------------------------------------
 run() { echo "+ $*"; "$@"; }
 
-do_gpu_build() {
-  echo "[INFO] Building GPU variant..."
-  run make -f Makefile-gpu -j"$(nproc)"
-  # Rename / move artefact
-  [[ -f "${OUT_DIR}/${APP_BASE}" ]] \
-      && mv -f "${OUT_DIR}/${APP_BASE}" "${GPU_BIN}"
-  echo "[INFO] GPU binary -> ${GPU_BIN}"
+do_main_build() {
+    banner "Building main text generator with Bazel"
+    
+    bazel build $BAZEL_CONF \
+        //flash-slim:text_generator_main \
+        $COPT_FLAGS \
+        $LINKOPTS \
+        $GPU_FLAGS \
+        $GPU_COPT_FLAGS \
+        --config=linux \
+        --config=ebpf
+
+    ensure_dir "${OUT_DIR}"
+    banner "Copying binary to output directory"
+    if [[ -f "${BAZEL_BIN}" ]]; then
+        [[ -f "${OUTPUT_BIN}" ]] && rm -f "${OUTPUT_BIN}"
+        cp "${BAZEL_BIN}" "${OUTPUT_BIN}"
+        log "Binary copied to ${OUTPUT_BIN}"
+    else
+        banner "Binary not found"
+        log "[ERROR] Binary not found at ${BAZEL_BIN}"
+        exit 1
+    fi
 }
 
-do_cpu_build() {
-  echo "[INFO] Building CPU variant..."
-  run make -f Makefile-cpu -j"$(nproc)"
-  [[ -f "${OUT_DIR}/${APP_BASE}" ]] \
-      && mv -f "${OUT_DIR}/${APP_BASE}" "${CPU_BIN}"
-  echo "[INFO] CPU binary -> ${CPU_BIN}"
+do_clean() {
+    banner "Cleaning build artifacts"
+    run bazel clean
+    rm -rf "${OUT_DIR}"
+    log "Clean complete"
 }
 
-do_qnn_build(){
-  echo "[INFO] Building QNN variant..."
-  run make -f Makefile-qnn -j"$(nproc)"
-  [[ -f "${OUT_DIR}/${APP_BASE}" ]] \
-      && mv -f "${OUT_DIR}/${APP_BASE}" "${QNN_BIN}"
-  echo "[INFO] QNN binary -> ${QNN_BIN}"
+do_test() {
+    banner "Running tests"
+    run bazel test //flash-slim:all
+    log "Tests complete"
+}
+
+do_all_build() {
+    banner "Building all targets"
+    run bazel build $BAZEL_CONF //flash-slim:all $COPT_FLAGS $LINKOPTS $GPU_FLAGS $GPU_COPT_FLAGS
+
+    ensure_dir "${OUT_DIR}"
+    banner "Copying main binary to output directory"
+    if [[ -f "${BAZEL_BIN}" ]]; then
+        [[ -f "${OUTPUT_BIN}" ]] && rm -f "${OUTPUT_BIN}"
+        cp "${BAZEL_BIN}" "${OUTPUT_BIN}"
+        log "Main binary copied to ${OUTPUT_BIN}"
+    fi
+
+    banner "Copying additional binaries"
+    for binary in bazel-bin/flash-slim/*; do
+        if [[ -f "$binary" && -x "$binary" && "$binary" != "${BAZEL_BIN}" ]]; then
+            binary_name=$(basename "$binary")
+            cp "$binary" "${OUT_DIR}/${binary_name}"
+            log "Additional binary copied to ${OUT_DIR}/${binary_name}"
+        fi
+    done
 }
 
 # ---------------------------------------------------------------------------
 # 3. Invoke builds
 # ---------------------------------------------------------------------------
-[[ "${BUILD_TARGET}" == gpu || "${BUILD_TARGET}" == all ]] && do_gpu_build
-[[ "${BUILD_TARGET}" == cpu || "${BUILD_TARGET}" == all ]] && do_cpu_build
-[[ "${BUILD_TARGET}" == qnn ]] && do_qnn_build
+case "${BUILD_TARGET}" in
+    main) do_main_build ;;
+    clean) do_clean ;;
+    test) do_test ;;
+    all) do_all_build ;;
+esac
 
 echo "[SUCCESS] Finished build target='${BUILD_TARGET}'."
 
 # ---------------------------------------------------------------------------
-# 4. Update convenience symlink
+# 4. Display build info
 # ---------------------------------------------------------------------------
-cd "${ROOT_PATH}"
-
-case "${BUILD_TARGET}" in
-  gpu) TARGET_BIN="${GPU_BIN}" ;;
-  cpu) TARGET_BIN="${CPU_BIN}" ;;
-  qnn) TARGET_BIN="${QNN_BIN}" ;;
-  all) TARGET_BIN="${GPU_BIN}" ;;   # default symlink to GPU when building both
-esac
-
-if [[ -L "${APP_BASE}" || -e "${APP_BASE}" ]]; then
-  rm -f "${APP_BASE}"
+if [[ "${BUILD_TARGET}" != "clean" ]]; then
+    echo ""
+    echo "Build Information:"
+    echo "  Target: ${BUILD_TARGET}"
+    echo "  Bazel workspace: $(pwd)"
+    echo "  Main binary: ${OUTPUT_BIN}"
+    
+    if [[ -f "${OUTPUT_BIN}" ]]; then
+        echo "  Binary size: $(ls -lh "${OUTPUT_BIN}" | awk '{print $5}')"
+        echo "  Binary permissions: $(ls -l "${OUTPUT_BIN}" | awk '{print $1}')"
+    fi
 fi
 
-# ln -s "${TARGET_BIN}" "${APP_BASE}"
-# echo "[INFO] Symlink ${APP_BASE} → ${TARGET_BIN}"
-echo "[IFNO] BUILD COMPLETE"
+echo "[INFO] BUILD COMPLETE"
