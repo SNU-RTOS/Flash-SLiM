@@ -176,8 +176,8 @@ run_with_memlimit() {
         fi
         
         # Set memory limit (always update to current limit)
-        sudo echo 0 >"$cg/memory.force_empty" || true
-        sudo echo "$(($(numfmt --from=iec "$mmax")))" >"$cg/memory.limit_in_bytes"
+        echo 0 | sudo tee "$cg/memory.force_empty" >/dev/null || true
+        echo "$(($(numfmt --from=iec "$mmax")))" | sudo tee "$cg/memory.limit_in_bytes" >/dev/null
         
         # Execute with cgroup
         sudo cgexec -g memory:llmbench -- "${cmd[@]}"

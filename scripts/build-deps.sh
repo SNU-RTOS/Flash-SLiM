@@ -7,15 +7,12 @@ source .env
 
 # ── Build Configuration ───────────────────────────────────────────────────────
 BUILD_MODE=${1:-release}
+setup_build_config "$BUILD_MODE"
+
+# Set PIC suffix based on build mode
 if [ "$BUILD_MODE" = "debug" ]; then
-  BAZEL_CONF="-c dbg"
-  COPT_FLAGS="--copt=-Og"
-  LINKOPTS=""
   USE_PIC_SUFFIX="a"
 else
-  BAZEL_CONF="-c opt"
-  COPT_FLAGS="--copt=-Os --copt=-fPIC "
-  LINKOPTS="--linkopt=-s"
   USE_PIC_SUFFIX="pic.a"
 fi
 

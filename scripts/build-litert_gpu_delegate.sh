@@ -7,15 +7,7 @@ source .env
 
 # ── Build Configuration ───────────────────────────────────────────────────────
 BUILD_MODE=${1:-release}
-if [ "$BUILD_MODE" = "debug" ]; then
-  BAZEL_CONF="-c dbg"
-  COPT_FLAGS="--copt=-Og"
-  LINKOPTS=""
-else
-  BAZEL_CONF="-c opt"
-  COPT_FLAGS="--copt=-Os --copt=-fPIC --copt=-Wno-incompatible-pointer-types"
-  LINKOPTS="--linkopt=-s"
-fi
+setup_build_config "$BUILD_MODE"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 GPU_DELEGATE_PATH=${LITERT_PATH}/bazel-bin/tflite/delegates/gpu/libtensorflowlite_gpu_delegate.so
@@ -29,6 +21,7 @@ pwd
 
 bazel build ${BAZEL_CONF} \
   //tflite/delegates/gpu:libtensorflowlite_gpu_delegate.so \
+  ${GPU_COPT_FLAGS} \
   ${COPT_FLAGS} ${LINKOPTS}
 
 # ── Symlinks ──────────────────────────────────────────────────────────────────

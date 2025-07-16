@@ -1,0 +1,35 @@
+INFO: STARTING!
+INFO: Log parameter values verbosely: [0]
+INFO: Num threads: [4]
+INFO: Report the peak memory footprint: [1]
+INFO: Graph: [models/mobileone_s0.tflite]
+INFO: Signature to run: []
+INFO: Enable op profiling: [1]
+INFO: Op profiling output mode.: [csv]
+INFO: Op profiling output file.: [./benchmark/benchmark_model_results/mobileone_s0_4threads_gpu.csv]
+INFO: #threads used for CPU inference: [4]
+INFO: Use gpu: [1]
+INFO: Use xnnpack: [0]
+INFO: Loaded model models/mobileone_s0.tflite
+INFO: Created TensorFlow Lite delegate for GPU.
+INFO: GPU delegate created.
+INFO: Loaded OpenCL library with dlopen.
+INFO: Initialized OpenCL-based API.
+INFO: Created 1 GPU delegate kernels.
+INFO: Explicitly applied GPU delegate, and the model graph will be completely executed by the delegate.
+INFO: The input model file size (MB): 8.35326
+INFO: Initialized session in 203.288ms.
+INFO: Running benchmark for at least 1 iterations and at least 0.5 seconds but terminate if exceeding 150 seconds.
+INFO: count=636 first=2948 curr=711 min=674 max=2948 avg=766.991 std=132 p5=684 median=727 p95=901
+
+INFO: Running benchmark for at least 50 iterations and at least 1 seconds but terminate if exceeding 150 seconds.
+INFO: count=1225 first=767 curr=825 min=672 max=1700 avg=783.88 std=142 p5=683 median=743 p95=1028
+
+INFO: Inference timings in us: Init: 203288, First inference: 2948, Warmup (avg): 766.991, Inference (avg): 783.88
+INFO: Note: as the benchmark tool itself affects memory footprint, the following is only APPROXIMATE to the actual memory footprint of the model at runtime. Take the information at your discretion.
+INFO: Memory footprint delta from the start of the tool (MB): init=146.707 overall=146.707
+INFO: Overall peak memory footprint (MB) via periodic monitoring: 151.957
+INFO: Memory status at the end of exeution:
+INFO: - VmRSS              : 146 MB
+INFO: + RssAnnon           : 32 MB
+INFO: + RssFile + RssShmem : 114 MB

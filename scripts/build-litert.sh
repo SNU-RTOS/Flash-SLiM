@@ -7,15 +7,7 @@ source .env
 
 # ── Build Configuration ───────────────────────────────────────────────────────
 BUILD_MODE=${1:-release}
-if [ "$BUILD_MODE" = "debug" ]; then
-  BAZEL_CONF="-c dbg"
-  COPT_FLAGS="--copt=-Og"
-  LINKOPTS=""
-else
-  BAZEL_CONF="-c opt"
-  COPT_FLAGS="--copt=-Os --copt=-fPIC --copt=-Wno-incompatible-pointer-types "
-  LINKOPTS="--linkopt=-s"
-fi
+setup_build_config "$BUILD_MODE"
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 LITERT_LIB_PATH=${LITERT_PATH}/bazel-bin/tflite/libtensorflowlite.so
@@ -45,6 +37,7 @@ bazel build ${BAZEL_CONF} \
     //tflite/experimental/resource:resource \
     //tflite/experimental/resource:cache_buffer \
     @flatbuffers//src:flatbuffers \
+    ${NO_GL_FLAG} \
     ${COPT_FLAGS} \
     ${LINKOPTS}
 

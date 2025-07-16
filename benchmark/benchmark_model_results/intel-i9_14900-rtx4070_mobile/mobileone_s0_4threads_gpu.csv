@@ -1,0 +1,138 @@
+Profiling Info for Benchmark Initialization:
+============================== Run Order ==============================
+node type, first, avg_ms, %, cdf%, mem KB, times called, name
+ModifyGraphWithDelegate, 181.126, 181.126, 99.5614%, 99.5614%, 146388, 1, ModifyGraphWithDelegate/0
+AllocateTensors, 0.798, 0.798, 0.438645%, 100%, 0, 1, AllocateTensors/0
+
+============================== Top by Computation Time ==============================
+node type, first, avg_ms, %, cdf%, mem KB, times called, name
+ModifyGraphWithDelegate, 181.126, 181.126, 99.5614%, 99.5614%, 146388, 1, ModifyGraphWithDelegate/0
+AllocateTensors, 0.798, 0.798, 0.438645%, 100%, 0, 1, AllocateTensors/0
+
+Number of nodes executed: 2
+============================== Summary by node type ==============================
+node type, count, avg_ms, avg %, cdf %, mem KB, times called
+ModifyGraphWithDelegate, 1, 181.126, 99.5614%, 99.5614%, 146388, 1
+AllocateTensors, 1, 0.798, 0.438645%, 100%, 0, 1
+
+Timings (microseconds): count=1 curr=181924
+Memory (bytes): count=0
+2 nodes observed
+
+
+Operator-wise Profiling Info for Regular Benchmark Runs:
+============================== Run Order ==============================
+node type, first, avg_ms, %, cdf%, mem KB, times called, name
+convolution_2d 1 -> relu 2, 0.012, 0.0172588, 5.05325%, 5.05325%, 0, 1, Delegate/convolution_2d 1 -> relu 2:0
+depthwise_convolution 4 -> relu 5, 0.006, 0.016702, 4.89024%, 9.9435%, 0, 1, Delegate/depthwise_convolution 4 -> relu 5:1
+convolution_2d 6 -> relu 7, 0.011, 0.0116669, 3.416%, 13.3595%, 0, 1, Delegate/convolution_2d 6 -> relu 7:2
+depthwise_convolution 8 -> relu 9, 0.006, 0.0094849, 2.77711%, 16.1366%, 0, 1, Delegate/depthwise_convolution 8 -> relu 9:3
+convolution_2d 10 -> relu 11, 0.005, 0.00719347, 2.1062%, 18.2428%, 0, 1, Delegate/convolution_2d 10 -> relu 11:4
+depthwise_convolution 13 -> relu 14, 0.011, 0.00685633, 2.00749%, 20.2503%, 0, 1, Delegate/depthwise_convolution 13 -> relu 14:5
+convolution_2d 15 -> relu 16, 0.022, 0.00585796, 1.71517%, 21.9655%, 0, 1, Delegate/convolution_2d 15 -> relu 16:6
+depthwise_convolution 17 -> relu 18, 0.008, 0.00507673, 1.48643%, 23.4519%, 0, 1, Delegate/depthwise_convolution 17 -> relu 18:7
+convolution_2d 19 -> relu 20, 0.008, 0.00821878, 2.4064%, 25.8583%, 0, 1, Delegate/convolution_2d 19 -> relu 20:8
+depthwise_convolution 21 -> relu 22, 0.004, 0.00482286, 1.4121%, 27.2704%, 0, 1, Delegate/depthwise_convolution 21 -> relu 22:9
+convolution_2d 23 -> relu 24, 0.01, 0.00773469, 2.26467%, 29.5351%, 0, 1, Delegate/convolution_2d 23 -> relu 24:10
+depthwise_convolution 25 -> relu 26, 0.004, 0.00506367, 1.48261%, 31.0177%, 0, 1, Delegate/depthwise_convolution 25 -> relu 26:11
+convolution_2d 27 -> relu 28, 0.007, 0.00790612, 2.31486%, 33.3325%, 0, 1, Delegate/convolution_2d 27 -> relu 28:12
+depthwise_convolution 29 -> relu 30, 0.004, 0.00482531, 1.41282%, 34.7454%, 0, 1, Delegate/depthwise_convolution 29 -> relu 30:13
+convolution_2d 31 -> relu 32, 0.007, 0.00771755, 2.25965%, 37.005%, 0, 1, Delegate/convolution_2d 31 -> relu 32:14
+depthwise_convolution 33 -> relu 34, 0.004, 0.00482449, 1.41258%, 38.4176%, 0, 1, Delegate/depthwise_convolution 33 -> relu 34:15
+convolution_2d 35 -> relu 36, 0.008, 0.00778857, 2.28044%, 40.698%, 0, 1, Delegate/convolution_2d 35 -> relu 36:16
+depthwise_convolution 37 -> relu 38, 0.005, 0.00509061, 1.4905%, 42.1885%, 0, 1, Delegate/depthwise_convolution 37 -> relu 38:17
+convolution_2d 39 -> relu 40, 0.008, 0.00803837, 2.35358%, 44.5421%, 0, 1, Delegate/convolution_2d 39 -> relu 40:18
+depthwise_convolution 41 -> relu 42, 0.004, 0.00501796, 1.46922%, 46.0113%, 0, 1, Delegate/depthwise_convolution 41 -> relu 42:19
+convolution_2d 43 -> relu 44, 0.007, 0.0080098, 2.34521%, 48.3565%, 0, 1, Delegate/convolution_2d 43 -> relu 44:20
+depthwise_convolution 46 -> relu 47, 0.004, 0.00590041, 1.7276%, 50.0841%, 0, 1, Delegate/depthwise_convolution 46 -> relu 47:21
+convolution_2d 48 -> relu 49, 0.006, 0.00722041, 2.11409%, 52.1982%, 0, 1, Delegate/convolution_2d 48 -> relu 49:22
+depthwise_convolution 50 -> relu 51, 0.004, 0.00512245, 1.49982%, 53.698%, 0, 1, Delegate/depthwise_convolution 50 -> relu 51:23
+convolution_2d 52 -> relu 53, 0.01, 0.0100645, 2.94681%, 56.6449%, 0, 1, Delegate/convolution_2d 52 -> relu 53:24
+depthwise_convolution 54 -> relu 55, 0.005, 0.00442122, 1.2945%, 57.9394%, 0, 1, Delegate/depthwise_convolution 54 -> relu 55:25
+convolution_2d 56 -> relu 57, 0.009, 0.00943592, 2.76277%, 60.7021%, 0, 1, Delegate/convolution_2d 56 -> relu 57:26
+depthwise_convolution 58 -> relu 59, 0.004, 0.00445306, 1.30383%, 62.006%, 0, 1, Delegate/depthwise_convolution 58 -> relu 59:27
+convolution_2d 60 -> relu 61, 0.008, 0.00942531, 2.75967%, 64.7656%, 0, 1, Delegate/convolution_2d 60 -> relu 61:28
+depthwise_convolution 62 -> relu 63, 0.004, 0.00439347, 1.28638%, 66.052%, 0, 1, Delegate/depthwise_convolution 62 -> relu 63:29
+convolution_2d 64 -> relu 65, 0.009, 0.0093298, 2.7317%, 68.7837%, 0, 1, Delegate/convolution_2d 64 -> relu 65:30
+depthwise_convolution 66 -> relu 67, 0.004, 0.00442286, 1.29498%, 70.0787%, 0, 1, Delegate/depthwise_convolution 66 -> relu 67:31
+convolution_2d 68 -> relu 69, 0.009, 0.00963755, 2.82181%, 72.9005%, 0, 1, Delegate/convolution_2d 68 -> relu 69:32
+depthwise_convolution 70 -> relu 71, 0.004, 0.00445878, 1.3055%, 74.206%, 0, 1, Delegate/depthwise_convolution 70 -> relu 71:33
+convolution_2d 72 -> relu 73, 0.009, 0.00938694, 2.74843%, 76.9544%, 0, 1, Delegate/convolution_2d 72 -> relu 73:34
+depthwise_convolution 74 -> relu 75, 0.004, 0.00442939, 1.29689%, 78.2513%, 0, 1, Delegate/depthwise_convolution 74 -> relu 75:35
+convolution_2d 76 -> relu 77, 0.009, 0.00947673, 2.77472%, 81.026%, 0, 1, Delegate/convolution_2d 76 -> relu 77:36
+depthwise_convolution 78 -> relu 79, 0.004, 0.00450694, 1.3196%, 82.3456%, 0, 1, Delegate/depthwise_convolution 78 -> relu 79:37
+convolution_2d 80 -> relu 81, 0.008, 0.00969388, 2.8383%, 85.1839%, 0, 1, Delegate/convolution_2d 80 -> relu 81:38
+depthwise_convolution 82 -> relu 83, 0.003, 0.00446857, 1.30837%, 86.4923%, 0, 1, Delegate/depthwise_convolution 82 -> relu 83:39
+convolution_2d 84 -> relu 85, 0.009, 0.0094449, 2.7654%, 89.2577%, 0, 1, Delegate/convolution_2d 84 -> relu 85:40
+depthwise_convolution 87 -> relu 88, 0.004, 0.00491347, 1.43863%, 90.6963%, 0, 1, Delegate/depthwise_convolution 87 -> relu 88:41
+convolution_2d 89 -> relu 90, 0.01, 0.0100139, 2.932%, 93.6283%, 0, 1, Delegate/convolution_2d 89 -> relu 90:42
+reduce_sum 91, 0.006, 0.00631102, 1.84782%, 95.4762%, 0, 1, Delegate/reduce_sum 91:43
+fully_connected 93, 0.014, 0.0154506, 4.52383%, 100%, 0, 1, Delegate/fully_connected 93:44
+
+============================== Top by Computation Time ==============================
+node type, first, avg_ms, %, cdf%, mem KB, times called, name
+convolution_2d 1 -> relu 2, 0.012, 0.0172588, 5.05325%, 5.05325%, 0, 1, Delegate/convolution_2d 1 -> relu 2:0
+depthwise_convolution 4 -> relu 5, 0.006, 0.016702, 4.89024%, 9.9435%, 0, 1, Delegate/depthwise_convolution 4 -> relu 5:1
+fully_connected 93, 0.014, 0.0154506, 4.52383%, 14.4673%, 0, 1, Delegate/fully_connected 93:44
+convolution_2d 6 -> relu 7, 0.011, 0.0116669, 3.416%, 17.8833%, 0, 1, Delegate/convolution_2d 6 -> relu 7:2
+convolution_2d 52 -> relu 53, 0.01, 0.0100645, 2.94681%, 20.8301%, 0, 1, Delegate/convolution_2d 52 -> relu 53:24
+convolution_2d 89 -> relu 90, 0.01, 0.0100139, 2.932%, 23.7621%, 0, 1, Delegate/convolution_2d 89 -> relu 90:42
+convolution_2d 80 -> relu 81, 0.008, 0.00969388, 2.8383%, 26.6004%, 0, 1, Delegate/convolution_2d 80 -> relu 81:38
+convolution_2d 68 -> relu 69, 0.009, 0.00963755, 2.82181%, 29.4223%, 0, 1, Delegate/convolution_2d 68 -> relu 69:32
+depthwise_convolution 8 -> relu 9, 0.006, 0.0094849, 2.77711%, 32.1994%, 0, 1, Delegate/depthwise_convolution 8 -> relu 9:3
+convolution_2d 76 -> relu 77, 0.009, 0.00947673, 2.77472%, 34.9741%, 0, 1, Delegate/convolution_2d 76 -> relu 77:36
+
+Number of nodes executed: 45
+============================== Summary by node type ==============================
+node type, count, avg_ms, avg %, cdf %, mem KB, times called
+convolution_2d 1 -> relu 2, 1, 0.017, 5.29595%, 5.29595%, 0, 1
+depthwise_convolution 4 -> relu 5, 1, 0.016, 4.98442%, 10.2804%, 0, 1
+fully_connected 93, 1, 0.015, 4.6729%, 14.9533%, 0, 1
+convolution_2d 6 -> relu 7, 1, 0.011, 3.42679%, 18.3801%, 0, 1
+convolution_2d 89 -> relu 90, 1, 0.01, 3.11526%, 21.4953%, 0, 1
+convolution_2d 52 -> relu 53, 1, 0.01, 3.11526%, 24.6106%, 0, 1
+depthwise_convolution 8 -> relu 9, 1, 0.009, 2.80374%, 27.4143%, 0, 1
+convolution_2d 84 -> relu 85, 1, 0.009, 2.80374%, 30.2181%, 0, 1
+convolution_2d 80 -> relu 81, 1, 0.009, 2.80374%, 33.0218%, 0, 1
+convolution_2d 76 -> relu 77, 1, 0.009, 2.80374%, 35.8255%, 0, 1
+convolution_2d 72 -> relu 73, 1, 0.009, 2.80374%, 38.6293%, 0, 1
+convolution_2d 68 -> relu 69, 1, 0.009, 2.80374%, 41.433%, 0, 1
+convolution_2d 64 -> relu 65, 1, 0.009, 2.80374%, 44.2368%, 0, 1
+convolution_2d 60 -> relu 61, 1, 0.009, 2.80374%, 47.0405%, 0, 1
+convolution_2d 56 -> relu 57, 1, 0.009, 2.80374%, 49.8442%, 0, 1
+convolution_2d 43 -> relu 44, 1, 0.008, 2.49221%, 52.3364%, 0, 1
+convolution_2d 39 -> relu 40, 1, 0.008, 2.49221%, 54.8287%, 0, 1
+convolution_2d 19 -> relu 20, 1, 0.008, 2.49221%, 57.3209%, 0, 1
+convolution_2d 48 -> relu 49, 1, 0.007, 2.18069%, 59.5015%, 0, 1
+convolution_2d 35 -> relu 36, 1, 0.007, 2.18069%, 61.6822%, 0, 1
+convolution_2d 31 -> relu 32, 1, 0.007, 2.18069%, 63.8629%, 0, 1
+convolution_2d 27 -> relu 28, 1, 0.007, 2.18069%, 66.0436%, 0, 1
+convolution_2d 23 -> relu 24, 1, 0.007, 2.18069%, 68.2243%, 0, 1
+convolution_2d 10 -> relu 11, 1, 0.007, 2.18069%, 70.405%, 0, 1
+reduce_sum 91, 1, 0.006, 1.86916%, 72.2741%, 0, 1
+depthwise_convolution 13 -> relu 14, 1, 0.006, 1.86916%, 74.1433%, 0, 1
+depthwise_convolution 50 -> relu 51, 1, 0.005, 1.55763%, 75.7009%, 0, 1
+depthwise_convolution 46 -> relu 47, 1, 0.005, 1.55763%, 77.2586%, 0, 1
+depthwise_convolution 41 -> relu 42, 1, 0.005, 1.55763%, 78.8162%, 0, 1
+depthwise_convolution 37 -> relu 38, 1, 0.005, 1.55763%, 80.3738%, 0, 1
+depthwise_convolution 25 -> relu 26, 1, 0.005, 1.55763%, 81.9315%, 0, 1
+depthwise_convolution 17 -> relu 18, 1, 0.005, 1.55763%, 83.4891%, 0, 1
+convolution_2d 15 -> relu 16, 1, 0.005, 1.55763%, 85.0467%, 0, 1
+depthwise_convolution 87 -> relu 88, 1, 0.004, 1.24611%, 86.2928%, 0, 1
+depthwise_convolution 82 -> relu 83, 1, 0.004, 1.24611%, 87.5389%, 0, 1
+depthwise_convolution 78 -> relu 79, 1, 0.004, 1.24611%, 88.785%, 0, 1
+depthwise_convolution 74 -> relu 75, 1, 0.004, 1.24611%, 90.0312%, 0, 1
+depthwise_convolution 70 -> relu 71, 1, 0.004, 1.24611%, 91.2773%, 0, 1
+depthwise_convolution 66 -> relu 67, 1, 0.004, 1.24611%, 92.5234%, 0, 1
+depthwise_convolution 62 -> relu 63, 1, 0.004, 1.24611%, 93.7695%, 0, 1
+depthwise_convolution 58 -> relu 59, 1, 0.004, 1.24611%, 95.0156%, 0, 1
+depthwise_convolution 54 -> relu 55, 1, 0.004, 1.24611%, 96.2617%, 0, 1
+depthwise_convolution 33 -> relu 34, 1, 0.004, 1.24611%, 97.5078%, 0, 1
+depthwise_convolution 29 -> relu 30, 1, 0.004, 1.24611%, 98.7539%, 0, 1
+depthwise_convolution 21 -> relu 22, 1, 0.004, 1.24611%, 100%, 0, 1
+
+Timings (microseconds): count=1225 first=321 curr=351 min=296 max=826 avg=341.538 std=60
+Memory (bytes): count=0
+45 nodes observed
+
+

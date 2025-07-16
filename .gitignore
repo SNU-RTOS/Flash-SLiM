@@ -29,7 +29,7 @@ scripts/*.log
 backup
 log_backup
 external
-util/benchmark_ops_results
+benchmark/benchmark_model_results/tmp
 inc/absl
 inc/sentencepiece
 inc/tensorflow

@@ -7,15 +7,7 @@ source .env
 
 # ── Build Configuration ───────────────────────────────────────────────────────
 BUILD_MODE=${1:-release}
-if [ "$BUILD_MODE" = "debug" ]; then
-  BAZEL_CONF="-c dbg"
-  COPT_FLAGS="--copt=-Og"
-  LINKOPTS=""
-else
-  BAZEL_CONF="-c opt"
-  COPT_FLAGS="--copt=-Os --copt=-fPIC --copt=-Wno-incompatible-pointer-types"
-  LINKOPTS="--linkopt=-s"
-fi
+setup_build_config "$BUILD_MODE"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BENCHMARK_TOOL_PATH=${LITERT_PATH}/bazel-bin/tflite/tools/benchmark/benchmark_model
@@ -27,23 +19,31 @@ if [ -f "${BENCHMARK_DEST_PATH}" ]; then
 fi
 
 # ── Build LiteRT benchmark tool ───────────────────────────────────────────────
-echo "[INFO] Build LiteRT benchmark tool ($BUILD_MODE mode)…"
+echo "[INFO] Build LiteRT benchmark tool ($BUILD_MODE mode) with GPU delegate support…"
 echo "[INFO] Path: ${BENCHMARK_TOOL_PATH}"
+echo "[INFO] GPU Flags: ${GPU_FLAGS}"
 
 cd "${LITERT_PATH}" || exit 1
 pwd
 
+# GPU delegate 의존성 문제를 해결하기 위한 추가 플래그
 bazel build ${BAZEL_CONF} \
     //tflite/tools/benchmark:benchmark_model \
+    ${GPU_FLAGS} \
     ${COPT_FLAGS} \
-    ${LINKOPTS}
+    ${GPU_COPT_FLAGS} \
+    ${LINKOPTS} \
+    --verbose_failures \
+    --define=TFLITE_SUPPORTS_GPU_DELEGATE=1
 
 # ── Copy binary ───────────────────────────────────────────────────────────────
 echo "[INFO] Copy benchmark tool to project root…"
 cp "${BENCHMARK_TOOL_PATH}" "${BENCHMARK_DEST_PATH}"
 
 if [ -f "${BENCHMARK_DEST_PATH}" ]; then
-    echo "✅ Successfully built benchmark tool: ${BENCHMARK_DEST_PATH}"
+    echo "✅ Successfully built benchmark tool with GPU delegate support: ${BENCHMARK_DEST_PATH}"
+    echo "[INFO] GPU delegate and invoke loop support enabled"
+    echo "[INFO] Available flags: --use_gpu, --gpu_invoke_loop_times, --gpu_backend"
 else
     echo "❌ Failed to build benchmark tool"
     exit 1
