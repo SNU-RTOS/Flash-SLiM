@@ -3,16 +3,22 @@
 TRACEFS="/sys/kernel/debug/tracing"
 TRACE_SAVE_INTERVAL=5  # Save trace every 5 seconds
 
+# Helper functions migrated from setup.sh
+run()         { echo "+ $*"; "$@"; }
+ensure_dir()  { [[ -d $1 ]] || run mkdir -p "$1"; }
+banner()      { printf "\n\033[1;34m========== %s ==========[0m\n" "$*"; }
+log()         { echo "$@"; }
+
 setup_ftrace() {
     # Clear existing trace
     echo > $TRACEFS/trace
-
+    
     # Disable tracing temporarily
     echo 0 > $TRACEFS/tracing_on
-
+    
     # Clear existing events
     echo > $TRACEFS/set_event
-
+    
     # Enable memory-related events
     echo 1 > $TRACEFS/events/kmem/mm_page_alloc/enable
     echo 1 > $TRACEFS/events/kmem/mm_page_free/enable
@@ -24,7 +30,7 @@ setup_ftrace() {
     
     # Set the trace buffer size (in KB)
     echo 8192 > $TRACEFS/buffer_size_kb
-
+    
     # Use function tracer
     echo function > $TRACEFS/current_tracer
     
@@ -75,27 +81,27 @@ clear_caches() {
     # sleep for a brief moment to ensure caches are cleared
     sleep 1
     echo "[INFO] DONE: Dropping OS Page Caches"
-
+    
     echo "Dropping swapped memory..."
     # sudo swapoff -a
     # sudo swapon -a
     sleep 1
     echo "[INFO] DONE: Dropping Swapped Memory"
-
+    
     echo "[INFO] Clearing CPU Caches"
     ARCH=$(uname -m)
-
+    
     case "$ARCH" in
         "x86_64")
             CACHE_SCRIPT="./util/clear_cache_x86"
-            ;;
+        ;;
         "aarch64")
             CACHE_SCRIPT="./util/clear_cache_arm"
-            ;;
+        ;;
         *)
             echo "[ERROR] Unsupported architecture: $ARCH"
             return 1
-            ;;
+        ;;
     esac
     
     if [[ -f "$CACHE_SCRIPT" ]]; then
@@ -103,7 +109,7 @@ clear_caches() {
     else
         echo "[WARNING] CPU cache clearing script not found: $CACHE_SCRIPT"
     fi
-
+    
     echo "[INFO] DONE: Clearing Caches"
     echo ""
 }

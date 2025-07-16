@@ -12,8 +12,8 @@
 # ── Build System ──────────────────────────────────────────────────────────────
 # Bazel
 MODULE.bazel.lock
-MODULE.bazel
 bazel-*
+.tf_configure.bazelrc
 
 # Build artifacts
 lib/
