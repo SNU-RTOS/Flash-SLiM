@@ -26,15 +26,13 @@ echo "[INFO] GPU Flags: ${GPU_FLAGS}"
 cd "${LITERT_PATH}" || exit 1
 pwd
 
-# GPU delegate 의존성 문제를 해결하기 위한 추가 플래그
 bazel build ${BAZEL_CONF} \
     //tflite/tools/benchmark:benchmark_model \
     ${GPU_FLAGS} \
     ${COPT_FLAGS} \
     ${GPU_COPT_FLAGS} \
     ${LINKOPTS} \
-    --verbose_failures \
-    --define=TFLITE_SUPPORTS_GPU_DELEGATE=1
+    --verbose_failures 
 
 # ── Copy binary ───────────────────────────────────────────────────────────────
 echo "[INFO] Copy benchmark tool to project root…"

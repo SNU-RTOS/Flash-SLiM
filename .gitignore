@@ -1,38 +1,78 @@
 
-########## Cache files ##########
-*.bin
-__pycache__
+# ══════════════════════════════════════════════════════════════════════════════
+# OS-Support-for-On-Device-LLM .gitignore
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── IDE and Editor ────────────────────────────────────────────────────────────
+.vscode
+*.swp
+*.swo
+*~
+
+# ── Build System ──────────────────────────────────────────────────────────────
+# Bazel
 MODULE.bazel.lock
 MODULE.bazel
-.vscode
+bazel-*
 
+# Build artifacts
+lib/
+obj/
+output/
+*.o
+*.so
+*.a
+*.dylib
 
-########## User files ##########
-evaluation/*
-lib
-obj
-output
+# ── Runtime and Cache ─────────────────────────────────────────────────────────
+*.bin
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+nohup.out
+
+# ── Project Specific ──────────────────────────────────────────────────────────
+# Environment and configuration
+.env
+.env.*
+
+# Generated executables
+text_generator_main
+text_generator_main_*
+
+# Models and data
+models/*
+!models/README.md
+!models/.gitkeep
+!models/mobileone_s0.tflite
+!models/mobilenetv3_small_100.lamb_in1k.tflite
+
+# Results and logs
 result_*
 perf.*
-.env
-text_generator_main
-models/*
-nohup.out
 scripts/*.log
+benchmark/benchmark_model_results/tmp/
 
-# Excludes from User files
+# Temporary directories
+backup/
+log_backup/
+external/
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+# External libraries
+inc/*
+
+# ── Evaluation and Testing ───────────────────────────────────────────────────
+evaluation/*
+# Keep essential evaluation scripts
 !evaluation/show-plot.py
 !evaluation/plot.sh
-!prompt/*.txt
+!evaluation/README.md
 
-########## Folders ##########
-backup
-log_backup
-external
-benchmark/benchmark_model_results/tmp
-inc/absl
-inc/sentencepiece
-inc/tensorflow
-inc/flatbuffers
-inc/litert
-inc/tflite
+# ── Prompts and Documentation ────────────────────────────────────────────────
+# Keep all prompt files
+!prompt/*.txt
+!prompt/README.md
+
