@@ -32,7 +32,7 @@ pwd
 
 # 1) Build core + GenAI + Resource + CacheBuffer
 bazel build ${BAZEL_CONF} \
-    //tflite:tf_lite_runtime \
+    //tflite:tensorflowlite \
     //tflite/experimental/genai:genai_ops \
     //tflite/experimental/resource:resource \
     //tflite/experimental/resource:cache_buffer \

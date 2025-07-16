@@ -11,7 +11,7 @@ setup_build_config "$BUILD_MODE"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BENCHMARK_TOOL_PATH=${LITERT_PATH}/bazel-bin/tflite/tools/benchmark/benchmark_model
-BENCHMARK_DEST_PATH=${ROOT_PATH}/benchmark_model
+BENCHMARK_DEST_PATH=${ROOT_PATH}/bin/benchmark_model
 
 # ── Clean existing binary ─────────────────────────────────────────────────────
 if [ -f "${BENCHMARK_DEST_PATH}" ]; then
@@ -36,6 +36,9 @@ bazel build ${BAZEL_CONF} \
 
 # ── Copy binary ───────────────────────────────────────────────────────────────
 echo "[INFO] Copy benchmark tool to project root…"
+if [ ! -d "${ROOT_PATH}/bin" ]; then
+    mkdir -p "${ROOT_PATH}/bin"
+fi
 cp "${BENCHMARK_TOOL_PATH}" "${BENCHMARK_DEST_PATH}"
 
 if [ -f "${BENCHMARK_DEST_PATH}" ]; then

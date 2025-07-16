@@ -31,7 +31,7 @@ source ./scripts/utils.sh               # Load utility functions
 # Hardcoded model path for simplicity
 MODEL_PATH="models/mobileone_s0.tflite"
 OUTPUT_DIR="./benchmark/benchmark_model_results/tmp"
-BENCHMARK_BIN="./util/benchmark_model_x64"
+BENCHMARK_BIN="./bin/benchmark_model"
 
 # Benchmark settings (hardcoded for simplicity)
 NUM_THREADS=4
