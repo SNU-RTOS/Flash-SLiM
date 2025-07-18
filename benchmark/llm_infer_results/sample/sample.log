@@ -1,0 +1,73 @@
+Model            : llama_q8_ekv1024
+Tokens requested : 8
+Cores            : all
+Threads          : 1
+Max tokens       : 16
+Temperature      : 1.85
+Top-k            : 40
+Top-p            : 0.9
+Repetition penalty: 2.0
+Enable rep. penalty: False
+Target Processor : CPU
+Log file         : benchmark/llm_infer_results/llama_q8_ekv1024_cpu_no_limit/run_8_1_250718_141744.log
+-----------------------------------------------
+Cache clear ...
+Dropping OS Page Caches...
+Waiting for caches to clear...
+Dropping swapped memory...
+Clearing CPU Caches...
+Finished clearing caches.
+[INFO] Text Generation App on LiteRT Interperter
+[INFO] eBPF tracing is enabled. USDT probes will be used.
+[INFO] Preparing Required Components
+[INFO] Process is running on cores: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 
+[INFO] Core used for logging and monitoring: 0
+[INFO] Cores used for text generation: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 
+---------------------------------------------------
+Start Generating Text
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+normalizer.cc(52) LOG(INFO) precompiled_charsmap is empty. use identity normalization.
+[INFO] Stop token ID: 128009 for token: <end_of_turn>
+[INFO] KV Cache tensor dims: [1, 1024, 8, 128]
+[INFO] Detected pattern [batch, seq_len, num_heads, head_dim]
+[INFO] KV Cache Max Size: 1024 (from dimension index 1)
+[INFO] Tokens in Prompt: 8
+[INFO] Tokens to Generate: 16
+[INFO] Limits of Tokens to Generate: 1024
+
+Prompt:
+Once upon a time, there was
+
+Output Text:
+
+ one big decision that had made Mary's life very interesting over the next three years
+[INFO] Decoding stage completed
+
+[INFO] Monitoring thread exiting...
+[INFO] Monitoring finished
+---------------------------------------------------
+[1;32mGeneration Metrics[0m
+
+[METRICS] Total Number of Generated Tokens : 16 tokens
+
+[METRICS] Prefill Time                     : 3909.08176 ms
+[METRICS] First Decoding Time              : 990.88907 ms
+[METRICS] Time to First Token              : 4899.97083 ms
+
+[METRICS] [NOTE] First Decoding Time is excluded from Total Decoding Time 
+
+[METRICS] Total Inference Time             : 5346.63056 ms
+[METRICS] Total Sampling Time              : 240.79373 ms
+[METRICS] Total Detokenization Time        : 0.32892 ms
+[METRICS] Total Decoding Time              : 5587.75320 ms
+
+[METRICS] Average Inference Time per Token        : 356.44204 ms (2.80551 tokens/s)
+[METRICS] Average Sampling Time per Token         : 16.05292 ms (62.29398 tokens/s)
+[METRICS] Average Detokenization Time per Token   : 0.02193 ms (45604.07153 tokens/s)
+[METRICS] Average Decoding Time per Token         : 372.51688 ms (2.68444 tokens/s)
+
+[INFO] Text Generation App completed successfully.
+---------------------------------------------------
+
+Log saved to benchmark/llm_infer_results/llama_q8_ekv1024_cpu_no_limit/run_8_1_250718_141744.log
+-----------------------------------------------
