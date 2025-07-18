@@ -43,7 +43,15 @@ Successfully tested on the following platforms:
 │   ├── run.sh                # Comprehensive run and benchmark script
 │   ├── run_once.sh           # Quick test run script
 │   ├── common.sh             # Shared build configurations
-│   └── utils.sh              # Common shell utilities
+│   ├── build-benchmark_util.sh # Builds the TFLite benchmark utility
+│   ├── build-deps.sh           # Installs build dependencies
+│   ├── build-litert.sh         # Builds the main LiteRT binary
+│   ├── build-litert_gpu_delegate.sh # Builds LiteRT with GPU delegate support
+│   ├── parse_json_prompt.py    # Parses JSON prompt files for the main run script
+│   ├── utils.sh                # Shared utility and build helper functions
+│   └── ...
+├── test/                     # Test files and scripts
+│   ├── README.md
 ├── benchmark/                # Benchmarking results and analysis tools
 ├── models/                   # Model storage directory
 ├── output/                   # Build output directory (binaries)
@@ -147,10 +155,10 @@ The `run.sh` script provides extensive options for benchmarking, including core 
 
 ## Build Options
 
-The build system supports multiple configurations via `scripts/common.sh`:
+The build system supports multiple configurations via `scripts/utils.sh`:
 
-- **Release Mode** (default): Optimized for performance (`-c opt`).
-- **Debug Mode**: Includes debug symbols (`-c dbg`).
+- **Release (default)**: Optimized for performance (`-c opt`).
+- **Debug**: Includes debugging symbols (`-c dbg`).
 
 ## Environment Variables
 

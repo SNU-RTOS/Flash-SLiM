@@ -21,10 +21,13 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # 0. Environment & Build Config
 # ---------------------------------------------------------------------------
+if [[ ! -f .env ]]; then
+    echo "[ERROR] .env file not found. Please run from project root directory." >&2
+    exit 1
+fi
+
 source .env
 source ./scripts/utils.sh
-source ./scripts/common.sh
-: "${ROOT_PATH:?ROOT_PATH must be set in .env}"
 
 # Apply build configuration (release by default)
 setup_build_config
@@ -72,7 +75,7 @@ do_main_build() {
         $LINKOPTS \
         $GPU_FLAGS \
         $GPU_COPT_FLAGS \
-        --config=linux \
+        --config=avx_linux \
         --config=ebpf
 
     ensure_dir "${OUT_DIR}"

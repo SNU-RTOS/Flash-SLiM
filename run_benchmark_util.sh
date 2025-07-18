@@ -7,15 +7,15 @@
 #   ./scripts/run_benchmark_util.sh
 #
 # Prerequisites:
-#   * .env file with MODEL_PATH defined
+#   * .env file with ROOT_PATH defined
 #   * benchmark_model binary in util/ directory
 #   * TensorFlow Lite model files (*.tflite) in model directory
 
 set -euo pipefail
 
-# --------------------------------------------------------------------------- #
-# 0. Load environment and helpers                                            #
-# --------------------------------------------------------------------------- #
+# =========================================================================== #
+# 0. Load Environment and Helpers                                             #
+# =========================================================================== #
 if [[ ! -f .env ]]; then
     echo "[ERROR] .env file not found. Please run from project root directory." >&2
     exit 1
@@ -24,48 +24,47 @@ fi
 source .env                              # Load environment variables
 source ./scripts/utils.sh               # Load utility functions
 
-banner "Build TensorFlow Lite Model Benchmarking Utility"
-# --------------------------------------------------------------------------- #
-# 1. Configuration                                                           #
-# --------------------------------------------------------------------------- #
-# Hardcoded model path for simplicity
-MODEL_PATH="models/mobileone_s0.tflite"
-OUTPUT_DIR="./benchmark/benchmark_model_results/tmp"
-BENCHMARK_BIN="./bin/benchmark_model"
+# =========================================================================== #
+# 1. Configuration                                                            #
+# =========================================================================== #
+banner "Benchmark Utility Configuration"
 
-# Benchmark settings (hardcoded for simplicity)
+# --- Model and Binary Settings ---
+MODEL_PATH="./models/test/mobileone_s0.tflite"
+OUTPUT_DIR="./benchmark/benchmark_model_results/tmp"
+BENCHMARK_BIN="./util/bin/benchmark_model"
+
+# --- Benchmark Settings ---
 NUM_THREADS=4
 USE_XNNPACK=true
 USE_GPU=false
 
-# --------------------------------------------------------------------------- #
-# 2. Validation                                                              #
-# --------------------------------------------------------------------------- #
-log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
-error() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2; }
-
+# =========================================================================== #
+# 2. Validation                                                               #
+# =========================================================================== #
 # Validate benchmark binary
 if [[ ! -x "$BENCHMARK_BIN" ]]; then
-    error "Benchmark binary not found or not executable: $BENCHMARK_BIN"
-    echo "Please ensure the benchmark_model binary is available." >&2
-    exit 1
+    log "Benchmark binary not found: $BENCHMARK_BIN"
+    banner "Building benchmark_model binary..."
+    (
+        cd scripts || exit 1
+        ./build-benchmark_util.sh
+    )
+    [[ ! -x "$BENCHMARK_BIN" ]] && error "Failed to build benchmark_model binary."
+    log "Successfully built benchmark_model binary: $BENCHMARK_BIN"
+else
+    log "Found benchmark_model binary: $BENCHMARK_BIN"
 fi
 
 # Validate model file
-if [[ ! -f "$MODEL_PATH" ]]; then
-    error "Model file not found: $MODEL_PATH"
-    exit 1
-fi
+[[ -f "$MODEL_PATH" ]] || error "Model file not found: $MODEL_PATH"
 
 # Create output directory
-if [[ ! -d "$OUTPUT_DIR" ]]; then
-    log "Creating output directory: $OUTPUT_DIR"
-    mkdir -p "$OUTPUT_DIR"
-fi
+ensure_dir "$OUTPUT_DIR"
 
-# --------------------------------------------------------------------------- #
-# 3. Benchmark execution                                                      #
-# --------------------------------------------------------------------------- #
+# =========================================================================== #
+# 3. Core Functions                                                           #
+# =========================================================================== #
 run_benchmark() {
     local model_path="$1"
     local model_name
@@ -96,50 +95,50 @@ run_benchmark() {
     log "Benchmarking: $model_name"
     log "Configuration: ${NUM_THREADS} threads, GPU=${USE_GPU}, XNNPACK=${USE_XNNPACK}"
     
-    # Clear caches before benchmarking
     clear_caches
     
-    # Execute benchmark (original hardcoded settings)
-    if "$BENCHMARK_BIN" \
-        --graph="$model_path" \
-        --num_threads="$NUM_THREADS" \
-        --enable_op_profiling=true \
-        --use_xnnpack="$USE_XNNPACK" \
-        --use_gpu="$USE_GPU" \
-        --report_peak_memory_footprint=true \
-        --op_profiling_output_mode=csv \
-        --op_profiling_output_file="$csv_file" \
-        > "$log_file" 2>&1; then
-        
-        log "✓ Completed: $model_name"
+    # Execute benchmark
+    local CMD=(
+        "$BENCHMARK_BIN"
+        --graph="$model_path"
+        --num_threads="$NUM_THREADS"
+        --enable_op_profiling=true
+        --use_xnnpack="$USE_XNNPACK"
+        --use_gpu="$USE_GPU"
+        --report_peak_memory_footprint=true
+        --op_profiling_output_mode=csv
+        --op_profiling_output_file="$csv_file"
+    )
+
+    if execute_with_log "$log_file" "${CMD[@]}"; then
+        log "Completed: $model_name"
         log "  Results: $csv_file"
         log "  Log: $log_file"
     else
-        error "✗ Failed: $model_name"
-        error "  Check log: $log_file"
+        error "Failed: $model_name. Check log: $log_file"
         return 1
     fi
 }
 
-# --------------------------------------------------------------------------- #
-# 4. Main execution                                                          #
-# --------------------------------------------------------------------------- #
+# =========================================================================== #
+# 4. Main Execution                                                           #
+# =========================================================================== #
 main() {
-    log "=== TensorFlow Lite Model Benchmarking ==="
+    banner "TensorFlow Lite Model Benchmarking"
     log "Model file: $MODEL_PATH"
     log "Output directory: $OUTPUT_DIR"
     log "Benchmark binary: $BENCHMARK_BIN"
     log "Threads: $NUM_THREADS"
     log "Use GPU: $USE_GPU"
     log "Use XNNPACK: $USE_XNNPACK"
-    log "============================================="
     
-    # Run benchmark for the single model file
+    # Enable logging for the benchmark run
+    LOG_ENABLED=true
+
     if run_benchmark "$MODEL_PATH"; then
-        log "Benchmark completed successfully!"
+        banner "Benchmark completed successfully!"
     else
         error "Benchmark failed!"
-        exit 1
     fi
 }
 

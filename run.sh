@@ -14,9 +14,9 @@
 
 set -euo pipefail
 
-# --------------------------------------------------------------------------- #
-# 0. Load environment and helpers                                            #
-# --------------------------------------------------------------------------- #
+# =========================================================================== #
+# 0. Load Environment and Helpers                                             #
+# =========================================================================== #
 if [[ ! -f .env ]]; then
     echo "[ERROR] .env file not found. Please run from project root directory." >&2
     exit 1
@@ -25,21 +25,57 @@ fi
 source .env
 source ./scripts/utils.sh
 
-banner "LLM Inference Script"
+# =========================================================================== #
+# 1. Configuration                                                            #
+# =========================================================================== #
+banner "Script Configuration"
 
-# ------------------------------------------------------------------------------
-# 1. Defaults & CLI parsing
-# ------------------------------------------------------------------------------
-TARGET="cpu"           # cpu | gpu
-LOG_ENABLED=false      # log to file
-CORE_LIST=all          # taskset core list
-NUM_THREADS=1
-PROMPT_FILE="./${PROMPT_PATH}/sample_prompt_8_1.json"
-MAX_TOK_LEN=16
-NUM_REPEATS=1          # number of iterations
-MEMORY_LIMITS=()       # array of memory limits for cgroup testing
-ENABLE_CGROUP=false    # enable memory-constrained benchmarking
+# --- Model and Binary Settings ---
+# You can switch models by uncommenting the desired lines.
+MODEL_DIR="${MODEL_PATH}/Llama3.2-1B"
+MODEL_NAME="llama_q8_ekv1024"
 
+# MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
+# MODEL_NAME="llama_q8_ekv1024"
+# MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
+# MODEL_NAME="model.q8"
+# MODEL_DIR="${MODEL_PATH}/SmolLM"
+# MODEL_NAME="model.q8"
+
+BIN="output/text_generator_main"
+
+# --- Execution Settings ---
+TARGET="cpu"           # Default target: cpu | gpu
+LOG_ENABLED=false      # Default logging: false
+CORE_LIST="all"          # Default core list for taskset
+NUM_THREADS=1          # Default number of threads
+PROMPT_FILE="./${PROMPT_PATH}/sample_prompt_8_1.json" # Default prompt file
+MAX_TOK_LEN=16         # Default max tokens to generate
+NUM_REPEATS=1          # Default number of iterations
+MEMORY_LIMITS=()       # Array of memory limits for cgroup testing
+ENABLE_CGROUP=false    # Default cgroup enable state
+
+# --- Logging Settings ---
+# Base directory for logs. The final path will be e.g. <LOG_DIR_BASE>/<model_target_mem>
+LOG_DIR_BASE="benchmark/llm_infer_results"
+
+log "--- Using the following configuration ---"
+log "Model            : ${MODEL_DIR}/${MODEL_NAME}.tflite"
+log "Binary           : ${BIN}"
+log "Default prompt   : ${PROMPT_FILE}"
+log "Log base dir     : ${LOG_DIR_BASE}"
+log "-------------------------------------------"
+
+# =========================================================================== #
+# 2. Validate Prerequisites                                                   #
+# =========================================================================== #
+[[ -x "$BIN" ]] || error "Binary not found: $BIN"
+[[ -f "$PROMPT_FILE" ]] || error "Prompt file not found: $PROMPT_FILE"
+[[ "$PROMPT_FILE" =~ \.(json)$ ]] || error "Prompt file must be .json format"
+
+# =========================================================================== #
+# 3. Usage and CLI Parsing                                                    #
+# =========================================================================== #
 usage() {
     banner "Usage Information"
     cat <<'EOF'
@@ -129,47 +165,37 @@ while [[ $# -gt 0 ]]; do
         usage 
         ;;
     *)
-        echo "Unknown option: $1" >&2
+        error "Unknown option: $1"
         usage
         ;;
     esac
 done
 
 # Validate target
-[[ "${TARGET}" =~ ^(gpu|cpu)$ ]] || {
-    banner "Invalid target argument"
-    echo "Invalid --target ${TARGET}" >&2
-    exit 1
-}
+[[ "${TARGET}" =~ ^(gpu|cpu)$ ]] || error "Invalid target argument: ${TARGET}"
 
 # Validate memory limits if specified
 if [[ ${#MEMORY_LIMITS[@]} -gt 0 ]]; then
-    echo "Memory-constrained benchmarking enabled with limits: ${MEMORY_LIMITS[*]}"
+    log "Memory-constrained benchmarking enabled with limits: ${MEMORY_LIMITS[*]}"
 fi
 
 # Set default memory limits if cgroup is enabled but no limits specified
 if [[ "$ENABLE_CGROUP" == true && ${#MEMORY_LIMITS[@]} -eq 0 ]]; then
     MEMORY_LIMITS=("2G")
-    echo "No memory limits specified, using default: ${MEMORY_LIMITS[*]}"
+    log "No memory limits specified, using default: ${MEMORY_LIMITS[*]}"
 fi
 
-# ------------------------------------------------------------------------------
-# 2. Logging helper
-# ------------------------------------------------------------------------------
-if $LOG_ENABLED; then
-    log() { echo "$@" | tee -a "$OUTPUT_FILE"; }
-fi
-
-# ------------------------------------------------------------------------------
-# 3. Memory-constrained execution helper (cgroup)
-# ------------------------------------------------------------------------------
+# =========================================================================== #
+# 4. Helper Functions                                                         #
+# =========================================================================== #
+# Memory-constrained execution helper (cgroup)
 run_with_memlimit() {
     local mmax="$1"
     shift
     local cmd=("$@")
     
     if [[ -f /sys/fs/cgroup/cgroup.controllers ]]; then
-        banner "cgroup v2 detected: systemd-run"
+        log "cgroup v2 detected: systemd-run"
 
         # Use systemd-run for cgroup v2
         systemd-run --quiet --scope \
@@ -177,11 +203,11 @@ run_with_memlimit() {
             -- "${cmd[@]}"
     else
         # Use cgexec for cgroup v1
-        banner "cgroup v1 detected: cgexec"
+        log "cgroup v1 detected: cgexec"
         
         local cg="/sys/fs/cgroup/memory/llmbench"
         if [[ ! -d "$cg" ]]; then
-            echo "Creating cgroup: $cg" >&2
+            log "Creating cgroup: $cg"
             sudo mkdir -p "$cg"
         fi
         echo 0 | sudo tee "$cg/memory.force_empty" >/dev/null || true
@@ -192,47 +218,46 @@ run_with_memlimit() {
     fi
 }
 
-# --------------------------------------------------------------------------- #
-# 3. Model, Binary and Prompt settings                                       #
-# --------------------------------------------------------------------------- #
-MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
-MODEL_NAME="llama_q8_ekv1024"
 
-# MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
-# MODEL_NAME="model.q8"
-
-# MODEL_DIR="${MODEL_PATH}/SmolLM"
-# MODEL_NAME="model.q8"
-
-# Use the unified Bazel-built binary
-BIN="output/text_generator_main"
+# =========================================================================== #
+# 5. Core Functions                                                           #
+# =========================================================================== #
 
 
-# Validate prerequisites
-[[ -x "$BIN" ]] || { 
-    echo "[ERROR] Binary not found: $BIN" >&2
-    exit 1 
+# Function to parse JSON and extract prompt data
+parse_json_file() {
+    local json_file="$1"
+    
+    log "Detected JSON format. Processing..." >&2
+    
+    # Check if Python3 is available
+    if ! command -v python3 >/dev/null 2>&1; then
+        error "Python3 is required for JSON parsing but not installed. Please install Python3: sudo apt-get install python3"
+    fi
+    
+    # Check if parser script exists
+    local parser_script="./scripts/parse_json_prompt.py"
+    if [[ ! -f "$parser_script" ]]; then
+        error "JSON parser script not found: $parser_script. Please ensure the script exists in the scripts directory."
+    fi
+    
+    # Run the Python parser
+    local parse_result
+    parse_result=$(python3 "$parser_script" "$json_file")
+    local parse_status=$?
+    
+    if [[ $parse_status -ne 0 ]]; then
+        error "Failed to parse JSON file:\n$parse_result"
+    fi
+    
+    echo "$parse_result"
 }
-
-[[ -f "$PROMPT_FILE" ]] || { 
-    echo "[ERROR] Prompt file not found: $PROMPT_FILE" >&2
-    exit 1 
-}
-
-[[ "$PROMPT_FILE" =~ \.(json)$ ]] || {
-    echo "[ERROR] Prompt file must be .json format" >&2
-    exit 1
-}
-
-# --------------------------------------------------------------------------- #
-# 4. Core Functions                                                          #
-# --------------------------------------------------------------------------- #
 
 # Function to run a single prompt
 run_single_prompt() {
     local TOKENS="$1"
     local PROMPT="$2"  
-    local OUTPUT_FILE="$3"
+    local LOG_FILE="$3"
     local TEMPERATURE="$4"
     local TOP_K="$5"
     local TOP_P="$6"
@@ -253,9 +278,10 @@ run_single_prompt() {
     log "Enable rep. penalty: ${ENABLE_REPETITION_PENALTY}"
     [[ -n "$MEMORY_LIMIT" ]] && log "Memory limit     : ${MEMORY_LIMIT}"
     log "Target Processor : ${TARGET^^}"
-    log "Log file         : ${OUTPUT_FILE}"
-    log "-----------------------------------------------"
-    log "Cache clear ..."
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        log "Log file         : ${LOG_FILE}"
+    fi
+    
     clear_caches
 
     # Build command as array (safe quoting)
@@ -283,69 +309,34 @@ run_single_prompt() {
     # Add taskset if specified
     [[ "${CORE_LIST}" != "all" ]] && CMD=(taskset -c "${CORE_LIST}" "${CMD[@]}")
 
+    banner "--- C++ Binary Execution START ---"
     # Execute command with or without memory limit
     if [[ -n "$MEMORY_LIMIT" ]]; then
         # Memory-constrained execution with cgroup
-        if $LOG_ENABLED; then
-            run_with_memlimit "$MEMORY_LIMIT" "${CMD[@]}" 2>&1 | tee -a "${OUTPUT_FILE}"
-            log "Results saved to ${OUTPUT_FILE}"
-        else
-            run_with_memlimit "$MEMORY_LIMIT" "${CMD[@]}"
-        fi
+        run_with_memlimit "$MEMORY_LIMIT" "${CMD[@]}"
     else
         # Normal execution
-        if $LOG_ENABLED; then
-           sudo "${CMD[@]}" 2>&1 | tee -a "${OUTPUT_FILE}"
-            log "Results saved to ${OUTPUT_FILE}"
-        else
-            sudo "${CMD[@]}"
-        fi
+        sudo "${CMD[@]}"
     fi
-    log "-----------------------------------------------"
+    banner "--- C++ Binary Execution END ---"
+
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        log "Log saved to ${LOG_FILE}"
+    fi
 }
 
-# Function to parse JSON and extract prompt data
-parse_json_file() {
-    local json_file="$1"
-    
-    echo "Detected JSON format. Processing..." >&2
-    
-    # Check if Python3 is available
-    if ! command -v python3 >/dev/null 2>&1; then
-        echo "[ERROR] Python3 is required for JSON parsing but not installed." >&2
-        echo "Please install Python3: sudo apt-get install python3" >&2
-        exit 1
-    fi
-    
-    # Check if parser script exists
-    local parser_script="./scripts/parse_json_prompt.py"
-    if [[ ! -f "$parser_script" ]]; then
-        echo "[ERROR] JSON parser script not found: $parser_script" >&2
-        echo "Please ensure the script exists in the scripts directory." >&2
-        exit 1
-    fi
-    
-    # Run the Python parser
-    local parse_result
-    parse_result=$(python3 "$parser_script" "$json_file")
-    local parse_status=$?
-    
-    if [[ $parse_status -ne 0 ]]; then
-        echo "[ERROR] Failed to parse JSON file:" >&2
-        echo "$parse_result" >&2
-        exit 1
-    fi
-    
-    echo "$parse_result"
-}
 
 # Function to process multiple prompts from array
 process_multiple_prompts() {
     local parse_result="$1"
+    local memory_limit="${2:-}"
+    local iteration="${3:-1}"
+    local log_dir="$4"
+
     local prompt_count
     prompt_count=$(echo "$parse_result" | head -n1 | awk '{print $2}')
     
-    echo "Found $prompt_count prompts in JSON file. Processing all..."
+    log "Found $prompt_count prompts in JSON file. Processing all..."
     
     local prompt_index=0
     local current_tokens current_temperature current_top_k current_top_p
@@ -374,17 +365,21 @@ process_multiple_prompts() {
             
             # Process this prompt
             local prompt_index_display=$((prompt_index + 1))
-            echo "Processing prompt $prompt_index_display/$prompt_count (${current_tokens} tokens)..."
+            log "Processing prompt $prompt_index_display/$prompt_count (${current_tokens} tokens)..." >&2
             
-            local timestamp output_file
+            local timestamp log_file
             timestamp=$(date +'%y%m%d_%H%M%S')
-            output_file="${RESULTS_DIR}/output_${current_tokens}_${prompt_index_display}_${timestamp}.log"
+            if [[ $NUM_REPEATS -gt 1 ]]; then
+                log_file="${log_dir}/run_${current_tokens}_${prompt_index_display}_${iteration}_${timestamp}.log"
+            else
+                log_file="${log_dir}/run_${current_tokens}_${prompt_index_display}_${timestamp}.log"
+            fi
             
-            run_single_prompt "$current_tokens" "$current_prompt" "$output_file" \
+            execute_with_log "$log_file" run_single_prompt "$current_tokens" "$current_prompt" "$log_file" \
                 "$current_temperature" "$current_top_k" "$current_top_p" \
-                "$current_repetition_penalty" "$current_enable_repetition_penalty"
+                "$current_repetition_penalty" "$current_enable_repetition_penalty" "$memory_limit"
                 
-        elif [[ "$in_prompt" == true ]]; then
+        elif [[ "$in_prompt" == "true" ]]; then
             if [[ -z "$current_prompt" ]]; then
                 current_prompt="$line"
             else
@@ -397,6 +392,9 @@ process_multiple_prompts() {
 # Function to process single prompt
 process_single_prompt() {
     local parse_result="$1"
+    local memory_limit="${2:-}"
+    local iteration="${3:-}"
+    local log_dir="$4"
     
     # Parse: SINGLE tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
     local first_line tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
@@ -408,42 +406,56 @@ process_single_prompt() {
     repetition_penalty=$(echo "$first_line" | awk '{print $6}')
     enable_repetition_penalty=$(echo "$first_line" | awk '{print $7}')
     
-    local prompt timestamp output_file
+    local prompt timestamp log_file
     prompt=$(echo "$parse_result" | sed -n '/PROMPT_START/,/PROMPT_END/p' | sed '1d;$d')
     timestamp=$(date +'%y%m%d_%H%M%S')
-    output_file="${RESULTS_DIR}/output_${tokens}_${timestamp}.log"
+    if [[ $NUM_REPEATS -gt 1 ]]; then
+        log_file="${log_dir}/run_${tokens}_${iteration}_${timestamp}.log"
+    else
+        log_file="${log_dir}/run_${tokens}_${timestamp}.log"
+    fi
     
-    run_single_prompt "$tokens" "$prompt" "$output_file" \
-        "$temperature" "$top_k" "$top_p" "$repetition_penalty" "$enable_repetition_penalty"
+    execute_with_log "$log_file" run_single_prompt "$tokens" "$prompt" "$log_file" \
+        "$temperature" "$top_k" "$top_p" "$repetition_penalty" "$enable_repetition_penalty" "$memory_limit"
 }
 
-# --------------------------------------------------------------------------- #
-# 5. Main execution                                                          #
-# --------------------------------------------------------------------------- #
+# =========================================================================== #
+# 6. Main Execution                                                           #
+# =========================================================================== #
 
 # Function to execute benchmarks with or without memory constraints
 execute_benchmarks() {
     local memory_limit="${1:-}"
+    local current_log_dir
     
-    # Setup results directory
+    # Setup log directory
+    local model_id="${MODEL_NAME}"
+    local target_id="${TARGET}"
+    local mem_id
+    
     if [[ -n "$memory_limit" ]]; then
-        RESULTS_DIR="result_${memory_limit}"
-        banner "Memory Limit: $memory_limit"
+        mem_id="_${memory_limit}"
+        log "Memory Limit: $memory_limit"
     else
-        RESULTS_DIR="result_run_once"
-        banner "Normal run (no memory limit)"
+        mem_id=""
+        log "Normal run (no memory limit)"
     fi
+    current_log_dir="${LOG_DIR_BASE}/${model_id}_${target_id}${mem_id}"
     
-    if [[ -d "${RESULTS_DIR}" ]]; then
-        banner "Results directory exists: ${RESULTS_DIR} (appending)"
-    else
-        ensure_dir "${RESULTS_DIR}"
-        banner "Created results directory: ${RESULTS_DIR}"
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        if [[ -d "${current_log_dir}" ]]; then
+            log "Log directory exists: ${current_log_dir} (appending)"
+        else
+            ensure_dir "${current_log_dir}"
+            log "Created log directory: ${current_log_dir}"
+        fi
     fi
     
     # Execute for each repeat
     for ((iter = 1; iter <= NUM_REPEATS; iter++)); do
-        [[ $NUM_REPEATS -gt 1 ]] && echo "[INFO] --- Iteration $iter / $NUM_REPEATS ---"
+        if [[ $NUM_REPEATS -gt 1 ]]; then
+            banner "Iteration $iter / $NUM_REPEATS"
+        fi
         
         # Parse JSON file
         local parse_result
@@ -452,117 +464,31 @@ execute_benchmarks() {
         # Process based on JSON structure
         if [[ "$parse_result" =~ ^ARRAY ]]; then
             # Multiple prompts
-            process_multiple_prompts "$parse_result" "$memory_limit" "$iter"
+            process_multiple_prompts "$parse_result" "$memory_limit" "$iter" "$current_log_dir"
         elif [[ "$parse_result" =~ ^SINGLE ]]; then
             # Single prompt
-            process_single_prompt "$parse_result" "$memory_limit" "$iter"
+            process_single_prompt "$parse_result" "$memory_limit" "$iter" "$current_log_dir"
         else
-            echo "[ERROR] Invalid JSON parse result format" >&2
-            exit 1
+            error "Invalid JSON parse result format"
         fi
     done
 }
 
-# Update process functions to accept memory limit and iteration
-process_multiple_prompts() {
-    local parse_result="$1"
-    local memory_limit="${2:-}"
-    local iteration="${3:-1}"
-    
-    local prompt_count
-    prompt_count=$(echo "$parse_result" | head -n1 | awk '{print $2}')
-    
-    echo "Found $prompt_count prompts in JSON file. Processing all..."
-    
-    local prompt_index=0
-    local current_tokens current_temperature current_top_k current_top_p
-    local current_repetition_penalty current_enable_repetition_penalty
-    local current_prompt="" in_prompt=false
-    
-    while IFS= read -r line; do
-        if [[ "$line" =~ ^ITEM ]]; then
-            # Parse: ITEM index tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
-            prompt_index=$(echo "$line" | awk '{print $2}')
-            current_tokens=$(echo "$line" | awk '{print $3}')
-            current_temperature=$(echo "$line" | awk '{print $4}')
-            current_top_k=$(echo "$line" | awk '{print $5}')
-            current_top_p=$(echo "$line" | awk '{print $6}')
-            current_repetition_penalty=$(echo "$line" | awk '{print $7}')
-            current_enable_repetition_penalty=$(echo "$line" | awk '{print $8}')
-            current_prompt=""
-            in_prompt=false
-            
-        elif [[ "$line" == "PROMPT_START" ]]; then
-            in_prompt=true
-            current_prompt=""
-            
-        elif [[ "$line" == "PROMPT_END" ]]; then
-            in_prompt=false
-            
-            # Process this prompt
-            local prompt_index_display=$((prompt_index + 1))
-            echo "Processing prompt $prompt_index_display/$prompt_count (${current_tokens} tokens)..."
-            
-            local timestamp output_file
-            timestamp=$(date +'%y%m%d_%H%M%S')
-            if [[ $NUM_REPEATS -gt 1 ]]; then
-                output_file="${RESULTS_DIR}/output_${current_tokens}_${prompt_index_display}_${iteration}_${timestamp}.log"
-            else
-                output_file="${RESULTS_DIR}/output_${current_tokens}_${prompt_index_display}_${timestamp}.log"
-            fi
-            
-            run_single_prompt "$current_tokens" "$current_prompt" "$output_file" \
-                "$current_temperature" "$current_top_k" "$current_top_p" \
-                "$current_repetition_penalty" "$current_enable_repetition_penalty" "$memory_limit"
-                
-        elif [[ "$in_prompt" == true ]]; then
-            if [[ -z "$current_prompt" ]]; then
-                current_prompt="$line"
-            else
-                current_prompt="$current_prompt"$'\n'"$line"
-            fi
-        fi
-    done <<< "$parse_result"
-}
-
-process_single_prompt() {
-    local parse_result="$1"
-    local memory_limit="${2:-}"
-    local iteration="${3:-}"
-    
-    # Parse: SINGLE tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
-    local first_line tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
-    first_line=$(echo "$parse_result" | head -n1)
-    tokens=$(echo "$first_line" | awk '{print $2}')
-    temperature=$(echo "$first_line" | awk '{print $3}')
-    top_k=$(echo "$first_line" | awk '{print $4}')
-    top_p=$(echo "$first_line" | awk '{print $5}')
-    repetition_penalty=$(echo "$first_line" | awk '{print $6}')
-    enable_repetition_penalty=$(echo "$first_line" | awk '{print $7}')
-    
-    local prompt timestamp output_file
-    prompt=$(echo "$parse_result" | sed -n '/PROMPT_START/,/PROMPT_END/p' | sed '1d;$d')
-    timestamp=$(date +'%y%m%d_%H%M%S')
-    if [[ $NUM_REPEATS -gt 1 ]]; then
-        output_file="${RESULTS_DIR}/output_${tokens}_${iteration}_${timestamp}.log"
+# --- Main Execution Logic ---
+main() {
+    # Main execution logic
+    if [[ "$ENABLE_CGROUP" == "true" ]]; then
+        # Memory-constrained benchmarking
+        for memory_limit in "${MEMORY_LIMITS[@]}"; do
+            execute_benchmarks "$memory_limit"
+        done
     else
-        output_file="${RESULTS_DIR}/output_${tokens}_${timestamp}.log"
+        # Normal benchmarking
+        execute_benchmarks
     fi
-    
-    run_single_prompt "$tokens" "$prompt" "$output_file" \
-        "$temperature" "$top_k" "$top_p" "$repetition_penalty" "$enable_repetition_penalty" "$memory_limit"
+
+    log "All benchmarks completed successfully!"
 }
 
-# Main execution logic
-if [[ "$ENABLE_CGROUP" == true ]]; then
-    # Memory-constrained benchmarking
-    for memory_limit in "${MEMORY_LIMITS[@]}"; do
-        execute_benchmarks "$memory_limit"
-    done
-else
-    # Normal benchmarking
-    execute_benchmarks
-fi
-
-echo "All benchmarks completed successfully!"
-exit 0
+# Run main function
+main "$@"

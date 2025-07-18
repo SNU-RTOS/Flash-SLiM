@@ -344,10 +344,9 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     int stop_token_id = -1;
     std::unordered_set<int> previously_generated_tokens;
 
-
     // 1. Load Model
     std::unique_ptr<tflite::FlatBufferModel> model;
-    TRACE_LOGIC_START(0);  // Load_Model
+    TRACE_LOGIC_START(0); // Load_Model
     TRACE_IO_START(0);
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Model");
@@ -358,7 +357,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     TRACE_LOGIC_END(0);
 
     // 2. Build Interpreter
-    TRACE_LOGIC_START(1);  // Build_Interpreter
+    TRACE_LOGIC_START(1); // Build_Interpreter
     TRACE_IO_START(1);
     std::unique_ptr<tflite::Interpreter> interpreter;
     {
@@ -372,7 +371,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     // PrintSignatureRunnersInfo(interpreter.get());
 
     // 3. Load SentencePiece
-    TRACE_LOGIC_START(2);  // Load_Tokenizer
+    TRACE_LOGIC_START(2); // Load_Tokenizer
     TRACE_IO_START(2);
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
@@ -383,7 +382,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     TRACE_LOGIC_END(2);
 
     // 4. Build KV Cache
-    TRACE_LOGIC_START(3);  // Build_KV_Cache
+    TRACE_LOGIC_START(3); // Build_KV_Cache
     TRACE_IO_START(3);
     std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
     {
@@ -406,7 +405,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     // }
 
     // 6. Prepare Input Prompt
-    TRACE_LOGIC_START(4);  // Prepare_Prompt
+    TRACE_LOGIC_START(4); // Prepare_Prompt
     TRACE_IO_START(4);
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Prompt");
@@ -439,7 +438,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     TRACE_LOGIC_END(4);
 
     // 7. Prepare Signature Runners
-    TRACE_LOGIC_START(5);  // Prepare_Signature_Runners
+    TRACE_LOGIC_START(5); // Prepare_Signature_Runners
     TRACE_IO_START(5);
     tflite::SignatureRunner *prefill_runner = nullptr;
     tflite::SignatureRunner *decode_runner = nullptr;
@@ -505,7 +504,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     }
 
     // 9. Prefill Stage
-    TRACE_LOGIC_START(6);  // Prefill
+    TRACE_LOGIC_START(6); // Prefill
     TRACE_IO_START(6);
     double prefill_time_ms = 0.0;
     {
@@ -541,13 +540,12 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 
     MINIMAL_CHECK(decode_steps > 0);
 
-
     // Decoding loop
     for (int i = 0; i < decode_steps; ++i)
     {
         std::string stage_name = "Decode_" + std::to_string(i);
 
-        TRACE_LOGIC_START(7);  // Decode_Generation
+        TRACE_LOGIC_START(7); // Decode_Generation
         TRACE_IO_START(7);
         std::string single_decoded_text;
         {
@@ -594,7 +592,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         }
         TRACE_IO_END(7);
         TRACE_LOGIC_END(7);
-        
+
         generation_metrics.RecordDecodingTime(inference_time_ms,
                                               sampling_time_ms,
                                               detok_time_ms);
@@ -612,9 +610,9 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         std::cout << single_decoded_text << std::flush;
         next_position++;
     }
-
-    std::cout << "\n[INFO] Decoding stage completed\n\n";
-
+    std::cout << "\n\n\n";
+    std::cout << "[INFO] Decoded " << decode_steps << " tokens.\n";
+    std::cout << "\n[INFO] Decoding stage completed" << std::endl;
 }
 
 // =======================================================================
@@ -626,8 +624,7 @@ int main(int argc, char *argv[])
     std::cout.precision(5);
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout << std::boolalpha;
-    std::cout << "[INFO] Text Generation App on LiteRT Interperter\n";
-
+    std::cout << "\n[INFO] Text Generation App on LiteRT Interperter\n";
 
 #ifdef EBPF_TRACE_ENABLED
     std::cout << "[INFO] eBPF tracing is enabled. USDT probes will be used.\n";
@@ -656,9 +653,7 @@ int main(int argc, char *argv[])
     {
         std::cout << core << " ";
     }
-    std::cout << "\n";
-    std::cout << "---------------------------------------------------\n";
-    std::cout << "Start Generating Text" << std::endl;
+    std::cout << "[INFO] Start Generating Text" << std::endl;
     // Just monitor the cores we're allowed to run on (should be only core 0 with taskset)
 
     custom::profiler::PhaseContext profile_ctx;
@@ -679,8 +674,9 @@ int main(int argc, char *argv[])
     profile_ctx.generation_done.store(true);
     profile_ctx.signal_cv.notify_all();
     monitor_thread.join(); // Wait for the monitor thread to finish
+    
     // Print RUsage results
-    // custom::profiler::print_rusage_records(rusage_records);
+    custom::profiler::print_rusage_records(rusage_records);
 
     // Print genenration metrics (inference vs. sampling)
     generation_metrics.PrintMetrics();

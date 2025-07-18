@@ -18,6 +18,7 @@ bazel-*
 # Build artifacts
 lib/
 obj/
+util/bin
 output/
 *.o
 *.so
@@ -46,14 +47,15 @@ text_generator_main_*
 models/*
 !models/README.md
 !models/.gitkeep
-!models/mobileone_s0.tflite
-!models/mobilenetv3_small_100.lamb_in1k.tflite
-
+!models/test
 # Results and logs
 result_*
 perf.*
 scripts/*.log
 benchmark/benchmark_model_results/tmp/
+
+!benchmark/llm_infer_results/sample/README.md
+!benchmark/llm_infer_results/sample/
 
 # Temporary directories
 backup/
@@ -75,4 +77,5 @@ evaluation/*
 # Keep all prompt files
 !prompt/*.txt
 !prompt/README.md
+
 
