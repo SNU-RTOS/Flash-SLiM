@@ -1,169 +1,156 @@
-# flash-slim: On-Device LLM Inference with OS Support
+# flash-slim: A Research Framework for On-Device LLM Inference with OS-Aware Optimization
 
-A high-performance, on-device Large Language Model (LLM) inference system built with LiteRT (TensorFlow Lite) and Bazel. This project, now named **flash-slim**, provides a complete framework for running, profiling, and evaluating LLMs on resource-constrained devices. It is designed to bridge the gap between high-level model research and low-level, OS-aware performance tuning.
+**flash-slim** is a high-performance research framework for on-device Large Language Model (LLM) inference. Built with LiteRT (TensorFlow Lite) and Bazel, it is engineered to explore and evaluate advanced OS-aware optimization techniques, specifically targeting memory-constrained environments.
 
-## Overview
+The core research goal of this project is to implement and analyze a **Weight Streaming with Compute–I/O Overlap** pipeline, designed to run large decoder-only LLMs on devices with limited DRAM. This framework provides the essential tools to profile, analyze, and optimize the complex interplay between the inference engine and the underlying operating system.
 
-This project provides a complete framework for running LLMs on-device with:
+## Core Features
 
-- **Modern Build System**: Powered by Bazel for fast, reproducible, and hermetic builds.
-- **OS-Aware Performance Tuning**: Deep integration with OS features like cgroups and core pinning for realistic benchmarking.
-- **Cross-platform compatibility**: Tested on x86_64 and aarch64 architectures.
-- **Advanced Benchmarking**: Comprehensive utilities for evaluating performance under various constraints.
-- **Memory Optimization**: XNNPACK weight caching and fine-grained memory management.
-- **Flexible Deployment**: Support for various LLM architectures (Gemma, Llama, etc.).
+- **OS-Aware Benchmarking**: Deep integration with `cgroups` (v1/v2) and `taskset` for precise control over memory and CPU.
+- **Multi-Level Profiling Infrastructure**: A unique, three-tiered profiling system to capture a holistic view of performance:
+  1. **TFLite Profiler**: Operator-level wall-clock time.
+  2. **eBPF Profiler**: System-level metrics like I/O delay and page faults.
+  3. **Custom Scope Profiler**: Stage-level timings for the inference pipeline (e.g., prefill, decode).
+- **Standardized Scripting & Logging**: A robust suite of scripts powered by a centralized utility module (`utils.sh`), featuring color-coded console output and clean, color-free log files for easy parsing and analysis.
+- **Cross-Platform Compatibility**: Successfully tested on x86_64 and aarch64 architectures (Ubuntu, Debian).
 
-## Design Philosophy
+## Current Status & Accomplishments
 
-The core goal of **flash-slim** is to provide a stable, high-performance environment for on-device LLM research with a strong emphasis on OS-level resource management.
+- **✅ Integrated Profiling System**: The three core profiling tools are fully integrated.
+- **✅ Standardized Log Format**: All log outputs, including the multi-level profilers, are standardized to a JSON-based format to facilitate unified post-processing.
+- **✅ Robust Scripting Infrastructure**: The project's scripts have been fully refactored for consistency, modularity, and ease of use.
+- **✅ Foundational Inference Pipeline**: A stable baseline inference pipeline is in place, serving as the foundation for future optimization work.
 
-- **OS-Aware Performance Tuning**: We believe that predictable performance on-device requires deep integration with the operating system. The project provides built-in tools for memory and CPU management (`cgroups`, `taskset`) to accurately simulate and benchmark performance under realistic constraints.
-- **Reproducibility and Reliability**: The entire project is built with Bazel to ensure that builds are hermetic and reproducible. This is critical for academic research and production deployments where consistency is key.
-- **Modularity and Focus**: By encapsulating the core logic within the `flash-slim` module, we aim to provide a clean, focused, and extensible codebase for LLM inference, separate from the complexities of dependency management and build orchestration.
+## Future Development Plan (Roadmap)
 
-## Platform Support
+The ultimate goal is to build a fully functional, prefetch-aware runtime that implements weight streaming. The development is planned in the following phases:
 
-Successfully tested on the following platforms:
+### Phase 1: Log Unification and Analysis (In Progress)
 
-- **x86_64**: Ubuntu 22.04, Ubuntu 24.04
-- **aarch64**: Ubuntu 20.04, Ubuntu 22.04, Ubuntu 24.04, Debian 13
+- **Objective**: Merge the disparate logs from the three profilers into a single, unified timeline based on high-precision timestamps.
+- **Tasks**:
+  - Implement a post-processing script (`merge_logs.py`) to sort and merge the JSON log files.
+  - Define and quantify key performance indicators (KPIs) such as Compute–I/O overlap ratio, I/O wait time, and page fault rates per inference stage.
+  - Develop visualization tools (e.g., using `matplotlib` or `plotly`) to chart the unified timeline and clearly identify performance bottlenecks.
 
-**Note**: GPU acceleration is available but may have model compatibility limitations.
+### Phase 2: Weight Chunk Partitioner (Pre-runtime)
+
+- **Objective**: Develop an offline tool that partitions a static LLM into dynamically loadable weight chunks based on profiling data from Phase 1.
+- **Algorithm**: A greedy algorithm will group operators into chunks. The partitioning heuristic aims to ensure that the I/O time for the next chunk is hidden by the compute time of the current chunk (`T_IO(c_i+1) < T_compute(c_i)`), without exceeding the device's specified memory budget (`M_peak < M_budget`).
+- **Output**: The tool will generate a **Chunk Metadata Table (CMT)** in JSON format. This table will contain the operator range, size, and estimated latencies for each chunk, serving as a blueprint for the runtime.
+
+### Phase 3: Prefetch-Aware Runtime
+
+- **Objective**: Modify the LiteRT interpreter to support asynchronous weight prefetching and compute-I/O overlap, guided by the CMT.
+- **Architectural Components**:
+  - **CMT Parser**: A C++ module to load the CMT and create an in-memory map from operator indices to chunk IDs.
+  - **Chunk Execution Module**: A component integrated into the LiteRT operator execution loop. It will track the current operator index, detect chunk boundaries, and trigger prefetch events for subsequent chunks.
+  - **Memory Prefetch Module**: A background thread managing a double-buffer system. It will be responsible for asynchronously loading the next chunk's weights from flash storage into the inactive buffer.
+
+### Phase 4: Performance Validation
+
+- **Objective**: Quantitatively evaluate the performance of the new weight streaming runtime against baseline approaches.
+- **Tasks**:
+  - Benchmark various models (e.g., Gemma-3B, Llama-3.2 3B) under different memory constraints.
+  - Measure key metrics: Time to First Token (TTFT), throughput (tokens/s), and peak DRAM usage.
+  - Compare results against a baseline implementation that relies on standard OS page fault mechanisms for memory management.
 
 ## Project Structure
 
 ```text
-├── flash-slim/             # Core source code for the inference engine
-│   ├── text_generator_main.cc # Main application logic
-│   ├── profiler.{h,cc}        # Performance profiling utilities
-│   ├── sampler.{h,cc}         # Text generation sampling strategies
-│   └── utils.{h,cc}           # Common utilities
-├── scripts/                  # Build, run, and utility scripts
-│   ├── build.sh              # Main build script
-│   ├── run.sh                # Comprehensive run and benchmark script
-│   ├── run_once.sh           # Quick test run script
-│   ├── common.sh             # Shared build configurations
-│   ├── build-benchmark_util.sh # Builds the TFLite benchmark utility
-│   ├── build-deps.sh           # Installs build dependencies
-│   ├── build-litert.sh         # Builds the main LiteRT binary
-│   ├── build-litert_gpu_delegate.sh # Builds LiteRT with GPU delegate support
-│   ├── parse_json_prompt.py    # Parses JSON prompt files for the main run script
-│   ├── utils.sh                # Shared utility and build helper functions
+├── flash-slim/             # Core C++ source code for the inference engine.
+│   ├── text_generator_main.cc # Main application logic with multi-level profiling.
+│   ├── profiler.{h,cc}        # Custom scope profiler implementation.
 │   └── ...
-├── test/                     # Test files and scripts
-│   ├── README.md
-├── benchmark/                # Benchmarking results and analysis tools
-├── models/                   # Model storage directory
-├── output/                   # Build output directory (binaries)
-├── bazel/                    # Patches and BUILD files for third-party deps
-├── .bazelrc                  # Bazel run commands configuration
-├── .bazelversion             # Specifies the official Bazel version for the project
-├── MODULE.bazel              # Bazel module file
-└── WORKSPACE                 # Bazel workspace definition
+├── scripts/                  # All shell scripts for building, running, and analysis.
+│   ├── build.sh              # Unified build script for all C++ targets.
+│   ├── run.sh                # Comprehensive script for multi-run benchmarks.
+│   ├── run_once.sh           # A simple script for a single, quick test run.
+│   ├── run_benchmark_util.sh # Script for benchmarking non-LLM TFLite models.
+│   ├── install_prerequisites.sh # Installs all necessary build dependencies.
+│   └── utils.sh                # Centralized shell utility and helper functions.
+├── models/                   # Model storage. See models/README.md for the required structure.
+├── benchmark/                # Default output directory for benchmark logs and results.
+├── util/                     # Source code for host-side C++ utilities (e.g., cache clearing tool).
+├── test/                     # Test files, PoC scripts, and non-LLM models.
+│   └── conceptual_streaming_prototype/ # Contains PoC code for the roadmap.
+├── bazel/                    # Patches and BUILD files for third-party dependencies.
+├── .bazelrc                  # Bazel run commands configuration.
+├── MODULE.bazel              # Bazel module file defining project dependencies.
+└── WORKSPACE                 # Bazel workspace definition.
 ```
 
 ## Getting Started
 
 ### 1. Prerequisites
 
-#### Install Bazelisk
-
-This project uses Bazel for builds. We recommend installing Bazelisk, which automatically manages Bazel versions.
-
-**Ubuntu/Linux:**
+First, clone the repository and run the script to install all necessary build dependencies. This will install Bazelisk (a Bazel version manager), build tools, and libraries required for the project.
 
 ```sh
-curl -L https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 -o /usr/local/bin/bazelisk
-chmod +x /usr/local/bin/bazelisk
-# Create a symlink to use 'bazel' command
-sudo ln -s /usr/local/bin/bazelisk /usr/local/bin/bazel
+git clone <repository_url>
+cd OS-Support-for-On-Device-LLM
+./scripts/install_prerequisites.sh
 ```
 
-#### Configure Environment
+### 2. Environment Setup
 
-Copy the sample environment file and customize it if necessary.
+Copy the sample environment file. This file defines root paths for the project, models, and prompts. The default values are generally sufficient for most setups.
 
 ```sh
 cp .env.sample .env
-# Edit .env to set project paths (defaults are usually fine)
 ```
 
-### 2. Build
+### 3. Build the Project
 
-The project is built using a simple shell script that wraps Bazel commands.
+Use the unified build script, which acts as a wrapper around Bazel. The main binary, `text_generator_main`, will be placed in the `output/` directory (which is git-ignored).
 
 ```sh
-# Build the main binary in release mode (default)
+# Build the main binary in release mode (optimized)
 ./build.sh
 
-# Build in debug mode
+# Build in debug mode with debugging symbols
 ./build.sh debug
-
-# Build all targets, including tests
-./build.sh all
-
-# Clean all build artifacts
-./build.sh clean
 ```
 
-The main binary `text_generator_main` will be placed in the `output/` directory.
+## Usage
 
-### 3. Run Inference
+### Quick Test Run (`run_once.sh`)
 
-#### Quick Test
-
-For a simple test run with default settings:
+For a simple, default test run to verify the build and basic functionality. This script is not configurable via CLI arguments and always logs its output to `result_run_once/output.log`.
 
 ```sh
 ./run_once.sh
 ```
 
-#### Advanced Benchmarking
+### Advanced Benchmarking (`run.sh`)
 
-The `run.sh` script provides extensive options for benchmarking, including core pinning, thread management, and memory constraints.
+The `run.sh` script is the primary tool for comprehensive benchmarking. It offers extensive command-line options to control the execution environment.
+
+**Log Path Format**:
+When logging is enabled (`--log`), results are saved to a structured directory inside `benchmark/llm_infer_results/`. The path is dynamically generated based on the run configuration:
+`[model_name]_[target]_[mem_limit]/`
+
+**Common Commands**:
 
 ```sh
-# See all available options
+# See all available options and their descriptions
 ./run.sh --help
 
-# Example: Run on GPU, log output, bind to cores 0-3, use 4 threads
-./run.sh --target gpu --log --core 0-3 --threads 4
+# Example: Run on GPU, log output, and bind to CPU cores 0-3
+./run.sh --target gpu --log --core 0-3
 
-# Example: Run a benchmark with specific memory limits (512MB and 1GB)
-./run.sh --memory 512M --memory 1G
+# Example: Run a multi-stage benchmark with different memory limits.
+# This will create two separate log directories:
+# .../llama_q8_ekv1024_cpu_512M/
+# .../llama_q8_ekv1024_cpu_1G/
+./run.sh --log --memory 512M --memory 1G
 ```
 
-## Features
+## Conceptual Prototypes
 
-### Performance Profiling & Benchmarking
+The `test/conceptual_streaming_prototype/` directory contains a set of files that serve as a Proof-of-Concept for the future development plan. These are not integrated into the main application but demonstrate the core logic:
 
-- **cgroup Integration**: Run benchmarks under specific memory constraints (cgroup v1 and v2 supported) to simulate real-world device limitations.
-- **Core Pinning**: Isolate and assign inference workloads to specific CPU cores using `taskset` for stable and predictable performance measurement.
-- **Detailed Logging**: Capture comprehensive performance metrics, model outputs, and system information for in-depth analysis.
-
-### Optimization Features
-
-- **XNNPACK Integration**: Leverage hardware-specific optimizations for high-performance CPU inference via the XNNPACK delegate.
-- **Weight Caching**: Reduce memory footprint and accelerate model loading times by caching model weights.
-- **Multi-threading**: Utilize a configurable thread pool to maximize performance on multi-core processors.
-
-### Supported Models
-
-- Gemma (2B, 7B variants)
-- Llama 3.2 (3B variants)
-- Custom models converted with ai-edge-torch, or from Hugging Face: [https://huggingface.co/litert-community/](https://huggingface.co/litert-community/)
-
-## Build Options
-
-The build system supports multiple configurations via `scripts/utils.sh`:
-
-- **Release (default)**: Optimized for performance (`-c opt`).
-- **Debug**: Includes debugging symbols (`-c dbg`).
-
-## Environment Variables
-
-Key environment variables (configure in `.env`):
-
-- `ROOT_PATH`: Project root directory.
-- `MODEL_PATH`: Directory for storing model files.
-- `PROMPT_PATH`: Directory for prompt JSON files.
+- `merged_profile.json`: A dummy data file simulating the output of the unified logging phase.
+- `partitioner.py`: A Python script that implements the greedy chunking algorithm, taking `merged_profile.json` as input and producing `cmt.json`.
+- `cmt.json`: A sample Chunk Metadata Table generated by the partitioner.
+- `chunk_streaming_litert.cpp`: A C++ application that simulates the prefetch-aware runtime. It loads the `cmt.json` and uses a dummy prefetch thread to log chunk loading and execution events, demonstrating the core double-buffering and swapping logic.
