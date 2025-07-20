@@ -53,7 +53,7 @@ result_*
 perf.*
 scripts/*.log
 benchmark/benchmark_model_results/tmp/
-
+benchmark/llm_infer_results/
 !benchmark/llm_infer_results/sample/README.md
 !benchmark/llm_infer_results/sample/
 

@@ -22,23 +22,24 @@ log()         { echo -e "${C_GREEN}✔${C_RESET} $@"; }
 error()       { echo -e "${C_RED}✖ Error in ${BASH_SOURCE[1]##*/} at line ${BASH_LINENO[0]}:${C_RESET} $*" >&2; exit 1; }
 
 execute_with_log() {
-    # Executes a command, redirecting its output to a log file (without color codes)
-    # and to the console (with color codes) if LOG_ENABLED is true.
-    # Usage: execute_with_log <log_file_path> <command_to_execute...>
-    local log_file="$1"
-    shift
+    # Executes a command, redirecting its output based on the implementation chosen below.
+    # To switch behavior, comment out the active implementation and uncomment the desired one.
+    # Usage: execute_with_log <log_file_path> <command...>
+    local log_file="$1"; shift
 
     if [[ "${LOG_ENABLED:-false}" == "true" ]]; then
         if [[ -z "$log_file" ]]; then
             error "Log file path not provided to execute_with_log."
             return 1
         fi
-        # The command's stdout and stderr are piped to tee.
-        # tee prints the output to the console (stdout) preserving colors.
-        # For the file log, the output is piped through sed to strip ANSI color codes
-        # before being appended to the log file.
-        # The use of a subshell for the command ensures its file descriptors don't leak.
-        ( "$@" ) 2>&1 | tee >(sed -r "s/\x1b\[[0-9;]*m//g" >> "$log_file")
+
+        # --- Implementation 1: Log to console AND file (default) ---
+        # Output is shown on the console (with color) and appended to the log file (without color).
+        # ( "$@" ) 2>&1 | tee >(sed -r "s/\x1b\[[0-9;]*m//g" >> "$log_file")
+
+        # --- Implementation 2: Log ONLY to file ---
+        # Output is NOT shown on the console, only appended to the log file (without color).
+        ( "$@" ) 2>&1 | sed -r "s/\x1b\[[0-9;]*m//g" >> "$log_file"
     else
         "$@"
     fi

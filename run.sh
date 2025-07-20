@@ -374,7 +374,8 @@ process_multiple_prompts() {
             else
                 log_file="${log_dir}/run_${current_tokens}_${prompt_index_display}_${timestamp}.log"
             fi
-            
+
+            log "Executing LLM Inference"
             execute_with_log "$log_file" run_single_prompt "$current_tokens" "$current_prompt" "$log_file" \
                 "$current_temperature" "$current_top_k" "$current_top_p" \
                 "$current_repetition_penalty" "$current_enable_repetition_penalty" "$memory_limit"
@@ -415,6 +416,7 @@ process_single_prompt() {
         log_file="${log_dir}/run_${tokens}_${timestamp}.log"
     fi
     
+    log "Executing LLM Inference"
     execute_with_log "$log_file" run_single_prompt "$tokens" "$prompt" "$log_file" \
         "$temperature" "$top_k" "$top_p" "$repetition_penalty" "$enable_repetition_penalty" "$memory_limit"
 }
