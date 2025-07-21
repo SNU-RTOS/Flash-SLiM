@@ -1,7 +1,6 @@
 workspace(name = "flash_slim")
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 # Bazel skylib (required for many rules)
 http_archive(
@@ -27,12 +26,18 @@ load("@rules_shell//shell:repositories.bzl", "rules_shell_dependencies", "rules_
 rules_shell_dependencies()
 rules_shell_toolchains()
 
-# LiteRT from GitHub
-git_repository(
+# LiteRT from local path
+local_repository(
     name = "litert",
-    remote = "https://github.com/google-ai-edge/LiteRT",
-    branch = "main",
+    path = "external/litert",
 )
+
+# load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+# git_repository(
+#     name = "litert",
+#     remote = "https://github.com/google-ai-edge/LiteRT",
+#     branch = "main",
+# )
 
 # Abseil (using same version as ai-edge-torch)
 http_archive(

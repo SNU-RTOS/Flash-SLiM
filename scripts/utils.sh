@@ -19,6 +19,7 @@ banner()      { echo -e "\n${C_BLUE}══════════════�
                 echo -e "${C_BLUE} ≫${C_RESET} ${C_YELLOW}$*${C_RESET}"; \
                 echo -e "${C_BLUE}════════════════════════════════════════════════════════════════════════════════${C_RESET}"; }
 log()         { echo -e "${C_GREEN}✔${C_RESET} $@"; }
+warn()        { echo -e "${C_YELLOW}⚠ Warning:${C_RESET} $@"; }
 error()       { echo -e "${C_RED}✖ Error in ${BASH_SOURCE[1]##*/} at line ${BASH_LINENO[0]}:${C_RESET} $*" >&2; exit 1; }
 
 execute_with_log() {
@@ -35,11 +36,11 @@ execute_with_log() {
 
         # --- Implementation 1: Log to console AND file (default) ---
         # Output is shown on the console (with color) and appended to the log file (without color).
-        # ( "$@" ) 2>&1 | tee >(sed -r "s/\x1b\[[0-9;]*m//g" >> "$log_file")
+        ( "$@" ) 2>&1 | tee >(sed -r "s/\x1b\[[0-9;]*m//g" >> "$log_file")
 
         # --- Implementation 2: Log ONLY to file ---
-        # Output is NOT shown on the console, only appended to the log file (without color).
-        ( "$@" ) 2>&1 | sed -r "s/\x1b\[[0-9;]*m//g" >> "$log_file"
+        # # Output is NOT shown on the console, only appended to the log file (without color).
+        # ( "$@" ) 2>&1 | sed -r "s/\x1b\[[0-9;]*m//g" >> "$log_file"
     else
         "$@"
     fi
@@ -47,7 +48,7 @@ execute_with_log() {
 
 
 # =========================================================================== #
-# 2. System & Benchmark Utilities                                             #
+# 2. System & Benchmark Helpers                                               #
 # =========================================================================== #
 
 clear_caches() {
@@ -118,7 +119,7 @@ get_pagefault_stats() {
 }
 
 # =========================================================================== #
-# 3. Ftrace Utilities                                                         #
+# 3. Ftrace Helpers                                                           #
 # =========================================================================== #
 
 TRACEFS="/sys/kernel/debug/tracing"

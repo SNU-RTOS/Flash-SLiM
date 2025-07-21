@@ -66,6 +66,24 @@ esac
 # ---------------------------------------------------------------------------
 run() { echo "+ $*"; "$@"; }
 
+setup_dependencies() {
+    banner "Setting up external dependencies"
+    
+    # Use variables from .env, with fallbacks to default values
+    local external_dir="${EXTERNAL_DIR:-external}"
+    local litert_repo="${LITERT_REPO_URL:-https://github.com/Seunmul/LiteRT.git}"
+    local litert_dir="$external_dir/litert" # Corrected to match WORKSPACE
+
+    ensure_dir "$external_dir"
+
+    if [ ! -d "$litert_dir" ]; then
+        log "Cloning LiteRT repository into $litert_dir..."
+        git clone "$litert_repo" "$litert_dir" --depth 1
+    else
+        log "LiteRT repository already exists. Skipping clone."
+    fi
+}
+
 do_main_build() {
     banner "Building main text generator with Bazel"
     
@@ -125,6 +143,13 @@ do_all_build() {
         fi
     done
 }
+
+# ---------------------------------------------------------------------------
+# Setup dependencies before building
+# ---------------------------------------------------------------------------
+if [[ "${BUILD_TARGET}" != "clean" ]]; then
+    setup_dependencies
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Invoke builds

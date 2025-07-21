@@ -34,7 +34,7 @@ LOG_DIR="result_run_once"
 LOG_FILE="${LOG_DIR}/output.log"
 
 # --- Model and Binary Settings ---
-MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
+MODEL_DIR="${MODEL_PATH}/Llama3.2-1B"
 MODEL_NAME="llama_q8_ekv1024"
 BIN="output/text_generator_main"
 PROMPT_FILE="./${PROMPT_PATH}/sample_prompt_8_1.json"

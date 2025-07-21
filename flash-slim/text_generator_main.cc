@@ -627,11 +627,11 @@ int main(int argc, char *argv[])
     std::cout << "\n[INFO] Text Generation App on LiteRT Interperter\n";
 
 #ifdef EBPF_TRACE_ENABLED
-    std::cout << "[INFO] eBPF tracing is enabled. USDT probes will be used.\n";
+    std::cout << "\n[INFO] eBPF tracing is enabled. USDT probes will be used.\n";
 #endif
 
     // 0. Parse flags
-    std::cout << "[INFO] Preparing Required Components\n";
+    std::cout << "\n[INFO] Preparing Required Components\n";
     absl::ParseCommandLine(argc, argv);
 
     // Check which cores we're actually running on
@@ -653,7 +653,7 @@ int main(int argc, char *argv[])
     {
         std::cout << core << " ";
     }
-    std::cout << "[INFO] Start Generating Text" << std::endl;
+    std::cout << "\n[INFO] Start Generating Text" << std::endl;
     // Just monitor the cores we're allowed to run on (should be only core 0 with taskset)
 
     custom::profiler::PhaseContext profile_ctx;

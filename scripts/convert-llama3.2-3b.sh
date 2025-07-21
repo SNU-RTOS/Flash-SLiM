@@ -1,5 +1,15 @@
 #!/bin/bash
 
+REMOTE_HOST=192.xxx.xxx.xxx
+REMOTE_USER=YOUR_USER_NAME
+REMOTE_PORT=YOUR_PORT_NAME
+REMOTE_PASSWORD=YOUR_PASSWD
+
+REMOTE_MODEL_DIR=/root/ghpark/LiteRT_LLM_Inference_app/models
+
+EXPORTED_MODEL_DIR=/home/rtos/workspace/ghpark/export
+
+
 # MODEL_NAME="DeepSeek-R1-Distill-Qwen-1.5B"
 # SCRIPT_PATH="/home/rtos/workspace/ghpark/ai-edge-torch/ai_edge_torch/generative/examples/deepseek"
 

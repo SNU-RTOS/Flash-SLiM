@@ -1,10 +1,6 @@
 #!/bin/bash
 
-# =============================================================================
-# Prerequisites Installation Script
-# =============================================================================
-
-set -e # Exit on any error
+set -euo pipefail 
 
 # =============================================================================
 # GLOBAL VARIABLES
@@ -14,6 +10,7 @@ set -e # Exit on any error
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 source .env
+source "$SCRIPT_DIR/utils.sh"
 cd "$ROOT_PATH"
 
 # Directory paths
@@ -66,18 +63,6 @@ CLANG_VERSION="18"
 # UTILITY FUNCTIONS
 # =============================================================================
 
-log_info() {
-    echo "INFO: $1"
-}
-
-log_warn() {
-    echo "WARNING: $1"
-}
-
-log_error() {
-    echo "ERROR: $1" >&2
-}
-
 # Check if a package is installed
 is_package_installed() {
     dpkg -l | grep -q "^ii  $1 "
@@ -88,19 +73,6 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Add configuration line to shell config file (avoid duplicates)
-add_to_shell_config() {
-    local config_line="$1"
-    local config_file="$2"
-
-    if ! grep -Fxq "$config_line" "$config_file" 2>/dev/null; then
-        echo "$config_line" >>"$config_file"
-        log_info "Added to shell config: $config_line"
-    else
-        log_info "Shell config already contains: $config_line"
-    fi
-}
-
 # Add complete shell configuration block atomically
 add_shell_config_block() {
     local config_file="$1"
@@ -109,28 +81,13 @@ add_shell_config_block() {
 
     # Check if block already exists
     if grep -q "$block_marker" "$config_file" 2>/dev/null; then
-        log_info "Shell config block already exists, skipping..."
+        log "Shell config block with marker '$block_marker' already exists in $config_file, skipping..."
         return
     fi
 
-    log_info "Adding complete shell config block to $config_file..."
+    log "Adding shell config block to $config_file..."
     echo "" >>"$config_file"
     echo "$block_content" >>"$config_file"
-}
-
-# Check if pyenv configuration already exists in shell config
-is_pyenv_configured() {
-    local config_file="$1"
-    grep -q 'Auto-generated settings by install_prerequisites.sh' "$config_file" 2>/dev/null &&
-        grep -q 'PYENV_ROOT' "$config_file" 2>/dev/null &&
-        grep -q 'pyenv init' "$config_file" 2>/dev/null
-}
-
-# Check if virtual environment activation is already configured
-is_venv_configured() {
-    local config_file="$1"
-    local venv_path="$2"
-    grep -q "source $venv_path/bin/activate" "$config_file" 2>/dev/null
 }
 
 # Get missing packages from a package list
@@ -152,43 +109,44 @@ get_missing_packages() {
 # =============================================================================
 
 setup_workspace() {
-    log_info "Setting up workspace"
-    log_info "Working in ROOT_PATH: $ROOT_PATH"
-    log_info "Detected shell: $CURRENT_SHELL"
-    log_info "Using config file: $SHELL_CONFIG (Shell type: $SHELL_TYPE)"
+    log "Setting up workspace"
+    log "Working in ROOT_PATH: $ROOT_PATH"
+    log "Detected shell: $CURRENT_SHELL"
+    log "Using config file: $SHELL_CONFIG (Shell type: $SHELL_TYPE)"
 
     # Ensure utils directory exists
     if [ ! -d "$UTILS_DIR" ]; then
         mkdir -p "$UTILS_DIR"
-        log_info "Created utils directory: $UTILS_DIR"
+        log "Created utils directory: $UTILS_DIR"
     fi
 }
 
 install_dev_prerequisites() {
-    log_info "Checking development prerequisites..."
-    local missing_packages=$(get_missing_packages "$DEV_PACKAGES")
+    log "Checking development prerequisites..."
+    local missing_packages
+    missing_packages=$(get_missing_packages "$DEV_PACKAGES")
 
     if [ -n "$missing_packages" ]; then
-        log_info "Installing missing packages:$missing_packages"
+        log "Installing missing packages:$missing_packages"
         sudo apt update
         sudo apt install -y $missing_packages
     else
-        log_info "All development prerequisites are already installed."
+        log "All development prerequisites are already installed."
     fi
 }
 
 install_clang() {
-    log_info "Checking clang version $CLANG_VERSION..."
+    log "Checking clang version $CLANG_VERSION..."
     if command_exists "clang-$CLANG_VERSION"; then
-        log_info "Clang $CLANG_VERSION is already installed."
+        log "Clang $CLANG_VERSION is already installed."
         return
     fi
 
-    log_info "Installing clang version $CLANG_VERSION..."
+    log "Installing clang version $CLANG_VERSION..."
     cd "$UTILS_DIR"
 
     if [ ! -f llvm.sh ]; then
-        log_info "Downloading llvm.sh to utils directory..."
+        log "Downloading llvm.sh to utils directory..."
         wget -O llvm.sh https://apt.llvm.org/llvm.sh
         chmod +x llvm.sh
     fi
@@ -198,16 +156,17 @@ install_clang() {
 }
 
 install_bazel() {
-    log_info "Checking bazelisk and bazel..."
+    log "Checking bazelisk and bazel..."
     if command_exists "bazel" && command_exists "bazelisk"; then
-        log_info "Bazelisk and bazel are already installed."
+        log "Bazelisk and bazel are already installed."
         return
     fi
 
-    log_info "Installing bazelisk and bazel..."
+    log "Installing bazelisk and bazel..."
 
     # Detect architecture
-    local arch=$(uname -m)
+    local arch
+    arch=$(uname -m)
     local bazelisk_arch
     case "$arch" in
     "x86_64")
@@ -217,12 +176,12 @@ install_bazel() {
         bazelisk_arch="linux-arm64"
         ;;
     *)
-        log_warn "Unsupported architecture $arch. Defaulting to linux-amd64"
+        warn "Unsupported architecture $arch. Defaulting to linux-amd64"
         bazelisk_arch="linux-amd64"
         ;;
     esac
 
-    log_info "Downloading bazelisk for architecture: $bazelisk_arch"
+    log "Downloading bazelisk for architecture: $bazelisk_arch"
     cd "$UTILS_DIR"
 
     if [ ! -f bazelisk ]; then
@@ -236,29 +195,30 @@ install_bazel() {
 }
 
 install_pyenv_prerequisites() {
-    log_info "Checking pyenv prerequisites..."
-    local missing_packages=$(get_missing_packages "$PYENV_PACKAGES")
+    log "Checking pyenv prerequisites..."
+    local missing_packages
+    missing_packages=$(get_missing_packages "$PYENV_PACKAGES")
 
     if [ -n "$missing_packages" ]; then
-        log_info "Installing missing pyenv prerequisites:$missing_packages"
+        log "Installing missing pyenv prerequisites:$missing_packages"
         sudo apt install -y --no-install-recommends $missing_packages
     else
-        log_info "All pyenv prerequisites are already installed."
+        log "All pyenv prerequisites are already installed."
     fi
 }
 
 install_pyenv() {
-    log_info "Checking pyenv installation..."
+    log "Checking pyenv installation..."
     if command_exists "pyenv"; then
-        log_info "Pyenv is already installed."
+        log "Pyenv is already installed."
         return
     fi
 
-    log_info "Installing pyenv..."
+    log "Installing pyenv..."
     cd "$UTILS_DIR"
 
     if [ ! -f pyenv-installer.sh ]; then
-        log_info "Downloading pyenv installer to utils directory..."
+        log "Downloading pyenv installer to utils directory..."
         curl -fsSL https://pyenv.run -o pyenv-installer.sh
         chmod +x pyenv-installer.sh
     fi
@@ -267,48 +227,23 @@ install_pyenv() {
     cd "$ROOT_PATH"
 }
 
-configure_pyenv() {
-    log_info "Checking pyenv configuration in $SHELL_CONFIG..."
-
-    if is_pyenv_configured "$SHELL_CONFIG"; then
-        log_info "Pyenv is already configured in shell config."
-    else
-        local config_block="# ==================================================================
-# Auto-generated settings by install_prerequisites.sh (minimal-litert-c)
-
-# Pyenv configuration for Python version management
-export PYENV_ROOT=\"\$HOME/.pyenv\"
-export PATH=\"\$PYENV_ROOT/bin:\$PATH\"
-if command -v pyenv 1>/dev/null 2>&1; then
-  eval \"\$(pyenv init --path)\"
-  eval \"\$(pyenv init -)\"
-fi
-
-# Python virtual environment auto-activation
-source $VENV_PATH/bin/activate
-
-# Bazel hermetic Python version specification
-export HERMETIC_PYTHON_VERSION=$HERMETIC_PYTHON_VERSION
-
-# =================================================================="
-        source ~/.bashrc 2>/dev/null || log_warn "Please restart your shell to apply pyenv configuration"
-        add_shell_config_block "$SHELL_CONFIG" "$config_block" "Auto-generated settings by install_prerequisites.sh"
-    fi
-}
-
 install_python() {
-    log_info "Checking Python $PYTHON_VERSION installation..."
+    log "Checking Python $PYTHON_VERSION installation..."
 
-    # Setup pyenv environment
+    # Setup pyenv environment for the current script run
     export PYENV_ROOT="$HOME/.pyenv"
     export PATH="$PYENV_ROOT/bin:$PATH"
-    eval "$(pyenv init --path)" 2>/dev/null
-    eval "$(pyenv init -)" 2>/dev/null
+    if command_exists pyenv; then
+        eval "$(pyenv init --path)"
+        eval "$(pyenv init -)"
+    else
+        warn "pyenv command not found. Python installation might fail."
+    fi
 
     if pyenv versions | grep -q "$PYTHON_VERSION"; then
-        log_info "Python $PYTHON_VERSION is already installed via pyenv."
+        log "Python $PYTHON_VERSION is already installed via pyenv."
     else
-        log_info "Installing Python $PYTHON_VERSION via pyenv..."
+        log "Installing Python $PYTHON_VERSION via pyenv..."
         pyenv install "$PYTHON_VERSION"
     fi
 
@@ -316,23 +251,49 @@ install_python() {
 }
 
 configure_python_venv() {
-    log_info "Checking Python virtual environment..."
+    log "Checking Python virtual environment..."
 
     if [ -d "$VENV_PATH" ]; then
-        log_info "Python virtual environment already exists."
+        log "Python virtual environment already exists."
     else
-        log_info "Creating Python virtual environment..."
+        log "Creating Python virtual environment..."
         cd "$ROOT_PATH"
         python3 -m venv .ws_pip
         cd "$ROOT_PATH"
     fi
-
-    log_info "Virtual environment configuration will be included in the main config block."
 }
 
-configure_python_bazel() {
-    log_info "Bazel Python configuration will be included in the main config block."
+configure_shell() {
+    log "Configuring shell for pyenv, virtual environment, and Bazel..."
+
+    local block_marker="# Auto-generated settings by install_prerequisites.sh"
+    local config_block="
+    # ==================================================================
+    $block_marker
+
+    # Pyenv configuration for Python version management
+    export PYENV_ROOT=\"\$HOME/.pyenv\"
+    export PATH=\"\$PYENV_ROOT/bin:\$PATH\"
+    if command -v pyenv 1>/dev/null 2>&1; then
+    eval \"\$(pyenv init --path)\"
+    eval \"\$(pyenv init -)\"
+    fi
+
+    # Python virtual environment auto-activation
+    if [ -f \"$VENV_PATH/bin/activate\" ]; then
+        source \"$VENV_PATH/bin/activate\"
+    fi
+
+    # Bazel hermetic Python version specification
+    export HERMETIC_PYTHON_VERSION=$HERMETIC_PYTHON_VERSION
+    # ==================================================================
+    "
+
+    add_shell_config_block "$SHELL_CONFIG" "$config_block" "$block_marker"
 }
+
+
+
 
 # =============================================================================
 # MAIN EXECUTION
@@ -346,11 +307,9 @@ main() {
     install_bazel
     install_pyenv_prerequisites
     install_pyenv
-
-    configure_pyenv
     install_python
     configure_python_venv
-    configure_python_bazel
+    configure_shell
 
     log_info "Installation completed!"
     log_info "Please restart your shell or run the following to apply all changes:"
