@@ -13,7 +13,7 @@ setup_build_config "$BUILD_MODE"
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BENCHMARK_TOOL_BUILD_DIR=${ROOT_PATH}/bazel-bin/external/litert/tflite/tools/benchmark
 BENCHMARK_TOOL_BUILD_BIN=${BENCHMARK_TOOL_BUILD_DIR}/benchmark_model
-BENCHMARK_DIR=${ROOT_PATH}/util/bin
+BENCHMARK_DIR=${ROOT_PATH}/tools/bin
 BENCHMARK_BIN=${BENCHMARK_DIR}/benchmark_model
 
 # ── Clean existing binary ─────────────────────────────────────────────────────

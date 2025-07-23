@@ -17,7 +17,7 @@ set -euo pipefail
 # 0. Load Environment and Helpers                                             #
 # =========================================================================== #
 if [[ ! -f .env ]]; then
-    echo "[ERROR] .env file not found. Please run from project root directory." >&2
+    error ".env file not found. Please run from project root directory." >&2
     exit 1
 fi
 
@@ -32,7 +32,7 @@ banner "Benchmark Utility Configuration"
 # --- Model and Binary Settings ---
 MODEL_PATH="./models/test/mobileone_s0.tflite"
 OUTPUT_DIR="./benchmark/benchmark_model_results/tmp"
-BENCHMARK_BIN="./util/bin/benchmark_model"
+BENCHMARK_BIN="./tools/bin/benchmark_model"
 
 # --- Benchmark Settings ---
 NUM_THREADS=4
@@ -91,6 +91,7 @@ run_benchmark() {
     
     local csv_file="${OUTPUT_DIR}/${model_name}${suffix}.csv"
     local log_file="${OUTPUT_DIR}/${model_name}${suffix}.log"
+    local tmp_fixed_csv_file="${OUTPUT_DIR}/${model_name}${suffix}_fixed.csv"
     
     log "Benchmarking: $model_name"
     log "Configuration: ${NUM_THREADS} threads, GPU=${USE_GPU}, XNNPACK=${USE_XNNPACK}"
@@ -111,9 +112,18 @@ run_benchmark() {
     )
 
     if execute_with_log "$log_file" "${CMD[@]}"; then
-        log "Completed: $model_name"
-        log "  Results: $csv_file"
-        log "  Log: $log_file"
+
+        log "Run main_profile finished"
+        log "Post-processing CSV file..."
+        python3 ${ROOT_PATH}/tools/benchmark/fix_profile_report.py "$csv_file" "$tmp_fixed_csv_file"
+        if [ $? -eq 0 ]; then
+                mv "$tmp_fixed_csv_file" "$csv_file"
+                # log "CSV file overwritten with fixed version: $csv_file"
+            else
+                warn "Failed to fix CSV file. Keeping original."
+                rm -f "$tmp_fixed_csv_file"
+            fi
+        log "Results saved to: $model_name\n - Log: $log_file\n - CSV: $csv_file"
     else
         error "Failed: $model_name. Check log: $log_file"
         return 1

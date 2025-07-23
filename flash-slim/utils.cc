@@ -21,6 +21,10 @@ limitations under the License.
 #include <string>
 #include <utility>
 #include <vector>
+#include <chrono>
+#include <map>
+#include <sstream>
+#include <iomanip>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -254,6 +258,79 @@ namespace ai_edge_torch
                 std::cout << "--------------------------------------------------\n";
             }
             std::cout << "==================================================\n\n";
+        }
+
+        //
+        // 현재 시간을 나노초 단위로 반환
+        int64_t getCurrentTimestampNs()
+        {
+            auto now = std::chrono::high_resolution_clock::now();
+            return std::chrono::duration_cast<std::chrono::nanoseconds>(
+                       now.time_since_epoch())
+                .count();
+        }
+
+        // 타임스탬프를 JSON 형식으로 포맷팅
+        std::string formatTimestampJson(int64_t timestamp_ns, const std::string &event_type,
+                                        const std::string &component, int stage_idx)
+        {
+            // 나노초 단위 타임스탬프를 초와 나노초 부분으로 분리
+            int64_t seconds = timestamp_ns / 1000000000;
+            int64_t nanos = timestamp_ns % 1000000000;
+
+            std::stringstream ss;
+            ss << "{";
+            ss << "\"timestamp\": {\"seconds\": " << seconds << ", \"nanos\": " << nanos << "}, ";
+            ss << "\"event\": \"" << event_type << "\", ";
+            ss << "\"component\": \"" << component << "\"";
+
+            if (stage_idx >= 0)
+            {
+                ss << ", \"stage_idx\": " << stage_idx;
+            }
+
+            ss << "}";
+            return ss.str();
+        }
+
+        // 타임스탬프된 이벤트 로깅
+        void logTimestampedEvent(const std::string &event_type, const std::string &component,
+                                 int stage_idx, std::ostream &out)
+        {
+            int64_t timestamp = getCurrentTimestampNs();
+            out << formatTimestampJson(timestamp, event_type, component, stage_idx) << std::endl;
+        }
+
+        // 더 자세한 속성을 가진 JSON 이벤트 로깅
+        void logJsonEvent(const std::string &event_type, const std::string &component,
+                          const std::map<std::string, std::string> &attributes,
+                          int stage_idx, std::ostream &out)
+        {
+            int64_t timestamp = getCurrentTimestampNs();
+
+            // 나노초 단위 타임스탬프를 초와 나노초 부분으로 분리
+            int64_t seconds = timestamp / 1000000000;
+            int64_t nanos = timestamp % 1000000000;
+
+            std::stringstream ss;
+            ss << "{";
+            ss << "\"timestamp\": {\"seconds\": " << seconds << ", \"nanos\": " << nanos << "}, ";
+            ss << "\"event\": \"" << event_type << "\", ";
+            ss << "\"component\": \"" << component << "\"";
+
+            if (stage_idx >= 0)
+            {
+                ss << ", \"stage_idx\": " << stage_idx;
+            }
+
+            // 추가 속성들 추가
+            for (const auto &attr : attributes)
+            {
+                ss << ", \"" << attr.first << "\": \"" << attr.second << "\"";
+            }
+
+            ss << "}";
+            out << ss.str() << std::endl;
         }
 
     } // namespace custom::util

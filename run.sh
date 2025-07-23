@@ -236,7 +236,7 @@ parse_json_file() {
     fi
     
     # Check if parser script exists
-    local parser_script="./scripts/parse_json_prompt.py"
+    local parser_script="./tools/prompt/parse_json_prompt.py"
     if [[ ! -f "$parser_script" ]]; then
         error "JSON parser script not found: $parser_script. Please ensure the script exists in the scripts directory."
     fi

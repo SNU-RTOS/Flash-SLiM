@@ -20,7 +20,7 @@ bazel-*
 # Build artifacts
 lib/
 obj/
-util/bin
+tools/bin
 output/
 *.o
 *.so
@@ -50,9 +50,11 @@ models/*
 !models/README.md
 !models/.gitkeep
 !models/test
+
 # Results and logs
 result_*
 perf.*
+*.log
 scripts/*.log
 benchmark/benchmark_model_results/tmp/
 benchmark/llm_infer_results/

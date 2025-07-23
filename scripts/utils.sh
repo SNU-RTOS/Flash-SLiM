@@ -20,8 +20,10 @@ banner()      { echo -e "\n${C_BLUE}══════════════�
                 echo -e "${C_BLUE}════════════════════════════════════════════════════════════════════════════════${C_RESET}"; }
 log()         { echo -e "${C_GREEN}✔${C_RESET} $@"; }
 warn()        { echo -e "${C_YELLOW}⚠ Warning:${C_RESET} $@"; }
-error()       { echo -e "${C_RED}✖ Error in ${BASH_SOURCE[1]##*/} at line ${BASH_LINENO[0]}:${C_RESET} $*" >&2; exit 1; }
-
+error() {
+  echo -e "${C_RED}✖ Error in ${BASH_SOURCE[1]}:${BASH_LINENO[0]}:${C_RESET} \n -> $*" >&2
+  exit 1;
+}
 execute_with_log() {
     # Executes a command, redirecting its output based on the implementation chosen below.
     # To switch behavior, comment out the active implementation and uncomment the desired one.
@@ -36,11 +38,11 @@ execute_with_log() {
 
         # --- Implementation 1: Log to console AND file (default) ---
         # Output is shown on the console (with color) and appended to the log file (without color).
-        ( "$@" ) 2>&1 | tee >(sed -r "s/\x1b\[[0-9;]*m//g" >> "$log_file")
+        # ( "$@" ) 2>&1 | tee >(sed -r "s/\x1b\[[0-9;]*m//g" > "$log_file")
 
         # --- Implementation 2: Log ONLY to file ---
         # # Output is NOT shown on the console, only appended to the log file (without color).
-        # ( "$@" ) 2>&1 | sed -r "s/\x1b\[[0-9;]*m//g" >> "$log_file"
+        ( "$@" ) 2>&1 | sed -r "s/\x1b\[[0-9;]*m//g" > "$log_file"
     else
         "$@"
     fi
@@ -66,17 +68,18 @@ clear_caches() {
     log "Clearing CPU Caches..."
     ARCH=$(uname -m)
     
-    BIN_DIR="${ROOT_PATH}/util/bin"
+    BIN_DIR="${ROOT_PATH}/tools/bin"
+    SRC_DIR="${ROOT_PATH}/tools/cache/src"
     ensure_dir "$BIN_DIR"
 
     case "$ARCH" in
         "x86_64")
             CACHE_SCRIPT_NAME="clear_cache_x86"
-            CACHE_SOURCE="./util/clear_cache_x86.cc"
+            CACHE_SOURCE="$SRC_DIR/clear_cache_x86.cc"
         ;;
         "aarch64")
             CACHE_SCRIPT_NAME="clear_cache_arm"
-            CACHE_SOURCE="./util/clear_cache_arm.cc"
+            CACHE_SOURCE="$SRC_DIR/clear_cache_arm.cc"
         ;;
         *)
             error "Unsupported architecture: $ARCH"
