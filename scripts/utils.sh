@@ -192,6 +192,8 @@ save_trace_buffer() {
 setup_build_config() {
   local BUILD_MODE=${1:-release}
   
+  BAZEL_LAUNCH_CONF="--output_user_root=$BAZEL_ROOT"
+
   if [ "$BUILD_MODE" = "debug" ]; then
     BAZEL_CONF="-c dbg"
     COPT_FLAGS="--copt=-Og"
@@ -207,7 +209,7 @@ setup_build_config() {
   GPU_COPT_FLAGS="--copt=-DTFLITE_GPU_ENABLE_INVOKE_LOOP=1 --copt=-DCL_DELEGATE_NO_GL --copt=-DTFLITE_SUPPORTS_GPU_DELEGATE=1"
   
   # Export variables for use in calling scripts
-  export BAZEL_CONF COPT_FLAGS LINKOPTS GPU_FLAGS GPU_COPT_FLAGS
+  export BAZEL_CONF COPT_FLAGS LINKOPTS GPU_FLAGS GPU_COPT_FLAGS BAZEL_LAUNCH_CONF
 }
 
 create_symlink_or_fail() {

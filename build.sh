@@ -87,14 +87,15 @@ setup_dependencies() {
 do_main_build() {
     banner "Building main text generator with Bazel"
     
-    bazel build $BAZEL_CONF \
+    bazel $BAZEL_LAUNCH_CONF \
+        build $BAZEL_CONF \
         //flash-slim:text_generator_main \
         $COPT_FLAGS \
         $LINKOPTS \
         $GPU_FLAGS \
         $GPU_COPT_FLAGS \
         --config=avx_linux \
-        --config=ebpf
+        --config=ebpf        
 
     ensure_dir "${OUT_DIR}"
     banner "Copying binary to output directory"
