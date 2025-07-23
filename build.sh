@@ -87,6 +87,24 @@ setup_dependencies() {
 do_main_build() {
     banner "Building main text generator with Bazel"
     
+    local arch_optimize_config=""
+    # Determine architecture
+    arch=$(uname -m)
+
+    # Set config based on architecture
+    case "${arch}" in
+        x86_64)
+            arch_optimize_config="--config=avx_linux"
+            ;;
+        aarch64*)
+            arch_optimize_config="--config=linux_arm64"
+            ;;
+        *)
+            echo "Unsupported architecture: ${arch}. Using default config."
+            arch_optimize_config=""
+            ;;
+    esac
+
     bazel $BAZEL_LAUNCH_CONF \
         build $BAZEL_CONF \
         //flash-slim:text_generator_main \
@@ -94,8 +112,8 @@ do_main_build() {
         $LINKOPTS \
         $GPU_FLAGS \
         $GPU_COPT_FLAGS \
-        --config=avx_linux \
-        --config=ebpf        
+        $arch_optimize_config \
+        --config=ebpf     
 
     ensure_dir "${OUT_DIR}"
     banner "Copying binary to output directory"
