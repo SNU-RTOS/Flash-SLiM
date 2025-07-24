@@ -69,7 +69,7 @@ clear_caches() {
     ARCH=$(uname -m)
     
     BIN_DIR="${ROOT_PATH}/tools/bin"
-    SRC_DIR="${ROOT_PATH}/tools/cache/src"
+    SRC_DIR="${ROOT_PATH}/tools/cache"
     ensure_dir "$BIN_DIR"
 
     case "$ARCH" in
