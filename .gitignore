@@ -55,12 +55,13 @@ models/*
 # Results and logs
 result_*
 perf.*
-*.log
 scripts/*.log
 benchmark/benchmark_model_results/tmp/
 benchmark/llm_infer_results/
 !benchmark/llm_infer_results/sample/README.md
 !benchmark/llm_infer_results/sample/
+!benchmark/ebpf/sample/
+
 
 # Temporary directories
 backup/

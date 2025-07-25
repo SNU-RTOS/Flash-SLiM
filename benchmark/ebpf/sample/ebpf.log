@@ -1,0 +1,4319 @@
+Attaching 45 probes...
+Attaching USDT probes for tflite_gen application with stage-specific logging...
+
+[================ Load_Model SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 2 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 2 ms
+    - User Mode (Estimated)      : 2 ms
+    - Kernel Mode                : 0 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 0 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 0
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 13
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 0
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 4 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 753664
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Build_Interpreter SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 172 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 172 ms
+    - User Mode (Estimated)      : 59 ms
+    - Kernel Mode                : 113 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 113 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 65
+-- I/O Counts --
+ Read Syscall Count     : 43
+ Write Syscall Count    : 3
+ Block I/O Count        : 809
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 77
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 99 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 16188
+ Read Bytes             : 54091
+ Write Bytes            : 56
+ Block Read Bytes       : 69394432
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Load_Tokenizer SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 142 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 142 ms
+    - User Mode (Estimated)      : 141 ms
+    - Kernel Mode                : 1 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 1 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 0
+-- I/O Counts --
+ Read Syscall Count     : 278
+ Write Syscall Count    : 9
+ Block I/O Count        : 20
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 139
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 8768
+ Read Bytes             : 2261158
+ Write Bytes            : 87
+ Block Read Bytes       : 2265088
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Build_KV_Cache SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 329 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 329 ms
+    - User Mode (Estimated)      : 315 ms
+    - Kernel Mode                : 14 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 14 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 4
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 0
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 303
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 0 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 57422
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 0
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Prepare_Prompt SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 0 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 0 ms
+    - User Mode (Estimated)      : 0 ms
+    - Kernel Mode                : 0 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 0 ms
+        - io_uring               : 0 ms
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 1
+ Block I/O Count        : 0
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 0
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 0 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 0
+ Read Bytes             : 0
+ Write Bytes            : 54
+ Block Read Bytes       : 0
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Prepare_Signature_Runners SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 5 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 5 ms
+    - User Mode (Estimated)      : 5 ms
+    - Kernel Mode                : 0 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 0 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 0
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 0
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 4
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 0 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 2274
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 0
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Prefill SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 694 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 694 ms
+    - User Mode (Estimated)      : 139 ms
+    - Kernel Mode                : 555 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 555 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 79
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 1711
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 297
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 582 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 8323
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 204111872
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 909 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 909 ms
+    - User Mode (Estimated)      : 157 ms
+    - Kernel Mode                : 752 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 752 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2321
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 598
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 650 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9570
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 282513408
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 846 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 846 ms
+    - User Mode (Estimated)      : 148 ms
+    - Kernel Mode                : 698 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 698 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2229
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 536
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 666 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9314
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 274821120
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 880 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 880 ms
+    - User Mode (Estimated)      : 154 ms
+    - Kernel Mode                : 726 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 726 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2262
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 591
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 636 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9391
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276996096
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 849 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 849 ms
+    - User Mode (Estimated)      : 151 ms
+    - Kernel Mode                : 698 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 698 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2220
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 552
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2378 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9202
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273408000
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 845 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 845 ms
+    - User Mode (Estimated)      : 147 ms
+    - Kernel Mode                : 698 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 698 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2247
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 541
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 654 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9329
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 275849216
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 842 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 842 ms
+    - User Mode (Estimated)      : 148 ms
+    - Kernel Mode                : 694 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 694 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2200
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 541
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1506 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9030
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 271990784
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 833 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 833 ms
+    - User Mode (Estimated)      : 137 ms
+    - Kernel Mode                : 696 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 696 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2226
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 552
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 642 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9150
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276828160
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 849 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 849 ms
+    - User Mode (Estimated)      : 145 ms
+    - Kernel Mode                : 704 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 704 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2313
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 556
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 652 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9490
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 284385280
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 841 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 841 ms
+    - User Mode (Estimated)      : 145 ms
+    - Kernel Mode                : 696 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 696 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2293
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 540
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 658 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9378
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 282931200
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 856 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 856 ms
+    - User Mode (Estimated)      : 150 ms
+    - Kernel Mode                : 706 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 706 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2227
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 560
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 649 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9245
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 272695296
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 845 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 845 ms
+    - User Mode (Estimated)      : 145 ms
+    - Kernel Mode                : 700 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 700 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2293
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 549
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 651 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9537
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 281919488
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 836 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 836 ms
+    - User Mode (Estimated)      : 140 ms
+    - Kernel Mode                : 696 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 696 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2198
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 554
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 3177 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9078
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 270450688
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 839 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 839 ms
+    - User Mode (Estimated)      : 141 ms
+    - Kernel Mode                : 698 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 698 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2307
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 548
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 651 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9542
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 284565504
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 838 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 838 ms
+    - User Mode (Estimated)      : 142 ms
+    - Kernel Mode                : 696 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 696 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2219
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 551
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 5679 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9118
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273580032
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 841 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 841 ms
+    - User Mode (Estimated)      : 142 ms
+    - Kernel Mode                : 699 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 699 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2206
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 558
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 3148 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9138
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 271720448
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 848 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 848 ms
+    - User Mode (Estimated)      : 145 ms
+    - Kernel Mode                : 703 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 703 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2291
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 557
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1490 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9547
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 281411584
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 850 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 850 ms
+    - User Mode (Estimated)      : 137 ms
+    - Kernel Mode                : 713 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 713 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2296
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 562
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1505 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9470
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 284127232
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 839 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 839 ms
+    - User Mode (Estimated)      : 140 ms
+    - Kernel Mode                : 699 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 699 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2290
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 541
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2377 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9462
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 282595328
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 836 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 836 ms
+    - User Mode (Estimated)      : 142 ms
+    - Kernel Mode                : 694 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 694 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2253
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 543
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 660 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9261
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276451328
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 847 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 847 ms
+    - User Mode (Estimated)      : 146 ms
+    - Kernel Mode                : 701 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 701 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2259
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 561
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 6532 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9256
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277762048
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 842 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 842 ms
+    - User Mode (Estimated)      : 145 ms
+    - Kernel Mode                : 697 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 697 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2250
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 553
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 632 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9283
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 275701760
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 851 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 851 ms
+    - User Mode (Estimated)      : 145 ms
+    - Kernel Mode                : 706 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 706 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2277
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 566
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 650 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9431
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 278470656
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 842 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 842 ms
+    - User Mode (Estimated)      : 146 ms
+    - Kernel Mode                : 696 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 696 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2264
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 550
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 9089 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9272
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277094400
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 832 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 832 ms
+    - User Mode (Estimated)      : 142 ms
+    - Kernel Mode                : 690 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 690 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2240
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 540
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 6544 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9203
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 274993152
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 841 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 841 ms
+    - User Mode (Estimated)      : 138 ms
+    - Kernel Mode                : 703 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 703 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2274
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 549
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 647 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9447
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 279392256
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 841 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 841 ms
+    - User Mode (Estimated)      : 144 ms
+    - Kernel Mode                : 697 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 697 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2264
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 558
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1468 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9357
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 279146496
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 841 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 841 ms
+    - User Mode (Estimated)      : 145 ms
+    - Kernel Mode                : 696 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 696 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2313
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 554
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 9050 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9559
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 286253056
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 848 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 848 ms
+    - User Mode (Estimated)      : 147 ms
+    - Kernel Mode                : 701 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 701 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2213
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 561
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2333 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9066
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 272859136
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 867 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 867 ms
+    - User Mode (Estimated)      : 160 ms
+    - Kernel Mode                : 707 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 707 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2242
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 579
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 4902 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9256
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 275439616
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 840 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 840 ms
+    - User Mode (Estimated)      : 147 ms
+    - Kernel Mode                : 693 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 693 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2190
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 557
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1473 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9030
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 270225408
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 832 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 832 ms
+    - User Mode (Estimated)      : 140 ms
+    - Kernel Mode                : 692 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 692 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2309
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 538
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 15883 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9539
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 284344320
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 846 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 846 ms
+    - User Mode (Estimated)      : 141 ms
+    - Kernel Mode                : 705 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 705 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2283
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 562
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1486 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9430
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 281288704
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 844 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 844 ms
+    - User Mode (Estimated)      : 144 ms
+    - Kernel Mode                : 700 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 700 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2245
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 554
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2337 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9207
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277176320
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 855 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 855 ms
+    - User Mode (Estimated)      : 151 ms
+    - Kernel Mode                : 704 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 704 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2227
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 574
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2327 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9155
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 274894848
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 847 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 847 ms
+    - User Mode (Estimated)      : 144 ms
+    - Kernel Mode                : 703 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 703 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2260
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 559
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 4046 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9255
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 278122496
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 835 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 835 ms
+    - User Mode (Estimated)      : 143 ms
+    - Kernel Mode                : 692 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 692 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2251
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 535
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1489 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9328
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277393408
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 842 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 842 ms
+    - User Mode (Estimated)      : 145 ms
+    - Kernel Mode                : 697 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 697 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2283
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 547
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1499 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9399
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 281042944
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 836 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 836 ms
+    - User Mode (Estimated)      : 135 ms
+    - Kernel Mode                : 701 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 701 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2348
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 537
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 671 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9718
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 290570240
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 849 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 849 ms
+    - User Mode (Estimated)      : 150 ms
+    - Kernel Mode                : 699 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 699 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2240
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 553
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2318 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9253
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276725760
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 850 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 850 ms
+    - User Mode (Estimated)      : 154 ms
+    - Kernel Mode                : 696 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 696 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2251
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 559
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 15849 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9257
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 278720512
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 845 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 845 ms
+    - User Mode (Estimated)      : 149 ms
+    - Kernel Mode                : 696 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 696 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2250
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 546
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1478 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9256
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276963328
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 845 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 845 ms
+    - User Mode (Estimated)      : 144 ms
+    - Kernel Mode                : 701 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 701 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2295
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 547
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 667 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9395
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280076288
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 840 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 840 ms
+    - User Mode (Estimated)      : 141 ms
+    - Kernel Mode                : 699 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 699 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2320
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 537
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 673 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9610
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 287309824
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 846 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 846 ms
+    - User Mode (Estimated)      : 141 ms
+    - Kernel Mode                : 705 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 705 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2286
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 549
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2359 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9416
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280776704
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 896 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 896 ms
+    - User Mode (Estimated)      : 189 ms
+    - Kernel Mode                : 707 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 707 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 78
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2252
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 546
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 671 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9219
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277491712
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 857 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 857 ms
+    - User Mode (Estimated)      : 141 ms
+    - Kernel Mode                : 716 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 716 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2250
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 571
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 642 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9263
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277250048
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 861 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 861 ms
+    - User Mode (Estimated)      : 158 ms
+    - Kernel Mode                : 703 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 703 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2202
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 556
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 4967 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9192
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273850368
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 836 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 836 ms
+    - User Mode (Estimated)      : 135 ms
+    - Kernel Mode                : 701 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 701 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2274
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 541
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 11731 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9345
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 278528000
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 848 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 848 ms
+    - User Mode (Estimated)      : 144 ms
+    - Kernel Mode                : 704 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 704 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2316
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 558
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 643 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9576
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 285425664
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 837 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 837 ms
+    - User Mode (Estimated)      : 144 ms
+    - Kernel Mode                : 693 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 693 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2273
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 541
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1487 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9314
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280039424
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 848 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 848 ms
+    - User Mode (Estimated)      : 149 ms
+    - Kernel Mode                : 699 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 699 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2240
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 556
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 644 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9276
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 275628032
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 846 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 846 ms
+    - User Mode (Estimated)      : 144 ms
+    - Kernel Mode                : 702 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 702 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2260
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 554
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 649 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9371
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 279592960
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 841 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 841 ms
+    - User Mode (Estimated)      : 142 ms
+    - Kernel Mode                : 699 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 699 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2229
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 547
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 6555 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9239
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 272429056
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 845 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 845 ms
+    - User Mode (Estimated)      : 142 ms
+    - Kernel Mode                : 703 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 703 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2288
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 554
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2344 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9476
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 282685440
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 836 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 836 ms
+    - User Mode (Estimated)      : 137 ms
+    - Kernel Mode                : 699 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 699 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2270
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 537
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 656 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9459
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 279175168
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 876 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 876 ms
+    - User Mode (Estimated)      : 165 ms
+    - Kernel Mode                : 711 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 711 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2268
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 568
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1483 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9340
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277831680
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 844 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 844 ms
+    - User Mode (Estimated)      : 143 ms
+    - Kernel Mode                : 701 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 701 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2250
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 552
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2387 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9258
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277250048
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 842 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 842 ms
+    - User Mode (Estimated)      : 141 ms
+    - Kernel Mode                : 701 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 701 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2241
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 557
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1487 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9260
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277860352
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 845 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 845 ms
+    - User Mode (Estimated)      : 141 ms
+    - Kernel Mode                : 704 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 704 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2281
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 551
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 658 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9339
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280637440
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 840 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 840 ms
+    - User Mode (Estimated)      : 149 ms
+    - Kernel Mode                : 691 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 691 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2257
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 550
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 3173 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9224
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277737472
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 848 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 848 ms
+    - User Mode (Estimated)      : 140 ms
+    - Kernel Mode                : 708 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 708 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2236
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 558
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 25247 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9207
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276226048
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 840 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 840 ms
+    - User Mode (Estimated)      : 136 ms
+    - Kernel Mode                : 704 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 704 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2337
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 551
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1487 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9733
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 287694848
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 847 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 847 ms
+    - User Mode (Estimated)      : 147 ms
+    - Kernel Mode                : 700 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 700 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2205
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 562
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 638 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9108
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273387520
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 849 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 849 ms
+    - User Mode (Estimated)      : 147 ms
+    - Kernel Mode                : 702 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 702 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2304
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 545
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 5748 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9542
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283893760
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 838 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 838 ms
+    - User Mode (Estimated)      : 136 ms
+    - Kernel Mode                : 702 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 702 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2275
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 555
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1488 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9441
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 279306240
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 887 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 887 ms
+    - User Mode (Estimated)      : 208 ms
+    - Kernel Mode                : 679 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 679 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 76
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2248
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 503
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2360 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9285
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277585920
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 875 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 875 ms
+    - User Mode (Estimated)      : 150 ms
+    - Kernel Mode                : 725 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 725 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2244
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 563
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 667 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9295
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 275677184
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 864 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 864 ms
+    - User Mode (Estimated)      : 147 ms
+    - Kernel Mode                : 717 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 717 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2282
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 565
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1559 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9427
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283131904
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 860 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 860 ms
+    - User Mode (Estimated)      : 152 ms
+    - Kernel Mode                : 708 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 708 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2273
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 561
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 17747 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9377
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 279359488
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 855 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 855 ms
+    - User Mode (Estimated)      : 140 ms
+    - Kernel Mode                : 715 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 715 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2267
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 564
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 4067 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9319
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280125440
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 837 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 837 ms
+    - User Mode (Estimated)      : 136 ms
+    - Kernel Mode                : 701 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 701 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2294
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 541
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 3237 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9371
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 281997312
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 835 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 835 ms
+    - User Mode (Estimated)      : 137 ms
+    - Kernel Mode                : 698 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 698 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2233
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 546
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2313 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9280
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 275148800
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 1019 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 1019 ms
+    - User Mode (Estimated)      : 207 ms
+    - Kernel Mode                : 812 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 812 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 79
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2297
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 741
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 37121 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9477
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280363008
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 1067 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 1067 ms
+    - User Mode (Estimated)      : 232 ms
+    - Kernel Mode                : 835 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 835 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 78
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2269
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 777
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1707 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9255
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273874944
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 954 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 954 ms
+    - User Mode (Estimated)      : 183 ms
+    - Kernel Mode                : 771 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 771 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 80
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2278
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 670
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 4585 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9384
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 279605248
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 944 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 944 ms
+    - User Mode (Estimated)      : 168 ms
+    - Kernel Mode                : 776 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 776 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2280
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 660
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2524 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9299
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 278298624
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 1013 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 1013 ms
+    - User Mode (Estimated)      : 199 ms
+    - Kernel Mode                : 814 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 814 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 80
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2257
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 743
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 18314 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9167
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 275681280
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 1244 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 1244 ms
+    - User Mode (Estimated)      : 279 ms
+    - Kernel Mode                : 965 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 965 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 77
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2249
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 966
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1558 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9168
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 274616320
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 983 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 983 ms
+    - User Mode (Estimated)      : 195 ms
+    - Kernel Mode                : 788 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 788 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 80
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2277
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 717
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1693 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9244
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280449024
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 865 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 865 ms
+    - User Mode (Estimated)      : 150 ms
+    - Kernel Mode                : 715 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 715 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2337
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 568
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 650 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9665
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 286732288
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 908 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 908 ms
+    - User Mode (Estimated)      : 167 ms
+    - Kernel Mode                : 741 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 741 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2287
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 624
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1514 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9437
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 282361856
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 886 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 886 ms
+    - User Mode (Estimated)      : 150 ms
+    - Kernel Mode                : 736 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 736 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2235
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 608
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 10426 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9227
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273051648
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 893 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 893 ms
+    - User Mode (Estimated)      : 163 ms
+    - Kernel Mode                : 730 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 730 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2290
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 606
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1545 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9457
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280236032
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 894 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 894 ms
+    - User Mode (Estimated)      : 156 ms
+    - Kernel Mode                : 738 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 738 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2281
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 611
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 629 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9408
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280051712
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 902 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 902 ms
+    - User Mode (Estimated)      : 168 ms
+    - Kernel Mode                : 734 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 734 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2217
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 620
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 5083 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9111
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 272207872
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 875 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 875 ms
+    - User Mode (Estimated)      : 160 ms
+    - Kernel Mode                : 715 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 715 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2299
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 588
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 631 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9351
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283226112
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 896 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 896 ms
+    - User Mode (Estimated)      : 161 ms
+    - Kernel Mode                : 735 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 735 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2280
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 601
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 6884 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9412
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280465408
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 920 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 920 ms
+    - User Mode (Estimated)      : 180 ms
+    - Kernel Mode                : 740 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 740 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 80
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2242
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 627
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 607 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9243
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 274776064
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 1033 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 1033 ms
+    - User Mode (Estimated)      : 211 ms
+    - Kernel Mode                : 822 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 822 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 79
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2302
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 751
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2496 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9376
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 282488832
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 977 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 977 ms
+    - User Mode (Estimated)      : 184 ms
+    - Kernel Mode                : 793 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 793 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2336
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 695
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 615 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9569
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283639808
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 859 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 859 ms
+    - User Mode (Estimated)      : 144 ms
+    - Kernel Mode                : 715 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 715 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2240
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 568
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 4541 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9235
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276615168
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 911 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 911 ms
+    - User Mode (Estimated)      : 158 ms
+    - Kernel Mode                : 753 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 753 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2281
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 631
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2368 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9345
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 280100864
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 889 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 889 ms
+    - User Mode (Estimated)      : 158 ms
+    - Kernel Mode                : 731 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 731 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2262
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 604
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 626 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9233
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 279347200
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 896 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 896 ms
+    - User Mode (Estimated)      : 157 ms
+    - Kernel Mode                : 739 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 739 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2285
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 618
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 627 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9441
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 279355392
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 935 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 935 ms
+    - User Mode (Estimated)      : 171 ms
+    - Kernel Mode                : 764 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 764 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2234
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 655
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1501 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9228
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276799488
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 869 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 869 ms
+    - User Mode (Estimated)      : 150 ms
+    - Kernel Mode                : 719 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 719 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2335
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 577
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 7835 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9584
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 285888512
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 958 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 958 ms
+    - User Mode (Estimated)      : 188 ms
+    - Kernel Mode                : 770 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 770 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 80
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2321
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 662
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 615 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9631
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283697152
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 901 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 901 ms
+    - User Mode (Estimated)      : 160 ms
+    - Kernel Mode                : 741 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 741 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2265
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 618
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 57563 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9270
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276869120
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 877 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 877 ms
+    - User Mode (Estimated)      : 159 ms
+    - Kernel Mode                : 718 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 718 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2276
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 583
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 644 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9379
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 281546752
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 852 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 852 ms
+    - User Mode (Estimated)      : 145 ms
+    - Kernel Mode                : 707 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 707 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2327
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 549
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 667 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9624
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 287686656
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 1028 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 1028 ms
+    - User Mode (Estimated)      : 207 ms
+    - Kernel Mode                : 821 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 821 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 79
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2268
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 754
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2329 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9338
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277938176
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 953 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 953 ms
+    - User Mode (Estimated)      : 175 ms
+    - Kernel Mode                : 778 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 778 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2251
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 670
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 608 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9258
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 275001344
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 901 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 901 ms
+    - User Mode (Estimated)      : 162 ms
+    - Kernel Mode                : 739 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 739 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2316
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 610
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2461 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9560
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283963392
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 930 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 930 ms
+    - User Mode (Estimated)      : 177 ms
+    - Kernel Mode                : 753 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 753 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 80
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2259
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 648
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 5302 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9332
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276848640
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 893 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 893 ms
+    - User Mode (Estimated)      : 159 ms
+    - Kernel Mode                : 734 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 734 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2295
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 611
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 620 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9468
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 281165824
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 944 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 944 ms
+    - User Mode (Estimated)      : 178 ms
+    - Kernel Mode                : 766 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 766 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2354
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 642
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2448 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9660
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 287866880
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 912 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 912 ms
+    - User Mode (Estimated)      : 168 ms
+    - Kernel Mode                : 744 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 744 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2300
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 620
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1548 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9371
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 281956352
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 861 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 861 ms
+    - User Mode (Estimated)      : 142 ms
+    - Kernel Mode                : 719 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 719 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 83
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2296
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 588
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 630 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9399
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 278757376
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 868 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 868 ms
+    - User Mode (Estimated)      : 149 ms
+    - Kernel Mode                : 719 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 719 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2270
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 583
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1504 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9321
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 278630400
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 922 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 922 ms
+    - User Mode (Estimated)      : 172 ms
+    - Kernel Mode                : 750 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 750 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2302
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 634
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 63326 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9429
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283451392
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 870 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 870 ms
+    - User Mode (Estimated)      : 151 ms
+    - Kernel Mode                : 719 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 719 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2245
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 574
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2498 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9201
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276824064
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 872 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 872 ms
+    - User Mode (Estimated)      : 159 ms
+    - Kernel Mode                : 713 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 713 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2267
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 582
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 627 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9319
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277131264
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 960 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 960 ms
+    - User Mode (Estimated)      : 181 ms
+    - Kernel Mode                : 779 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 779 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2301
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 673
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1544 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9427
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283209728
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 1068 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 1068 ms
+    - User Mode (Estimated)      : 212 ms
+    - Kernel Mode                : 856 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 856 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 80
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2283
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 803
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 567 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9317
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277925888
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 940 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 940 ms
+    - User Mode (Estimated)      : 177 ms
+    - Kernel Mode                : 763 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 763 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2288
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 663
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 57742 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9345
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 282759168
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 870 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 870 ms
+    - User Mode (Estimated)      : 149 ms
+    - Kernel Mode                : 721 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 721 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2232
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 585
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 2630 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9126
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273645568
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 924 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 924 ms
+    - User Mode (Estimated)      : 174 ms
+    - Kernel Mode                : 750 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 750 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2300
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 636
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 3354 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9414
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 282996736
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 905 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 905 ms
+    - User Mode (Estimated)      : 168 ms
+    - Kernel Mode                : 737 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 737 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2276
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 613
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 625 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9438
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277614592
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 905 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 905 ms
+    - User Mode (Estimated)      : 165 ms
+    - Kernel Mode                : 740 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 740 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2224
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 628
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1518 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9136
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273793024
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 948 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 948 ms
+    - User Mode (Estimated)      : 179 ms
+    - Kernel Mode                : 769 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 769 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2305
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 660
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1544 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9526
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283267072
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 943 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 943 ms
+    - User Mode (Estimated)      : 180 ms
+    - Kernel Mode                : 763 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 763 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 80
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2259
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 657
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1569 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9320
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 276508672
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 913 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 913 ms
+    - User Mode (Estimated)      : 168 ms
+    - Kernel Mode                : 745 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 745 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2301
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 625
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 3416 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9517
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 283389952
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 903 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 903 ms
+    - User Mode (Estimated)      : 164 ms
+    - Kernel Mode                : 739 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 739 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2233
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 630
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 12681 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9106
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273571840
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 920 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 920 ms
+    - User Mode (Estimated)      : 170 ms
+    - Kernel Mode                : 750 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 750 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2321
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 628
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1564 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9503
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 284213248
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 921 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 921 ms
+    - User Mode (Estimated)      : 175 ms
+    - Kernel Mode                : 746 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 746 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 80
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2262
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 627
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1534 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9325
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 277995520
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 917 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 917 ms
+    - User Mode (Estimated)      : 168 ms
+    - Kernel Mode                : 749 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 749 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 81
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2302
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 625
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 1559 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9617
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 282918912
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 917 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 917 ms
+    - User Mode (Estimated)      : 165 ms
+    - Kernel Mode                : 752 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 752 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 82
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2268
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 624
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 629 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9372
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 278519808
+ Block Write Bytes      : 0
+[===============================================]
+
+[================ Decode_Generation SUMMARY ================]
+ TID                    : 271746
+-- Elapsed Time Analysis --
+ Wall Clock Time                 : 1066 ms
+ - User Logic Time (Estimated)   : 0 ms
+ - I/O Handling elpsaed Time     : 1066 ms
+    - User Mode (Estimated)      : 218 ms
+    - Kernel Mode                : 848 ms
+        - Read Syscall           : 0 ms
+        - Write Syscall          : 0 ms
+        - Page Fault             : 848 ms
+        - io_uring               : 0 ms
+ -- I/O Hadling Time Analysis --
+* I/O Ratio in Logic (%)                 : 100
+* Kernal Mode Ratio in I/O Handling  (%) : 79
+-- I/O Counts --
+ Read Syscall Count     : 0
+ Write Syscall Count    : 0
+ Block I/O Count        : 2238
+ io_uring Completion Count: 0
+-- Total CPU Time --
+ Total CPU Runtime (ms) : 795
+-- Total I/O Time (block device) --
+ Total Block I/O Time   : 33734 ms
+-- Page Faults & Bytes --
+ Page Fault Count       : 9158
+ Read Bytes             : 0
+ Write Bytes            : 0
+ Block Read Bytes       : 273801216
+ Block Write Bytes      : 0
+[===============================================]

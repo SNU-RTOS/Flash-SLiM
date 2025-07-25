@@ -38,9 +38,9 @@ banner "Script Configuration"
 # MODEL_DIR="${MODEL_PATH}/Llama3.2-3B"
 # MODEL_NAME="llama3.2_q8_ekv1024"
 
-# MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
+MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
 # MODEL_NAME="gemma3_q4_ekv2048"
-# MODEL_NAME="gemma3_q8_ekv2048"
+MODEL_NAME="gemma3_q8_ekv2048"
 
 # MODEL_DIR="${MODEL_PATH}/Gemma2-2B"
 # MODEL_NAME="gemma2_q8_ekv1024"
@@ -62,7 +62,7 @@ TARGET="cpu"           # Default target: cpu | gpu
 LOG_ENABLED=false      # Default logging: false
 CORE_LIST="all"          # Default core list for taskset
 NUM_THREADS=1          # Default number of threads
-PROMPT_FILE="./${PROMPT_PATH}/sample_prompt_8_1.json" # Default prompt file
+PROMPT_FILE="${PROMPT_PATH}/sample_prompt_8_1.json" # Default prompt file
 MAX_TOK_LEN=16         # Default max tokens to generate
 NUM_REPEATS=1          # Default number of iterations
 MEMORY_LIMITS=()       # Array of memory limits for cgroup testing
