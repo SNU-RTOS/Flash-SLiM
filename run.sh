@@ -32,15 +32,28 @@ banner "Script Configuration"
 
 # --- Model and Binary Settings ---
 # You can switch models by uncommenting the desired lines.
-MODEL_DIR="${MODEL_PATH}/Llama3.2-1B"
-MODEL_NAME="llama_q8_ekv1024"
+# MODEL_DIR="${MODEL_PATH}/Llama3.2-1B"
+# MODEL_NAME="llama3.2_q8_ekv1280"
 
-# MODEL_DIR="${MODEL_PATH}/llama-3.2-3b-it-q8"
-# MODEL_NAME="llama_q8_ekv1024"
+# MODEL_DIR="${MODEL_PATH}/Llama3.2-3B"
+# MODEL_NAME="llama3.2_q8_ekv1024"
+
 # MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
-# MODEL_NAME="model.q8"
-# MODEL_DIR="${MODEL_PATH}/SmolLM"
-# MODEL_NAME="model.q8"
+# MODEL_NAME="gemma3_q4_ekv2048"
+# MODEL_NAME="gemma3_q8_ekv2048"
+
+# MODEL_DIR="${MODEL_PATH}/Gemma2-2B"
+# MODEL_NAME="gemma2_q8_ekv1024"
+
+# MODEL_DIR="${MODEL_PATH}/Qwen2.5-1.5B"
+# MODEL_NAME="qwen2.5-1.5b_q8_ekv1280"
+# MODEL_NAME="qwen2.5-1.5b_q8_ekv4096"
+
+# MODEL_DIR="${MODEL_PATH}/Qwen2.5-3B"
+# MODEL_NAME="qwen2.5-3b_q8_ekv1280"
+
+# MODEL_DIR="${MODEL_PATH}/SmolLM-135M"
+# MODEL_NAME="smollm_q8_ekv1280"
 
 BIN="output/text_generator_main"
 
