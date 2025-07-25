@@ -39,6 +39,12 @@ local_repository(
 #     branch = "main",
 # )
 
+# XNNPACK from local path
+local_repository(
+    name = "XNNPACK",
+    path = "external/XNNPACK",
+)
+
 # Abseil (using same version as ai-edge-torch)
 http_archive(
     name = "com_google_absl",

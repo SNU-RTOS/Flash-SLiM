@@ -36,12 +36,16 @@
 #define TRACE_IO_END(stage_idx)
 #endif
 
-// AI EDGE TORCH & LiteRT
+// abseil
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/match.h"
+
+// Sentencepiece
 #include "src/sentencepiece_processor.h"
+
+// LiteRT Core
 #include "tflite/delegates/xnnpack/xnnpack_delegate.h"
 #include "tflite/experimental/genai/genai_ops.h"
 #include "tflite/interpreter.h"
@@ -50,6 +54,15 @@
 #include "tflite/model_builder.h"
 #include "tflite/signature_runner.h"
 
+// LiteRT Profiling
+// #include "tflite/profiling/profile_summarizer.h"
+// #include "tflite/profiling/buffered_profiler.h"
+// #include "tflite/profiling/profile_summary_formatter.h"
+// #include "tflite/tools/benchmark/benchmark_model.h"
+// #include "tflite/tools/benchmark/benchmark_params.h"
+// #include "tflite/tools/logging.h"
+
+// Custom
 #include "utils.h"
 #include "sampler.h"
 #include "profiler.h"

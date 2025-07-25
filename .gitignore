@@ -36,6 +36,7 @@ __pycache__/
 .Python
 nohup.out
 
+
 # ── Project Specific ──────────────────────────────────────────────────────────
 # Environment and configuration
 .env
@@ -83,3 +84,5 @@ evaluation/*
 !prompt/README.md
 
 
+
+tmp

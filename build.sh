@@ -73,6 +73,8 @@ setup_dependencies() {
     local external_dir="${EXTERNAL_DIR:-external}"
     local litert_repo="${LITERT_REPO_URL:-https://github.com/Seunmul/LiteRT.git}"
     local litert_dir="$external_dir/litert" # Corrected to match WORKSPACE
+    local XNNPACK_repo="${XNNPACK_REPO_URL:-https://github.com/Seunmul/XNNPACK.git}"
+    local XNNPACK_dir="$external_dir/XNNPACK"
 
     ensure_dir "$external_dir"
 
@@ -82,6 +84,14 @@ setup_dependencies() {
     else
         log "LiteRT repository already exists. Skipping clone."
     fi
+
+    if [ ! -d "$XNNPACK_dir" ]; then
+        log "Cloning XNNPACK repository into $XNNPACK_dir..."
+        git clone "$XNNPACK_repo" "$XNNPACK_dir" --depth 1
+    else
+        log "XNNPACK repository already exists. Skipping clone."
+    fi
+
 }
 
 do_main_build() {
