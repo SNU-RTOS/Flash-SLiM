@@ -1,0 +1,34 @@
+#ifndef FLASH_SLIM_SAMPLER_H_
+#define FLASH_SLIM_SAMPLER_H_
+
+#include <vector>
+#include <random>
+#include <algorithm>
+#include <limits>
+#include <cmath>
+#include <unordered_set>
+#include "tflite/interpreter.h"
+
+namespace custom::sampler
+{
+    // Greedy Sampler
+    int greedy_sampler(const TfLiteTensor *logits);
+
+    // Top-K Sampler
+    int top_k_sampler(const TfLiteTensor *logits, int k);
+
+    // Top-P (Nucleus) Sampler
+    int top_p_sampler(const TfLiteTensor *logits, float p);
+
+    // Temperature + Top-K + Top-P Sampler
+    int temperature_top_k_top_p_sampler(const TfLiteTensor *logits, float temperature, int k, float p);
+
+    // Temperature + Top-K + Top-P + Repetition Penalty Sampler
+    int temperature_top_k_top_p_repetition_sampler(const TfLiteTensor *logits, 
+                                                  float temperature, int k, float p,
+                                                  const std::unordered_set<int>& previously_generated_tokens,
+                                                  float repetition_penalty = 1.2f);
+
+} // namespace custom::sampler
+
+#endif // FLASH_SLIM_SAMPLER_H_

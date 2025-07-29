@@ -1,0 +1,12 @@
+[
+  {
+    "tokens": 8,
+    "prompt": "Once upon a time, there was",
+    "temperature": 1.85,
+    "top_k": 40,
+    "top_p": 0.9,
+    "repetition_penalty": 2.0,
+    "enable_repetition_penalty": false,
+    "description": "간단한 이야기 시작"
+  }
+]

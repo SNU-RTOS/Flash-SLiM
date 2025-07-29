@@ -1,47 +1,68 @@
 #!/bin/bash
 
+REMOTE_HOST=192.xxx.xxx.xxx
+REMOTE_USER=YOUR_USER_NAME
+REMOTE_PORT=YOUR_PORT_NAME
+REMOTE_PASSWORD=YOUR_PASSWD
+
+REMOTE_MODEL_DIR=/root/ghpark/LiteRT_LLM_Inference_app/models
+
+EXPORTED_MODEL_DIR=/home/rtos/workspace/ghpark/export
+
+
+# MODEL_NAME="DeepSeek-R1-Distill-Qwen-1.5B"
+# SCRIPT_PATH="/home/rtos/workspace/ghpark/ai-edge-torch/ai_edge_torch/generative/examples/deepseek"
+
+# MODEL_NAME=gemma-2-2b-it
+# SCRIPT_PATH="/home/rtos/workspace/ghpark/ai-edge-torch/ai_edge_torch/generative/examples/gemma"
+
+# MODEL_NAME="phi-3.5-mini-it"
+# SCRIPT_PATH="/home/rtos/workspace/ghpark/ai-edge-torch/ai_edge_torch/generative/examples/phi"
+
 MODEL_NAME=llama-3.2-3b-it
-EXPORT_PATH="/home/rtos/workspace/ghpark/export"
 SCRIPT_PATH="/home/rtos/workspace/ghpark/ai-edge-torch/ai_edge_torch/generative/examples/llama"
 
+MODEL_EXPORT_PATH="/home/rtos/workspace/models/export"
+MODEL_ORIGIN_CHECKPOINT_PATH="/home/rtos/workspace/models/llm/${MODEL_NAME}"
 
-
-
-echo "========================================"
-
-OUTPUT_PATH="${EXPORT_PATH}/${MODEL_NAME}-fp32"
 exec > >(tee "log-${MODEL_NAME}-fp32.log") 2>&1  # stdout + stderr을 로그 파일에 저장 & 실시간 출력
-if [ -d "${OUTPUT_PATH}" ]; then
-  echo "Directory '${OUTPUT_PATH}' already exists. Skipping creation."
-else
-  echo "Directory '${OUTPUT_PATH}' does not exist. Creating now."
-  mkdir -p "${OUTPUT_PATH}"
-  echo "Directory '${OUTPUT_PATH}' created successfully."
-fi
-
-python3 ${SCRIPT_PATH}/convert_to_tflite.py \
-     --checkpoint_path  /home/rtos/workspace/ghpark/models/${MODEL_NAME} \
-     --output_path ${OUTPUT_PATH}
-
-echo "[INFO] ${OUTPUT_PATH}  exported"
 
 # echo "========================================"
-
-# OUTPUT_PATH="${EXPORT_PATH}/${MODEL_NAME}-q8"
-# if [ -d "${OUTPUT_PATH}" ]; then
-#   echo "Directory '${OUTPUT_PATH}' already exists. Skipping creation."
+# EXPORT_PATH="${MODEL_EXPORT_PATH}/${MODEL_NAME}-fp32"
+# if [ -d "${EXPORT_PATH}" ]; then
+#   echo "Directory '${EXPORT_PATH}' already exists. Skipping creation."
 # else
-#   echo "Directory '${OUTPUT_PATH}' does not exist. Creating now."
-#   mkdir -p "${OUTPUT_PATH}"
-#   echo "Directory '${OUTPUT_PATH}' created successfully."
+#   echo "Directory '${EXPORT_PATH}' does not exist. Creating now."
+#   mkdir -p "${EXPORT_PATH}"
+#   echo "Directory '${EXPORT_PATH}' created successfully."
 # fi
 
 # python3 ${SCRIPT_PATH}/convert_to_tflite.py \
 #      --checkpoint_path  /home/rtos/workspace/ghpark/models/${MODEL_NAME} \
-#      --output_path ${OUTPUT_PATH} \
-#      --quantize True
+#      --output_path ${EXPORT_PATH} \
+#      --saved_model_path ${EXPORT_PATH}
 
-# echo "[INFO] ${OUTPUT_PATH}  exported"
+# echo "[INFO] ${EXPORT_PATH} exported"
 
+
+exec > >(tee "log-${MODEL_NAME}-q8.log") 2>&1  # stdout + stderr을 로그 파일에 저장 & 실시간 출력
+
+echo "========================================"
+EXPORT_PATH="${MODEL_EXPORT_PATH}/${MODEL_NAME}-q8"
+if [ -d "${EXPORT_PATH}" ]; then
+  echo "Directory '${EXPORT_PATH}' already exists. Skipping creation."
+else
+  echo "Directory '${EXPORT_PATH}' does not exist. Creating now."
+  mkdir -p "${EXPORT_PATH}"
+  echo "Directory '${EXPORT_PATH}' created successfully."
+fi
+
+python3 ${SCRIPT_PATH}/convert_to_tflite.py \
+     --checkpoint_path  ${MODEL_ORIGIN_CHECKPOINT_PATH} \
+     --output_path ${EXPORT_PATH} \
+     --saved_model_path ${EXPORT_PATH} \
+     --quantize True
+
+echo "[INFO] ${EXPORT_PATH} exported"
 
 exit
