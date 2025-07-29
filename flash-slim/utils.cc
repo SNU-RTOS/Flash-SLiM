@@ -37,301 +37,180 @@ limitations under the License.
 #include "tflite/schema/schema_generated.h"
 #include "tflite/signature_runner.h"
 
-namespace ai_edge_torch
+namespace custom::util
 {
-    namespace examples
+    // --------------------------------------------------------------------------
+    // Helper functions to print tensor details.
+    // --------------------------------------------------------------------------
+    const char *TfLiteTypeToString(TfLiteType type)
     {
-
-        std::unique_ptr<LoRA> LoRA::FromFile(absl::string_view path)
+        switch (type)
         {
-            std::unique_ptr<tflite::FlatBufferModel> model =
-                tflite::FlatBufferModel::VerifyAndBuildFromFile(path.data());
-            if (model == nullptr)
-            {
-                return nullptr;
-            }
-
-            int rank = -1;
-            absl::flat_hash_map<std::string, std::vector<float, AlignedAllocator<float>>>
-                tensors;
-            for (const auto &tensor :
-                 *model->GetModel()->subgraphs()->Get(0)->tensors())
-            {
-                size_t size = 1;
-                for (const int &dim : *tensor->shape())
-                {
-                    size *= dim;
-                }
-                std::vector<float, AlignedAllocator<float>> buffer(size);
-                const auto *data =
-                    model->GetModel()->buffers()->Get(tensor->buffer())->data();
-                memcpy(buffer.data(), data->data(), data->size());
-                tensors.emplace(*tensor->name(), std::move(buffer));
-
-                if (tensor->name()->str() == "lora_atten_q_a_prime_weight_0")
-                {
-                    rank = tensor->shape()->Get(1);
-                }
-            }
-            if (rank == -1)
-            {
-                return nullptr;
-            }
-
-            return absl::WrapUnique(new LoRA(rank, std::move(tensors)));
+        case kTfLiteNoType:
+            return "NoType";
+        case kTfLiteFloat32:
+            return "Float32";
+        case kTfLiteInt32:
+            return "Int32";
+        case kTfLiteUInt8:
+            return "UInt8";
+        case kTfLiteInt64:
+            return "Int64";
+        case kTfLiteString:
+            return "String";
+        case kTfLiteBool:
+            return "Bool";
+        case kTfLiteInt16:
+            return "Int16";
+        case kTfLiteComplex64:
+            return "Complex64";
+        case kTfLiteInt8:
+            return "Int8";
+        case kTfLiteFloat16:
+            return "Float16";
+        case kTfLiteFloat64:
+            return "Float64";
+        case kTfLiteComplex128:
+            return "Complex128";
+        case kTfLiteUInt64:
+            return "UInt64";
+        case kTfLiteResource:
+            return "Resource";
+        case kTfLiteVariant:
+            return "Variant";
+        case kTfLiteUInt32:
+            return "UInt32";
+        default:
+            return "Unknown";
         }
+    }
 
-        tflite::SignatureRunner *LoRA::GetPrefillRunner(
-            tflite::Interpreter *interpreter, int matched_sequence_length) const
+    void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name)
+    {
+        if (tensor == nullptr)
+            return;
+        std::cout << "    - " << tensor_name
+                  << " (Type: " << TfLiteTypeToString(tensor->type)
+                  << ", Dims: [";
+        for (int i = 0; i < tensor->dims->size; ++i)
         {
-            std::string signature_name =
-                absl::StrFormat("prefill_%d_lora_r%d", matched_sequence_length, rank_);
-            return GetRunnerHelper(interpreter, signature_name);
+            std::cout << tensor->dims->data[i] << (i == tensor->dims->size - 1 ? "" : ", ");
         }
+        std::cout << "])\n";
+    }
 
-        tflite::SignatureRunner *LoRA::GetDecodeRunner(
-            tflite::Interpreter *interpreter) const
-        {
-            std::string signature_name = absl::StrFormat("decode_lora_r%d", rank_);
-            return GetRunnerHelper(interpreter, signature_name);
-        };
+    // --------------------------------------------------------------------------
+    // Prints information about all signature runners in the interpreter.
+    // --------------------------------------------------------------------------
+    void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter)
+    {
+        std::cout << "\n[INFO] Dumping Signature Runner Information...\n";
+        std::cout << "==================================================\n";
 
-        tflite::SignatureRunner *LoRA::GetRunnerHelper(
-            tflite::Interpreter *interpreter, absl::string_view signature_name) const
+        const auto &signature_keys = interpreter->signature_keys();
+        for (const auto *key : signature_keys)
         {
-            tflite::SignatureRunner *runner =
-                interpreter->GetSignatureRunner(signature_name.data());
+            tflite::SignatureRunner *runner = interpreter->GetSignatureRunner(key->c_str());
             if (runner == nullptr)
+                continue;
+
+            std::cout << "Signature: \"" << *key << "\"\n";
+
+            // Print Inputs
+            std::cout << "  Inputs:\n";
+            const auto &inputs = runner->input_names();
+            for (const auto &input_name : inputs)
             {
-                return nullptr;
+                // std::cout << "    - " << input_name << ": "<< std::endl;
+                TfLiteTensor *input_tensor = runner->input_tensor(input_name);
+                PrintTensorInfo(input_tensor, input_name);
             }
 
-            absl::flat_hash_set<std::string> lora_input_tensors;
-            lora_input_tensors.reserve(runner->input_size());
-            for (const char *input_name : runner->input_names())
+            // Print Outputs
+            std::cout << "  Outputs:\n";
+            const auto &outputs = runner->output_names();
+            for (const auto &output_name : outputs)
             {
-                if (absl::StrContains(input_name, "lora"))
-                {
-                    lora_input_tensors.insert(input_name);
-                }
+                // std::cout << "    - " << output_name << ": "<< std::endl;
+                TfLiteTensor *output_tensor = runner->input_tensor(output_name);
+                PrintTensorInfo(output_tensor, output_name);
             }
-
-            if (lora_input_tensors.size() < tensors_.size())
-            {
-                return nullptr;
-            }
-
-            for (const auto &[name, buffer] : tensors_)
-            {
-                TfLiteTensor *tensor = runner->input_tensor(name.c_str());
-                if (tensor == nullptr)
-                {
-                    return nullptr;
-                }
-                lora_input_tensors.erase(name);
-                TfLiteCustomAllocation allocation = {
-                    .data = static_cast<void *>(const_cast<float *>(buffer.data())),
-                    .bytes = buffer.size() * sizeof(float)};
-                if (runner->SetCustomAllocationForInputTensor(name.c_str(), allocation) !=
-                    kTfLiteOk)
-                {
-                    return nullptr;
-                }
-            };
-            if (runner->AllocateTensors() != kTfLiteOk)
-            {
-                return nullptr;
-            }
-
-            for (const auto &name : lora_input_tensors)
-            {
-                TfLiteTensor *tensor = runner->input_tensor(name.c_str());
-                if (tensor == nullptr)
-                {
-                    return nullptr;
-                }
-                memset(tensor->data.data, 0, tensor->bytes);
-            }
-
-            return runner;
+            std::cout << "--------------------------------------------------\n";
         }
-    } // namespace examples
+        std::cout << "==================================================\n\n";
+    }
 
-    namespace custom::util
+    //
+    // 현재 시간을 나노초 단위로 반환
+    int64_t getCurrentTimestampNs()
     {
-        // --------------------------------------------------------------------------
-        // Helper functions to print tensor details.
-        // --------------------------------------------------------------------------
-        const char *TfLiteTypeToString(TfLiteType type)
+        auto now = std::chrono::high_resolution_clock::now();
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(
+                   now.time_since_epoch())
+            .count();
+    }
+
+    // 타임스탬프를 JSON 형식으로 포맷팅
+    std::string formatTimestampJson(int64_t timestamp_ns, const std::string &event_type,
+                                    const std::string &component, int stage_idx)
+    {
+        // 나노초 단위 타임스탬프를 초와 나노초 부분으로 분리
+        int64_t seconds = timestamp_ns / 1000000000;
+        int64_t nanos = timestamp_ns % 1000000000;
+
+        std::stringstream ss;
+        ss << "{";
+        ss << "\"timestamp\": {\"seconds\": " << seconds << ", \"nanos\": " << nanos << "}, ";
+        ss << "\"event\": \"" << event_type << "\", ";
+        ss << "\"component\": \"" << component << "\"";
+
+        if (stage_idx >= 0)
         {
-            switch (type)
-            {
-            case kTfLiteNoType:
-                return "NoType";
-            case kTfLiteFloat32:
-                return "Float32";
-            case kTfLiteInt32:
-                return "Int32";
-            case kTfLiteUInt8:
-                return "UInt8";
-            case kTfLiteInt64:
-                return "Int64";
-            case kTfLiteString:
-                return "String";
-            case kTfLiteBool:
-                return "Bool";
-            case kTfLiteInt16:
-                return "Int16";
-            case kTfLiteComplex64:
-                return "Complex64";
-            case kTfLiteInt8:
-                return "Int8";
-            case kTfLiteFloat16:
-                return "Float16";
-            case kTfLiteFloat64:
-                return "Float64";
-            case kTfLiteComplex128:
-                return "Complex128";
-            case kTfLiteUInt64:
-                return "UInt64";
-            case kTfLiteResource:
-                return "Resource";
-            case kTfLiteVariant:
-                return "Variant";
-            case kTfLiteUInt32:
-                return "UInt32";
-            default:
-                return "Unknown";
-            }
+            ss << ", \"stage_idx\": " << stage_idx;
         }
 
-        void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name)
+        ss << "}";
+        return ss.str();
+    }
+
+    // 타임스탬프된 이벤트 로깅
+    void logTimestampedEvent(const std::string &event_type, const std::string &component,
+                             int stage_idx, std::ostream &out)
+    {
+        int64_t timestamp = getCurrentTimestampNs();
+        out << formatTimestampJson(timestamp, event_type, component, stage_idx) << std::endl;
+    }
+
+    // 더 자세한 속성을 가진 JSON 이벤트 로깅
+    void logJsonEvent(const std::string &event_type, const std::string &component,
+                      const std::map<std::string, std::string> &attributes,
+                      int stage_idx, std::ostream &out)
+    {
+        int64_t timestamp = getCurrentTimestampNs();
+
+        // 나노초 단위 타임스탬프를 초와 나노초 부분으로 분리
+        int64_t seconds = timestamp / 1000000000;
+        int64_t nanos = timestamp % 1000000000;
+
+        std::stringstream ss;
+        ss << "{";
+        ss << "\"timestamp\": {\"seconds\": " << seconds << ", \"nanos\": " << nanos << "}, ";
+        ss << "\"event\": \"" << event_type << "\", ";
+        ss << "\"component\": \"" << component << "\"";
+
+        if (stage_idx >= 0)
         {
-            if (tensor == nullptr)
-                return;
-            std::cout << "    - " << tensor_name
-                      << " (Type: " << TfLiteTypeToString(tensor->type)
-                      << ", Dims: [";
-            for (int i = 0; i < tensor->dims->size; ++i)
-            {
-                std::cout << tensor->dims->data[i] << (i == tensor->dims->size - 1 ? "" : ", ");
-            }
-            std::cout << "])\n";
+            ss << ", \"stage_idx\": " << stage_idx;
         }
 
-        // --------------------------------------------------------------------------
-        // Prints information about all signature runners in the interpreter.
-        // --------------------------------------------------------------------------
-        void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter)
+        // 추가 속성들 추가
+        for (const auto &attr : attributes)
         {
-            std::cout << "\n[INFO] Dumping Signature Runner Information...\n";
-            std::cout << "==================================================\n";
-
-            const auto &signature_keys = interpreter->signature_keys();
-            for (const auto *key : signature_keys)
-            {
-                tflite::SignatureRunner *runner = interpreter->GetSignatureRunner(key->c_str());
-                if (runner == nullptr)
-                    continue;
-
-                std::cout << "Signature: \"" << *key << "\"\n";
-
-                // Print Inputs
-                std::cout << "  Inputs:\n";
-                const auto &inputs = runner->input_names();
-                for (const auto &input_name : inputs)
-                {
-                    // std::cout << "    - " << input_name << ": "<< std::endl;
-                    TfLiteTensor *input_tensor = runner->input_tensor(input_name);
-                    PrintTensorInfo(input_tensor, input_name);
-                }
-
-                // Print Outputs
-                std::cout << "  Outputs:\n";
-                const auto &outputs = runner->output_names();
-                for (const auto &output_name : outputs)
-                {
-                    // std::cout << "    - " << output_name << ": "<< std::endl;
-                    TfLiteTensor *output_tensor = runner->input_tensor(output_name);
-                    PrintTensorInfo(output_tensor, output_name);
-                }
-                std::cout << "--------------------------------------------------\n";
-            }
-            std::cout << "==================================================\n\n";
+            ss << ", \"" << attr.first << "\": \"" << attr.second << "\"";
         }
 
-        //
-        // 현재 시간을 나노초 단위로 반환
-        int64_t getCurrentTimestampNs()
-        {
-            auto now = std::chrono::high_resolution_clock::now();
-            return std::chrono::duration_cast<std::chrono::nanoseconds>(
-                       now.time_since_epoch())
-                .count();
-        }
+        ss << "}";
+        out << ss.str() << std::endl;
+    }
 
-        // 타임스탬프를 JSON 형식으로 포맷팅
-        std::string formatTimestampJson(int64_t timestamp_ns, const std::string &event_type,
-                                        const std::string &component, int stage_idx)
-        {
-            // 나노초 단위 타임스탬프를 초와 나노초 부분으로 분리
-            int64_t seconds = timestamp_ns / 1000000000;
-            int64_t nanos = timestamp_ns % 1000000000;
-
-            std::stringstream ss;
-            ss << "{";
-            ss << "\"timestamp\": {\"seconds\": " << seconds << ", \"nanos\": " << nanos << "}, ";
-            ss << "\"event\": \"" << event_type << "\", ";
-            ss << "\"component\": \"" << component << "\"";
-
-            if (stage_idx >= 0)
-            {
-                ss << ", \"stage_idx\": " << stage_idx;
-            }
-
-            ss << "}";
-            return ss.str();
-        }
-
-        // 타임스탬프된 이벤트 로깅
-        void logTimestampedEvent(const std::string &event_type, const std::string &component,
-                                 int stage_idx, std::ostream &out)
-        {
-            int64_t timestamp = getCurrentTimestampNs();
-            out << formatTimestampJson(timestamp, event_type, component, stage_idx) << std::endl;
-        }
-
-        // 더 자세한 속성을 가진 JSON 이벤트 로깅
-        void logJsonEvent(const std::string &event_type, const std::string &component,
-                          const std::map<std::string, std::string> &attributes,
-                          int stage_idx, std::ostream &out)
-        {
-            int64_t timestamp = getCurrentTimestampNs();
-
-            // 나노초 단위 타임스탬프를 초와 나노초 부분으로 분리
-            int64_t seconds = timestamp / 1000000000;
-            int64_t nanos = timestamp % 1000000000;
-
-            std::stringstream ss;
-            ss << "{";
-            ss << "\"timestamp\": {\"seconds\": " << seconds << ", \"nanos\": " << nanos << "}, ";
-            ss << "\"event\": \"" << event_type << "\", ";
-            ss << "\"component\": \"" << component << "\"";
-
-            if (stage_idx >= 0)
-            {
-                ss << ", \"stage_idx\": " << stage_idx;
-            }
-
-            // 추가 속성들 추가
-            for (const auto &attr : attributes)
-            {
-                ss << ", \"" << attr.first << "\": \"" << attr.second << "\"";
-            }
-
-            ss << "}";
-            out << ss.str() << std::endl;
-        }
-
-    } // namespace custom::util
-} // namespace ai_edge_torch
+} // namespace custom::util

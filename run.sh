@@ -38,9 +38,9 @@ banner "Script Configuration"
 # MODEL_DIR="${MODEL_PATH}/Llama3.2-3B"
 # MODEL_NAME="llama3.2_q8_ekv1024"
 
-MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
+# MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
 # MODEL_NAME="gemma3_q4_ekv2048"
-MODEL_NAME="gemma3_q8_ekv2048"
+# MODEL_NAME="gemma3_q8_ekv2048"
 
 # MODEL_DIR="${MODEL_PATH}/Gemma2-2B"
 # MODEL_NAME="gemma2_q8_ekv1024"
@@ -52,8 +52,8 @@ MODEL_NAME="gemma3_q8_ekv2048"
 # MODEL_DIR="${MODEL_PATH}/Qwen2.5-3B"
 # MODEL_NAME="qwen2.5-3b_q8_ekv1280"
 
-# MODEL_DIR="${MODEL_PATH}/SmolLM-135M"
-# MODEL_NAME="smollm_q8_ekv1280"
+MODEL_DIR="${MODEL_PATH}/SmolLM-135M"
+MODEL_NAME="smollm_q8_ekv1280"
 
 BIN="output/text_generator_main"
 
@@ -277,42 +277,67 @@ run_single_prompt() {
     local REPETITION_PENALTY="$7"
     local ENABLE_REPETITION_PENALTY="$8"
     local MEMORY_LIMIT="${9:-}"
+    local CSV_FILE="${LOG_FILE%.log}.csv"
+
     banner "LLM inference start (${TARGET^^})"
-    log "Model            : ${MODEL_NAME}"
-    log "Tokens requested : ${TOKENS}"
+    log "Model                           : ${MODEL_NAME}"
+    log "Tokens requested                : ${TOKENS}"
     # log "Prompt           : ${PROMPT}"
-    log "Cores            : ${CORE_LIST}"
-    log "Threads          : ${NUM_THREADS}"
-    log "Max tokens       : ${MAX_TOK_LEN}"
-    log "Temperature      : ${TEMPERATURE}"
-    log "Top-k            : ${TOP_K}"
-    log "Top-p            : ${TOP_P}"
-    log "Repetition penalty: ${REPETITION_PENALTY}"
-    log "Enable rep. penalty: ${ENABLE_REPETITION_PENALTY}"
-    [[ -n "$MEMORY_LIMIT" ]] && log "Memory limit     : ${MEMORY_LIMIT}"
-    log "Target Processor : ${TARGET^^}"
+    log "Cores                           : ${CORE_LIST}"
+    log "Threads                         : ${NUM_THREADS}"
+    log "Max tokens                      : ${MAX_TOK_LEN}"
+    log "Temperature                     : ${TEMPERATURE}"
+    log "Top-k                           : ${TOP_K}"
+    log "Top-p                           : ${TOP_P}"
+    log "Repetition penalty              : ${REPETITION_PENALTY}"
+    log "Enable rep. penalty             : ${ENABLE_REPETITION_PENALTY}"
+    [[ -n "$MEMORY_LIMIT" ]] && \
+    log "Memory limit                    : ${MEMORY_LIMIT}"
+    log "Target Processor                : ${TARGET^^}"
     if [[ "$LOG_ENABLED" == "true" ]]; then
-        log "Log file         : ${LOG_FILE}"
+        log "Log file                        : ${LOG_FILE}"
+        log "Op-level profiling csv results  : ${CSV_FILE}"
     fi
-    
+
     clear_caches
 
     # Build command as array (safe quoting)
-    local CMD=(
-        "${BIN}"
-        --tflite_model "${MODEL_DIR}/${MODEL_NAME}.tflite"
-        --sentencepiece_model "${MODEL_DIR}/tokenizer.model"
-        --max_decode_steps "${MAX_TOK_LEN}"
-        --start_token "<bos>"
-        --stop_token "<end_of_turn>"
-        --num_threads "${NUM_THREADS}"
-        --prompt "${PROMPT}"
-        --weight_cache_path "${MODEL_DIR}/${MODEL_NAME}.xnnpack_cache"
-        --temperature "${TEMPERATURE}"
-        --top_k "${TOP_K}"
-        --top_p "${TOP_P}"
-        --repetition_penalty "${REPETITION_PENALTY}"
+
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        local CMD=(
+            "${BIN}"
+            --tflite_model "${MODEL_DIR}/${MODEL_NAME}.tflite"
+            --sentencepiece_model "${MODEL_DIR}/tokenizer.model"
+            --max_decode_steps "${MAX_TOK_LEN}"
+            --start_token "<bos>"
+            --stop_token "<end_of_turn>"
+            --num_threads "${NUM_THREADS}"
+            --prompt "${PROMPT}"
+            --weight_cache_path "${MODEL_DIR}/${MODEL_NAME}.xnnpack_cache"
+            --temperature "${TEMPERATURE}"
+            --top_k "${TOP_K}"
+            --top_p "${TOP_P}"
+            --repetition_penalty "${REPETITION_PENALTY}"
+            --csv_profile_output_path "$CSV_FILE"
     )
+    else
+        local CMD=(
+            "${BIN}"
+            --tflite_model "${MODEL_DIR}/${MODEL_NAME}.tflite"
+            --sentencepiece_model "${MODEL_DIR}/tokenizer.model"
+            --max_decode_steps "${MAX_TOK_LEN}"
+            --start_token "<bos>"
+            --stop_token "<end_of_turn>"
+            --num_threads "${NUM_THREADS}"
+            --prompt "${PROMPT}"
+            --weight_cache_path "${MODEL_DIR}/${MODEL_NAME}.xnnpack_cache"
+            --temperature "${TEMPERATURE}"
+            --top_k "${TOP_K}"
+            --top_p "${TOP_P}"
+            --repetition_penalty "${REPETITION_PENALTY}"
+        )
+    fi
+    
 
     # Add repetition penalty flag if enabled
     if [[ "${ENABLE_REPETITION_PENALTY}" == "true" ]]; then
@@ -334,7 +359,20 @@ run_single_prompt() {
     banner "--- C++ Binary Execution END ---"
 
     if [[ "$LOG_ENABLED" == "true" ]]; then
+        local tmp_fixed_csv_file="${CSV_FILE}.fixed.csv"
+
+        echo "[INFO] Post-processing CSV file..."
+        python3 ${ROOT_PATH}/tools/benchmark/fix_profile_report.py "$CSV_FILE" "$tmp_fixed_csv_file"
+        if [ $? -eq 0 ]; then
+                mv "$tmp_fixed_csv_file" "$CSV_FILE"
+                echo "[INFO] CSV file overwritten with fixed version: $CSV_FILE"
+            else
+                echo "[ERROR] Failed to fix CSV file. Keeping original."
+                rm -f "$tmp_fixed_csv_file"
+            fi
+        echo ""
         log "Log saved to ${LOG_FILE}"
+        log "Op-level profiling csv results saved to ${CSV_FILE}"
     fi
 }
 

@@ -3,7 +3,7 @@
 // --------------------------------------------------------------------------
 // A class that provides various sampling methods (Greedy, Top-K, Top-P, etc.)
 // --------------------------------------------------------------------------
-namespace ai_edge_torch::custom::sampler
+namespace custom::sampler
 {
     // ------------------------
     // Greedy Sampler

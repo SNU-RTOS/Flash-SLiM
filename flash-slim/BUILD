@@ -54,7 +54,6 @@ cc_library(
     ],
 )
 
-
 cc_library(
     name = "profiler",
     srcs = ["profiler.cc"],
@@ -71,19 +70,51 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "aligned_allocator",
+    srcs = ["aligned_allocator.h"],
+    deps = [
+        "@litert//tflite:framework",
+        "@litert//tflite:util",
+    ],
+)
+
+cc_library(
+    name = "lora_adapter",
+    srcs = [
+        "lora_adapter.cc",
+    ],
+    hdrs = [
+        "lora_adapter.h",
+    ],
+    deps = [
+        ":aligned_allocator",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/strings:str_format",
+        "@litert//tflite:framework",
+        "@litert//tflite:util",
+        "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
+        "@litert//tflite/experimental/genai:genai_ops",
+        "@litert//tflite/kernels:builtin_ops",
+    ],
+)
+
 cc_binary(
     name = "text_generator_main",
     srcs = [
         "text_generator_main.cc",
     ],
     defines = [
-        "TF_LITE_TENSORFLOW_PROFILER", 
+        "TF_LITE_TENSORFLOW_PROFILER",
     ],
     linkopts = tflite_linkopts(),
     deps = [
-        ":utils",
-        ":sampler",
+        ":aligned_allocator",
+        ":lora_adapter",
         ":profiler",
+        ":sampler",
+        ":utils",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",
@@ -93,8 +124,8 @@ cc_binary(
         "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
         "@litert//tflite/experimental/genai:genai_ops",
         "@litert//tflite/kernels:builtin_ops",
+        "@litert//tflite/profiling:profile_summarizer",
+        "@litert//tflite/profiling:profiler",
+        "@litert//tflite/tools/benchmark:benchmark_model_lib",
     ],
 )
-
-
-# "@org_tensorflow//tensorflow/lite/profiling:profiler", if profiler is needed

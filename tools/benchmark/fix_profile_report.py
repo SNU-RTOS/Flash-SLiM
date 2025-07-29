@@ -49,23 +49,33 @@ def process_profile_text_file(input_path, output_path):
             
             # if Detect CSV table section detected
             if in_table:
-                row = [field.strip() for field in line.split(',')]
-                
-                # post-process the unexpected comma in the first field
-                first, second = row[0], row[1]
-                if '(' in first and ')' in second:
-                    merged = f'{first}, {second}'
-                    row = [merged] + row[2:]
+                def smart_split_first_field(line):
+                    parts = []
+                    i = 0
+                    n = len(line)
+                    paren_count = 0
+                    while i < n:
+                        c = line[i]
+                        if c == '(':
+                            paren_count += 1
+                        elif c == ')':
+                            paren_count -= 1
+                        elif c == ',' and paren_count == 0:
+                            break
+                        i += 1
+                    first_field = line[:i].strip()
+                    rest = line[i+1:].strip() if i < n else ''
+                    rest_fields = [f.strip() for f in rest.split(',')] if rest else []
+                    return [first_field] + rest_fields
+
+                row = smart_split_first_field(line)
 
                 if len(row) == expected_num_fields:
-                    # If field count matches, write normally
                     writer.writerow(row)
                 else:
-                    # Fallback: write raw
                     print(f"⚠️  Warning: Unexpected field count in row: {line.strip()} → {len(row)} (expected {expected_num_fields})")
-                    fout.write(line)        
+                    fout.write(line)
             else:
-                # Outside CSV table, write raw
                 fout.write(line)
 
 def main():

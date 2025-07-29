@@ -21,10 +21,12 @@
 #include <mutex>
 #include <condition_variable>
 
-// USDT Probes for eBPF tracing with stage index
-// Stage indices: 0=Load_Model, 1=Build_Interpreter, 2=Load_Tokenizer, 3=Build_KV_Cache, 4=Prepare_Prompt, 5=Prepare_Signature_Runners, 6=Prefill, 7=Decode_Generation
+// USDT Probes for eBPF tracing with Phase index
+// Phase indices: 0=Load_Model, 1=Build_Interpreter, 2=Load_Tokenizer, 3=Build_KV_Cache, 4=Prepare_Prompt, 5=Prepare_Signature_Runners, 6=Prefill, 7=Decode_Generation
 #ifdef EBPF_TRACE_ENABLED
 #include <sys/sdt.h>
+
+// TODO:REMOVE Phase indices and use DTRACE_PROBEX API for dynamic Phase names
 #define TRACE_LOGIC_START(stage_idx) DTRACE_PROBE1(tflite_gen, logic_start, stage_idx)
 #define TRACE_LOGIC_END(stage_idx) DTRACE_PROBE1(tflite_gen, logic_end, stage_idx)
 #define TRACE_IO_START(stage_idx) DTRACE_PROBE1(tflite_gen, io_start, stage_idx)
@@ -55,17 +57,19 @@
 #include "tflite/signature_runner.h"
 
 // LiteRT Profiling
-// #include "tflite/profiling/profile_summarizer.h"
-// #include "tflite/profiling/buffered_profiler.h"
-// #include "tflite/profiling/profile_summary_formatter.h"
-// #include "tflite/tools/benchmark/benchmark_model.h"
-// #include "tflite/tools/benchmark/benchmark_params.h"
-// #include "tflite/tools/logging.h"
+#include "tflite/profiling/profile_summarizer.h"
+#include "tflite/profiling/buffered_profiler.h"
+#include "tflite/profiling/profile_summary_formatter.h"
+#include "tflite/tools/benchmark/benchmark_model.h"
+#include "tflite/tools/benchmark/benchmark_params.h"
+#include "tflite/tools/logging.h"
 
 // Custom
 #include "utils.h"
 #include "sampler.h"
 #include "profiler.h"
+#include "aligned_allocator.h"
+#include "lora_adapter.h"
 
 // ----------------------
 // absl::FLAGS definition
@@ -89,11 +93,36 @@ ABSL_FLAG(int, top_k, 40, "Top-k sampling parameter. Only consider the top k tok
 ABSL_FLAG(float, top_p, 0.9f, "Top-p (nucleus) sampling parameter. Only consider tokens with cumulative probability <= top_p. Defaults to 0.9.");
 ABSL_FLAG(float, repetition_penalty, 1.2f, "Repetition penalty for sampling. Higher values reduce repetition. Defaults to 1.2.");
 ABSL_FLAG(bool, enable_repetition_penalty, false, "Enable repetition penalty. Defaults to false.");
-
+ABSL_FLAG(std::string, csv_profile_output_path, "",
+          "Path to save the profiling results in CSV format. If empty, no CSV output is generated.");
 namespace
 {
-    using ai_edge_torch::examples::AlignedAllocator;
     using ai_edge_torch::examples::LoRA;
+    using ai_edge_torch::mem::AlignedAllocator;
+
+    int count_total_nodes(tflite::Interpreter *interpreter)
+    {
+        int total_nodes = 0;
+        if (!interpreter)
+            return 0;
+
+        for (int i = 0; i < interpreter->subgraphs_size(); ++i)
+        {
+            total_nodes += static_cast<int>(interpreter->subgraph(i)->nodes_size());
+            // std::cout << "[INFO] Subgraph " << i
+            //           << " has " << interpreter->subgraph(i)->nodes_size() << " nodes." << std::endl;
+        }
+        return total_nodes;
+    }
+
+    struct ProfilerOutput
+    {
+        std::shared_ptr<tflite::profiling::ProfileSummaryFormatter> formatter;
+        std::shared_ptr<tflite::profiling::ProfileSummarizer> init_summarizer;
+        std::shared_ptr<tflite::profiling::ProfileSummarizer> run_summarizer;
+        std::string output_type; // "log" or "csv"
+        std::string output_path; // empty for log, file path for csv
+    };
 
     // --------------------------------------------------------------------------
     // Utility for applying XNNPACK weight caching
@@ -104,49 +133,11 @@ namespace
         std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
         delegate_options.weight_cache_file_path = weight_cache_path.c_str();
         delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
-        // delegate_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_SUBGRAPH_RESHAPING;
-        // delegate_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS;
-
         MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
                           tflite::Interpreter::TfLiteDelegatePtr(
                               TfLiteXNNPackDelegateCreate(&delegate_options),
                               [](TfLiteDelegate *delegate)
                               { TfLiteXNNPackDelegateDelete(delegate); })) == kTfLiteOk);
-    }
-
-    // --------------------------------------------------------------------------
-    // Loads the TFLite model
-    // --------------------------------------------------------------------------
-    std::unique_ptr<tflite::FlatBufferModel> LoadModel()
-    {
-        std::unique_ptr<tflite::FlatBufferModel> model =
-            tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
-        MINIMAL_CHECK(model != nullptr);
-        return model;
-    }
-
-    // --------------------------------------------------------------------------
-    // Builds a TFLite interpreter from the model and applies XNNPACK if requested
-    // --------------------------------------------------------------------------
-    std::unique_ptr<tflite::Interpreter>
-    BuildInterpreter(tflite::FlatBufferModel *model, int num_threads)
-    {
-        tflite::ops::builtin::BuiltinOpResolver resolver;
-        // Register GenAI custom ops
-        tflite::ops::custom::GenAIOpsRegisterer(&resolver);
-
-        tflite::InterpreterBuilder builder(*model, resolver);
-        MINIMAL_CHECK(builder.SetNumThreads(num_threads) == kTfLiteOk);
-
-        std::unique_ptr<tflite::Interpreter> interpreter;
-        builder(&interpreter);
-        MINIMAL_CHECK(interpreter != nullptr);
-
-        if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
-        {
-            ApplyXNNPACKWeightCaching(interpreter.get());
-        }
-        return interpreter;
     }
 
     // --------------------------------------------------------------------------
@@ -189,7 +180,8 @@ namespace
     // Sets custom memory allocations for the KV cache on the given runner
     // --------------------------------------------------------------------------
     void PrepareRunner(tflite::SignatureRunner *runner,
-                       std::map<std::string, std::vector<float, AlignedAllocator<float>>> &kv_cache)
+                       std::map<std::string,
+                                std::vector<float, AlignedAllocator<float>>> &kv_cache)
     {
         for (auto &[name, cache] : kv_cache)
         {
@@ -211,7 +203,7 @@ namespace
         tflite::Interpreter *interpreter,
         std::size_t num_input_tokens,
         std::map<std::string, std::vector<float, AlignedAllocator<float>>> &kv_cache,
-        const ai_edge_torch::examples::LoRA *lora)
+        const LoRA *lora)
     {
         tflite::SignatureRunner *runner = nullptr;
         int best_seq_size = -1;
@@ -259,7 +251,7 @@ namespace
     tflite::SignatureRunner *GetDecodeRunner(
         tflite::Interpreter *interpreter,
         std::map<std::string, std::vector<float, AlignedAllocator<float>>> &kv_cache,
-        ai_edge_torch::examples::LoRA *lora)
+        LoRA *lora)
     {
         tflite::SignatureRunner *runner =
             (lora == nullptr)
@@ -348,43 +340,70 @@ void __set_affinity_to_cores(const std::vector<int> &cores)
 }
 
 void __run_main(custom::profiler::PhaseContext &phase_ctx,
-                custom::profiler::GenerationMetrics &generation_metrics)
+                custom::profiler::GenAIMetrics &genai_metrics,
+                std::unique_ptr<tflite::profiling::BufferedProfiler> &op_profiler,
+                const std::vector<ProfilerOutput> &op_profiler_outputs)
 {
 
-    // Global variables
+    // Declare local variables
     std::vector<int> prompt_tokens;
     std::string prompt, start_token, stop_token;
-    int stop_token_id = -1;
     std::unordered_set<int> previously_generated_tokens;
+    TfLiteStatus status = kTfLiteOk;
+    int stop_token_id = -1;
 
-    // 1. Load Model
+    //* ============ [Phase] 1. Load Model ============ */
     std::unique_ptr<tflite::FlatBufferModel> model;
-    TRACE_LOGIC_START(0); // Load_Model
+    TRACE_LOGIC_START(0);
     TRACE_IO_START(0);
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Model");
-
-        model = LoadModel();
+        model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
     }
     TRACE_IO_END(0);
     TRACE_LOGIC_END(0);
+    MINIMAL_CHECK(model != nullptr);
 
-    // 2. Build Interpreter
-    TRACE_LOGIC_START(1); // Build_Interpreter
+    //* ============ [Phase] 2. Build Interpreter ============ */
+    TRACE_LOGIC_START(1);
     TRACE_IO_START(1);
     std::unique_ptr<tflite::Interpreter> interpreter;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_Interpreter");
-        interpreter = BuildInterpreter(model.get(), absl::GetFlag(FLAGS_num_threads));
+        // Register Ops
+        tflite::ops::builtin::BuiltinOpResolver resolver;
+        tflite::ops::custom::GenAIOpsRegisterer(&resolver); // Register GenAI custom ops
+
+        // Build the interpreter
+        tflite::InterpreterBuilder builder(*model, resolver);
+        MINIMAL_CHECK(builder.SetNumThreads(absl::GetFlag(FLAGS_num_threads)) == kTfLiteOk);
+        builder(&interpreter);
+        MINIMAL_CHECK(interpreter != nullptr);
     }
     TRACE_IO_END(1);
     TRACE_LOGIC_END(1);
 
-    // Print signature runner info
-    // PrintSignatureRunnersInfo(interpreter.get());
+    // Create profiler if profiling is enabled
+    constexpr int kProfilingBufferHeadrooms = 512;
+    int total_nodes = count_total_nodes(interpreter.get());
+    if (total_nodes > kProfilingBufferHeadrooms)
+        total_nodes += kProfilingBufferHeadrooms;
+    op_profiler = std::make_unique<tflite::profiling::BufferedProfiler>(total_nodes, true);
 
-    // 3. Load SentencePiece
-    TRACE_LOGIC_START(2); // Load_Tokenizer
+    // Set profiler to interpreter
+    interpreter->SetProfiler(op_profiler.get());
+
+    //* ============ [Phase] 3. Apply Delegate ============ */
+    {
+        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Apply_Delegate");
+        if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
+        {
+            ApplyXNNPACKWeightCaching(interpreter.get());
+        }
+    }
+
+    //* ============ [Phase] 4. Load Tokenizer ============ */
+    TRACE_LOGIC_START(2);
     TRACE_IO_START(2);
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
@@ -394,37 +413,40 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     TRACE_IO_END(2);
     TRACE_LOGIC_END(2);
 
-    // 4. Build KV Cache
-    TRACE_LOGIC_START(3); // Build_KV_Cache
+    //* ============ [Phase] 5. Build KV Cache ============ */
+    TRACE_LOGIC_START(3);
     TRACE_IO_START(3);
     std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_KV_Cache");
         kv_cache = BuildKVCache(interpreter.get());
-        MINIMAL_CHECK(!kv_cache.empty());
     }
     TRACE_IO_END(3);
     TRACE_LOGIC_END(3);
+    MINIMAL_CHECK(!kv_cache.empty());
 
     // 5. Optionally load LoRA
-    // std::unique_ptr<ai_edge_torch::examples::LoRA> lora = nullptr;
-    // {
-    //     custom::profiler::ScopeTimer timer("LoRA Loading");
-    //     if (!absl::GetFlag(FLAGS_lora_path).empty())
-    //     {
-    //         lora = ai_edge_torch::examples::LoRA::FromFile(absl::GetFlag(FLAGS_lora_path));
-    //         MINIMAL_CHECK(lora != nullptr);
-    //     }
-    // }
+    /*
+    std::unique_ptr<ai_edge_torch::examples::LoRA> lora = nullptr;
+    {
+        custom::profiler::ScopeTimer timer("LoRA Loading");
+        if (!absl::GetFlag(FLAGS_lora_path).empty())
+        {
+            lora = ai_edge_torch::examples::LoRA::FromFile(absl::GetFlag(FLAGS_lora_path));
+            MINIMAL_CHECK(lora != nullptr);
+        }
+    }
+    */
 
-    // 6. Prepare Input Prompt
-    TRACE_LOGIC_START(4); // Prepare_Prompt
+    //* ============ [Phase] 6. Prepare Prompt ============ */
+    TRACE_LOGIC_START(4);
     TRACE_IO_START(4);
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Prompt");
         prompt = absl::GetFlag(FLAGS_prompt);
         MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
 
+        // Initialize start and stop tokens
         start_token = absl::GetFlag(FLAGS_start_token);
         if (!start_token.empty())
         {
@@ -435,7 +457,6 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         if (!stop_token.empty())
         {
             stop_token_id = sp_processor->PieceToId(stop_token);
-            std::cout << "[INFO] Stop token ID: " << stop_token_id << " for token: " << stop_token << "\n";
         }
 
         // Initialize previously generated tokens with prompt tokens for repetition penalty
@@ -449,23 +470,22 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     }
     TRACE_IO_END(4);
     TRACE_LOGIC_END(4);
+    std::cout << "[INFO] Stop token ID: " << stop_token_id << " for token: " << stop_token << std::endl;
 
-    // 7. Prepare Signature Runners
-    TRACE_LOGIC_START(5); // Prepare_Signature_Runners
-    TRACE_IO_START(5);
+    //* ============ [Phase] 7. Prepare Signature Runners ============ */
     tflite::SignatureRunner *prefill_runner = nullptr;
     tflite::SignatureRunner *decode_runner = nullptr;
-    std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
+    TRACE_LOGIC_START(5);
+    TRACE_IO_START(5);
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Signature_Runners");
+        std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
         prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
-        MINIMAL_CHECK(prefill_runner != nullptr);
-
         decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
-        MINIMAL_CHECK(decode_runner != nullptr);
     }
     TRACE_IO_END(5);
     TRACE_LOGIC_END(5);
+    MINIMAL_CHECK(prefill_runner != nullptr || decode_runner != nullptr);
 
     TfLiteTensor *prefill_input = nullptr;
     TfLiteTensor *prefill_input_pos = nullptr;
@@ -475,9 +495,9 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     int max_seq_size = 0;
     int kv_cache_max_size = 0;
     int prefill_seq_size = 0;
+    int seq_dim_index = 0;
 
-    // 8. Access Tensors
-    // Get the input tensors for prefill and decode
+    //* ============ [Phase] 8. Prepare Input Tensors ============ */
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Input_Tensor");
 
@@ -489,18 +509,15 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         max_seq_size = prefill_input->dims->data[1];
 
         // Detect KV cache sequence dimension and set max size accordingly
-        int seq_dim_index = DetectKVCacheSequenceDimension(kv_cache_k_0);
+        seq_dim_index = DetectKVCacheSequenceDimension(kv_cache_k_0);
         if (seq_dim_index >= 0 && seq_dim_index < kv_cache_k_0->dims->size)
         {
             kv_cache_max_size = kv_cache_k_0->dims->data[seq_dim_index];
         }
-        else
+        else // Fallback to default behavior
         {
-            // Fallback to default behavior
             kv_cache_max_size = kv_cache_k_0->dims->data[1];
         }
-
-        std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")\n";
 
         prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
 
@@ -515,22 +532,35 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
             prefill_input_pos->data.i32[i] = i;
         }
     }
+    std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")" << std::endl;
 
-    // 9. Prefill Stage
-    TRACE_LOGIC_START(6); // Prefill
-    TRACE_IO_START(6);
+    //* ============ [Phase] 9. Prefill Phase ============ */
     double prefill_time_ms = 0.0;
+    std::cout << "[INFO] Prefill Phase started" << std::endl;
+
+    // Start op-level profiling
+    op_profiler->Reset();
+    op_profiler->StartProfiling();
+    TRACE_LOGIC_START(6);
+    TRACE_IO_START(6);
     {
         custom::profiler::ScopeTimer prefill_timer(prefill_time_ms);
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prefill");
-        MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk); // Execute the prefill runner
+        status = prefill_runner->Invoke(); // Execute the prefill runner
     }
-    generation_metrics.RecordPrefillTime(prefill_time_ms);
     TRACE_IO_END(6);
     TRACE_LOGIC_END(6);
+    genai_metrics.RecordPrefillTime(prefill_time_ms);
+    op_profiler->StopProfiling();
+    for (auto &out : op_profiler_outputs)
+    {
+        out.run_summarizer->ProcessProfiles(op_profiler->GetProfileEvents(), *interpreter);
+    }
 
-    // 10. Decoding Stage with separate metrics for inference and sampling
+    MINIMAL_CHECK(status == kTfLiteOk);
+    std::cout << "[INFO] Prefill Phase completed" << std::endl;
 
+    //* ============ [Phase] 10. Decoding Phase ============ */
     // Determine how many tokens to generate
     int max_decode_steps = (absl::GetFlag(FLAGS_max_decode_steps) == -1)
                                ? kv_cache_max_size
@@ -560,6 +590,9 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 
         TRACE_LOGIC_START(7); // Decode_Generation
         TRACE_IO_START(7);
+        op_profiler->Reset();
+        op_profiler->StartProfiling();
+
         std::string single_decoded_text;
         {
             custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, stage_name);
@@ -578,7 +611,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
                 custom::profiler::ScopeTimer timer(sampling_time_ms);
                 if (absl::GetFlag(FLAGS_enable_repetition_penalty))
                 {
-                    next_token_id = ai_edge_torch::custom::sampler::temperature_top_k_top_p_repetition_sampler(
+                    next_token_id = custom::sampler::temperature_top_k_top_p_repetition_sampler(
                         decode_runner->output_tensor("logits"),
                         absl::GetFlag(FLAGS_temperature),
                         absl::GetFlag(FLAGS_top_k),
@@ -588,7 +621,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
                 }
                 else
                 {
-                    next_token_id = ai_edge_torch::custom::sampler::temperature_top_k_top_p_sampler(
+                    next_token_id = custom::sampler::temperature_top_k_top_p_sampler(
                         decode_runner->output_tensor("logits"),
                         absl::GetFlag(FLAGS_temperature),
                         absl::GetFlag(FLAGS_top_k),
@@ -603,12 +636,15 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
                 MINIMAL_CHECK(sp_processor->Decode(next_token, &single_decoded_text).ok());
             }
         }
+
         TRACE_IO_END(7);
         TRACE_LOGIC_END(7);
-
-        generation_metrics.RecordDecodingTime(inference_time_ms,
-                                              sampling_time_ms,
-                                              detok_time_ms);
+        genai_metrics.RecordDecodingTime(inference_time_ms, sampling_time_ms, detok_time_ms);
+        op_profiler->StopProfiling();
+        for (auto &out : op_profiler_outputs)
+        {
+            out.run_summarizer->ProcessProfiles(op_profiler->GetProfileEvents(), *interpreter);
+        }
 
         // Check if the next token is a stop token
         if (next_token_id == stop_token_id)
@@ -623,9 +659,10 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         std::cout << single_decoded_text << std::flush;
         next_position++;
     }
+
     std::cout << "\n\n\n";
     std::cout << "[INFO] Decoded " << decode_steps << " tokens.\n";
-    std::cout << "\n[INFO] Decoding stage completed" << std::endl;
+    std::cout << "\n[INFO] Decoding Phase completed" << std::endl;
 }
 
 // =======================================================================
@@ -633,7 +670,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 // =======================================================================
 int main(int argc, char *argv[])
 {
-    // set precision
+    // Set precision
     std::cout.precision(5);
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout << std::boolalpha;
@@ -643,8 +680,8 @@ int main(int argc, char *argv[])
     std::cout << "\n[INFO] eBPF tracing is enabled. USDT probes will be used.\n";
 #endif
 
-    // 0. Parse flags
-    std::cout << "\n[INFO] Preparing Required Components\n";
+    // Parse flags
+    std::cout << "\n[INFO] Preparing Required Components" << std::endl;
     absl::ParseCommandLine(argc, argv);
 
     // Check which cores we're actually running on
@@ -657,43 +694,84 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    // 메인 스레드 코어 설정
-    std::vector<int> monitor_core = {active_cores[0]};
+    // Set core affinity for the main thread and monitor thread
+    // Just monitor the cores we're allowed to run on (should be only core 0 with taskset)
+    std::vector<int> monitor_core({active_cores[0]});
     std::vector<int> worker_cores(active_cores.begin() + 1, active_cores.end());
-    std::cout << "[INFO] Core used for logging and monitoring: " << monitor_core[0] << "\n";
+    std::cout << "[INFO] Core used for logging and monitoring: " << monitor_core[0] << std::endl;
     std::cout << "[INFO] Cores used for text generation: ";
     for (const auto &core : worker_cores)
     {
         std::cout << core << " ";
     }
     std::cout << "\n[INFO] Start Generating Text" << std::endl;
-    // Just monitor the cores we're allowed to run on (should be only core 0 with taskset)
 
+    // Init Custom Phase-level Profiler
     custom::profiler::PhaseContext profile_ctx;
     std::vector<custom::profiler::RUsageRecord> rusage_records;
-    custom::profiler::GenerationMetrics generation_metrics;
+
+    // Init Custom GenAI Metrics Profiler
+    custom::profiler::GenAIMetrics genai_metrics;
+
+    // Init Tflite Internal Op-level Profiler
+    std::unique_ptr<tflite::profiling::BufferedProfiler> op_profiler; // Create op_profiler pointer
+    ProfilerOutput pf_out_default = {
+        // Init Tflite Internal Op-level Profiler: Default Log output
+        .formatter = std::make_shared<tflite::profiling::ProfileSummaryDefaultFormatter>(),
+        .init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(pf_out_default.formatter),
+        .run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(pf_out_default.formatter),
+        .output_type = "log",
+        .output_path = "",
+    };
+    std::string csv_path = absl::GetFlag(FLAGS_csv_profile_output_path);
+    ProfilerOutput pf_out_csv = {
+        // Init Tflite Internal Op-level Profiler: CSV Log output
+        .formatter = std::make_shared<tflite::profiling::ProfileSummaryCSVFormatter>(),
+        .init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(pf_out_csv.formatter),
+        .run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(pf_out_csv.formatter),
+        .output_type = "csv",
+        .output_path = csv_path.empty() ? "" : csv_path,
+    };
+    std::vector<ProfilerOutput> op_profiler_outputs{pf_out_default, pf_out_csv}; // Initialize profiler outputs
+
+    //* ============ Run Threads ============ */
     std::thread monitor_thread([&]()
                                {
         __set_affinity_to_cores(monitor_core);
         custom::profiler::ScopeEventListener listener(profile_ctx, false, &rusage_records);
         listener.Run(); });
 
-    std::thread generate_thread([&]()
-                                {
+    std::thread main_thread([&]()
+                            {
         __set_affinity_to_cores(worker_cores);
-        __run_main(profile_ctx, generation_metrics); });
+        __run_main(profile_ctx, genai_metrics, op_profiler, op_profiler_outputs); });
 
-    generate_thread.join(); // Wait for the generate thread to finish
+    main_thread.join(); // Wait for the main thread to finish
     profile_ctx.generation_done.store(true);
     profile_ctx.signal_cv.notify_all();
     monitor_thread.join(); // Wait for the monitor thread to finish
-    
-    // Print RUsage results
+
+    //* ============ Print Results ============ */
+    // Print Phase-level profiling results
     custom::profiler::print_rusage_records(rusage_records);
 
-    // Print genenration metrics (inference vs. sampling)
-    generation_metrics.PrintMetrics();
+    // Print genai metrics (inference vs. sampling)
+    genai_metrics.Print();
 
+    // Print Op-level profiling results
+    std::cout << "\n[INFO] Generating Ops-level profiling (log)" << std::endl;
+
+    auto out_default = op_profiler_outputs[0];
+    auto out_csv = op_profiler_outputs[1];
+    // out_default.formatter->HandleOutput(out_default.init_summarizer->GetOutputString(),
+    //                                     out_default.run_summarizer->GetOutputString(), out_default.output_path);
+    out_csv.formatter->HandleOutput(out_csv.init_summarizer->GetOutputString(),
+                                    out_csv.run_summarizer->GetOutputString(), out_csv.output_path);
+    // for (auto &out : op_profiler_outputs)
+    // {
+    //     out.formatter->HandleOutput(out.init_summarizer->GetOutputString(),
+    //                                 out.run_summarizer->GetOutputString(), out.output_path);
+    // }
     std::cout << "\n[INFO] Text Generation App completed successfully.\n";
     std::cout << "---------------------------------------------------\n\n";
 

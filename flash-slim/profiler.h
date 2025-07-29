@@ -59,37 +59,6 @@ std::pair<double, double> get_core_cpu_time(int core_id);
 
 namespace custom::profiler
 {
-    //////////////////////////////////////////////////////////////
-    /* Struct, Types */
-    //////////////////////////////////////////////////////////////
-
-    struct PerfStats
-    {
-        // Wall clock time
-        double wall_time_ms;
-
-        // CPU time (from rusage)
-        double user_time_sec;
-        double system_time_sec;
-        double cpu_time_sec; // user + system
-
-        // I/O time (from multiple sources)
-        double io_wait_time_ms;
-        double io_bytes_read;
-        double io_bytes_written;
-
-        // Per-core metrics (if available)
-        std::vector<double> core_user_times;
-        std::vector<double> core_system_times;
-        std::vector<double> core_cpu_times; // Add this missing field
-
-        // New fields for timespec-based CPU time verification
-        double process_cpu_time_sec; // CPU time using clock_gettime(CLOCK_PROCESS_CPUTIME_ID)
-
-        PerfStats() : wall_time_ms(0), user_time_sec(0), system_time_sec(0),
-                      cpu_time_sec(0), io_wait_time_ms(0), io_bytes_read(0), io_bytes_written(0),
-                      process_cpu_time_sec(0) {}
-    };
 
     // RUsage record structure
     struct RUsageRecord
@@ -122,13 +91,13 @@ namespace custom::profiler
     //////////////////////////////////////////////////////////////
 
     // --------------------------------------------------------------------------
-    // DecodingMetrics
+    // GenAIMetrics
     // --------------------------------------------------------------------------
-    class GenerationMetrics
+    class GenAIMetrics
     {
     public:
-        GenerationMetrics() = default;
-        ~GenerationMetrics() = default;
+        GenAIMetrics() = default;
+        ~GenAIMetrics() = default;
 
         void RecordPrefillTime(double prefill_time_ms);
         void RecordDecodingTime(
@@ -136,7 +105,7 @@ namespace custom::profiler
             double sampling_time_ms,
             double detok_time_ms);
 
-        void PrintMetrics();
+        void Print();
 
     private:
         // Time to first token
@@ -287,7 +256,6 @@ namespace custom::profiler
         PhaseContext &ctx_;
         std::unique_lock<std::mutex> lock_;
     };
-
     class ScopeEventListener
     {
     public:

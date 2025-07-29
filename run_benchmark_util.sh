@@ -30,7 +30,8 @@ source ./scripts/utils.sh               # Load utility functions
 banner "Benchmark Utility Configuration"
 
 # --- Model and Binary Settings ---
-MODEL_PATH="./models/test/mobileone_s0.tflite"
+# MODEL_PATH="./models/test/mobileone_s0.tflite"
+MODEL_PATH="./models/SmolLM-135M/smollm_q8_ekv1280.tflite"
 OUTPUT_DIR="./benchmark/benchmark_model_results/tmp"
 BENCHMARK_BIN="./tools/bin/benchmark_model"
 

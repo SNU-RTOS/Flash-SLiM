@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef THIRD_PARTY_PY_AI_EDGE_TORCH_GENERATIVE_EXAMPLES_CPP_UTILS_H_
-#define THIRD_PARTY_PY_AI_EDGE_TORCH_GENERATIVE_EXAMPLES_CPP_UTILS_H_
+#ifndef FLASH_SLIM_UTILS_H_
+#define FLASH_SLIM_UTILS_H_
 
 #include <cstddef>
 #include <memory>
@@ -40,98 +40,29 @@ limitations under the License.
         exit(1);                                                 \
     }
 #endif // MINIMAL_CHECK
-namespace ai_edge_torch
+
+namespace custom::util
 {
-    namespace examples
-    {
-        // Timestamp utilities for unified logging across eBPF and application code
-        
-        // Get current timestamp in nanoseconds since epoch
-        int64_t getCurrentTimestampNs();
-        
-        // Format timestamp as JSON object with seconds and nanoseconds
-        std::string formatTimestampJson(int64_t timestamp_ns, const std::string& event_type, 
-                                        const std::string& component, int stage_idx = -1);
-        
-        // Log an event with timestamp in JSON format
-        void logTimestampedEvent(const std::string& event_type, const std::string& component, 
-                                int stage_idx = -1, std::ostream& out = std::cout);
-        
-        // Structured logging helper for detailed event information
-        void logJsonEvent(const std::string& event_type, const std::string& component,
-                         const std::map<std::string, std::string>& attributes,
-                         int stage_idx = -1, std::ostream& out = std::cout);
+    // Timestamp utilities for unified logging across eBPF and application code
 
-        // TF Lite requires all buffers (including external buffers used for KV cache
-        // here) be `tflite::kDefaultTensorAlignment` aligned. To ensure that, we use
-        // this custom allocator. Please use with caution as different platforms may
-        // have different alignment requirements.
-        template <typename T>
-        class AlignedAllocator
-        {
-        public:
-            using value_type = T;
+    // Get current timestamp in nanoseconds since epoch
+    int64_t getCurrentTimestampNs();
 
-            T *allocate(std::size_t n)
-            {
-                void *ptr;
-                std::size_t size = n * sizeof(T);
-                std::size_t padding = tflite::kDefaultTensorAlignment -
-                                      (size % tflite::kDefaultTensorAlignment);
-                size += padding;
-                int ret = posix_memalign(&ptr, tflite::kDefaultTensorAlignment, size);
-                if (ret != 0)
-                {
-                    return nullptr;
-                }
-                return static_cast<T *>(ptr);
-            };
+    // Format timestamp as JSON object with seconds and nanoseconds
+    std::string formatTimestampJson(int64_t timestamp_ns, const std::string &event_type,
+                                    const std::string &component, int stage_idx = -1);
 
-            void deallocate(T *ptr, std::size_t n) { free(ptr); }
-        };
+    // Log an event with timestamp in JSON format
+    void logTimestampedEvent(const std::string &event_type, const std::string &component,
+                             int stage_idx = -1, std::ostream &out = std::cout);
 
-        // An example implementation of LoRA adapters manager for TFLite interpreter.
-        // The class loads an adapter from a flatbuffers files and provides helper
-        // methods for finding the right signature and setting the appropriate input
-        // tensors. Please note the use of CustomAllocator to ensure zero-copy loading
-        // and potentially hot-swapping between multiple adapters with minimal cost.
-        class LoRA
-        {
-        public:
-            static std::unique_ptr<LoRA> FromFile(absl::string_view path);
+    // Structured logging helper for detailed event information
+    void logJsonEvent(const std::string &event_type, const std::string &component,
+                      const std::map<std::string, std::string> &attributes,
+                      int stage_idx = -1, std::ostream &out = std::cout);
+    const char *TfLiteTypeToString(TfLiteType type);
+    void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name);
+    void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter);
+} // namespace custom::util
 
-            tflite::SignatureRunner *GetPrefillRunner(tflite::Interpreter *interpreter,
-                                                      int matched_sequence_length) const;
-            tflite::SignatureRunner *GetDecodeRunner(
-                tflite::Interpreter *interpreter) const;
-
-            int rank() const { return rank_; };
-
-        private:
-            explicit LoRA(int rank,
-                          absl::flat_hash_map<std::string,
-                                              std::vector<float, AlignedAllocator<float>>>
-                              tensors)
-                : rank_(rank), tensors_(std::move(tensors)) {}
-
-            tflite::SignatureRunner *GetRunnerHelper(
-                tflite::Interpreter *interpreter, absl::string_view signature_name) const;
-
-            // The rank of the LoRA adapter.
-            const int rank_;
-            // A Map of names to LoRA tensors.
-            const absl::flat_hash_map<std::string,
-                                      std::vector<float, AlignedAllocator<float>>>
-                tensors_;
-        };
-    } // namespace examples
-    namespace custom::util
-    {
-
-        const char *TfLiteTypeToString(TfLiteType type);
-        void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name);
-        void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter);
-    } // namespace custom::util
-} // namespace ai_edge_torch
-
-#endif // THIRD_PARTY_PY_AI_EDGE_TORCH_GENERATIVE_EXAMPLES_CPP_UTILS_H_
+#endif // FLASH_SLIM_UTILS_H_

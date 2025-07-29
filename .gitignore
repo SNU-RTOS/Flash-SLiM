@@ -21,6 +21,9 @@ bazel-*
 lib/
 obj/
 tools/bin
+tools/model_dump/tflite
+tools/model_dump/logs
+
 output/
 *.o
 *.so
@@ -47,7 +50,7 @@ text_generator_main
 text_generator_main_*
 
 # Models and data
-models/*
+models
 !models/README.md
 !models/.gitkeep
 !models/test

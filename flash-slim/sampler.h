@@ -1,5 +1,5 @@
-#ifndef AI_EDGE_TORCH_GENERATIVE_CUSTOM_SAMPLER_H_
-#define AI_EDGE_TORCH_GENERATIVE_CUSTOM_SAMPLER_H_
+#ifndef FLASH_SLIM_SAMPLER_H_
+#define FLASH_SLIM_SAMPLER_H_
 
 #include <vector>
 #include <random>
@@ -9,7 +9,7 @@
 #include <unordered_set>
 #include "tflite/interpreter.h"
 
-namespace ai_edge_torch::custom::sampler
+namespace custom::sampler
 {
     // Greedy Sampler
     int greedy_sampler(const TfLiteTensor *logits);
@@ -29,6 +29,6 @@ namespace ai_edge_torch::custom::sampler
                                                   const std::unordered_set<int>& previously_generated_tokens,
                                                   float repetition_penalty = 1.2f);
 
-} // namespace ai_edge_torch::custom::sampler
+} // namespace custom::sampler
 
-#endif // AI_EDGE_TORCH_GENERATIVE_CUSTOM_SAMPLER_H_
+#endif // FLASH_SLIM_SAMPLER_H_

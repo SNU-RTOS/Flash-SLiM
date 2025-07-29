@@ -164,12 +164,12 @@ namespace custom::profiler
     /* class DecodingMetrics: Class for measuring decoding metrics (time to first token, average times, etc.)*/
     // public:
 
-    void GenerationMetrics::RecordPrefillTime(double prefill_time_ms)
+    void GenAIMetrics::RecordPrefillTime(double prefill_time_ms)
     {
         prefill_time_ms_ = prefill_time_ms;
     }
 
-    void GenerationMetrics::RecordDecodingTime(double inference_time_ms,
+    void GenAIMetrics::RecordDecodingTime(double inference_time_ms,
                                                double sampling_time_ms,
                                                double detok_time_ms)
     {
@@ -197,7 +197,7 @@ namespace custom::profiler
     }
 
     // Print out final decoding metrics
-    void GenerationMetrics::PrintMetrics()
+    void GenAIMetrics::Print()
     {
         double avg_inference_time_ms = 0.0;
         double avg_sampling_time_ms = 0.0;
