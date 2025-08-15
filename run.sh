@@ -35,8 +35,8 @@ banner "Script Configuration"
 # MODEL_DIR="${MODEL_PATH}/Llama3.2-1B"
 # MODEL_NAME="llama3.2_q8_ekv1280"
 
-# MODEL_DIR="${MODEL_PATH}/Llama3.2-3B"
-# MODEL_NAME="llama3.2_q8_ekv1024"
+MODEL_DIR="${MODEL_PATH}/Llama3.2-3B"
+MODEL_NAME="llama3.2_q8_ekv1024"
 
 # MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
 # MODEL_NAME="gemma3_q4_ekv2048"
@@ -52,8 +52,8 @@ banner "Script Configuration"
 # MODEL_DIR="${MODEL_PATH}/Qwen2.5-3B"
 # MODEL_NAME="qwen2.5-3b_q8_ekv1280"
 
-MODEL_DIR="${MODEL_PATH}/SmolLM-135M"
-MODEL_NAME="smollm_q8_ekv1280"
+# MODEL_DIR="${MODEL_PATH}/SmolLM-135M"
+# MODEL_NAME="smollm_q8_ekv1280"
 
 BIN="output/text_generator_main"
 
@@ -138,6 +138,7 @@ EOF
     exit 0
 }
 
+parse_command_line(){
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -197,6 +198,8 @@ if [[ "$ENABLE_CGROUP" == true && ${#MEMORY_LIMITS[@]} -eq 0 ]]; then
     MEMORY_LIMITS=("2G")
     log "No memory limits specified, using default: ${MEMORY_LIMITS[*]}"
 fi
+
+}
 
 # =========================================================================== #
 # 4. Helper Functions                                                         #
@@ -472,9 +475,6 @@ process_single_prompt() {
         "$temperature" "$top_k" "$top_p" "$repetition_penalty" "$enable_repetition_penalty" "$memory_limit"
 }
 
-# =========================================================================== #
-# 6. Main Execution                                                           #
-# =========================================================================== #
 
 # Function to execute benchmarks with or without memory constraints
 execute_benchmarks() {
@@ -527,8 +527,15 @@ execute_benchmarks() {
     done
 }
 
+# =========================================================================== #
+# 6. Main Execution                                                           #
+# =========================================================================== #
+
+
 # --- Main Execution Logic ---
 main() {
+    parse_command_line "$@"
+
     # Main execution logic
     if [[ "$ENABLE_CGROUP" == "true" ]]; then
         # Memory-constrained benchmarking

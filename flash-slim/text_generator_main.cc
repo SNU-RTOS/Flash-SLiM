@@ -753,7 +753,7 @@ int main(int argc, char *argv[])
 
     //* ============ Print Results ============ */
     // Print Phase-level profiling results
-    custom::profiler::print_rusage_records(rusage_records);
+    // custom::profiler::print_rusage_records(rusage_records);
 
     // Print genai metrics (inference vs. sampling)
     genai_metrics.Print();
