@@ -252,12 +252,14 @@ namespace custom::profiler
             ctx_.signal_cv.notify_all();
             ctx_.signal_cv.wait(lock_, [&]()
                                 { return !ctx_.log_requested.load(); });
+
             TRACE_LOGIC_START;
         }
 
         ~ScopeEventPrefetcher()
         {
             TRACE_LOGIC_END(ctx_.current_phase_name);
+            
             ctx_.log_requested.store(true);
             ctx_.phase_status = 1; // End phase
             ctx_.signal_cv.notify_all();
