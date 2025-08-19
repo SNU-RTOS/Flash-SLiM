@@ -22,20 +22,15 @@
 #include <condition_variable>
 
 // USDT Probes for eBPF tracing with Phase index
-// Phase indices: 0=Load_Model, 1=Build_Interpreter, 2=Load_Tokenizer, 3=Build_KV_Cache, 4=Prepare_Prompt, 5=Prepare_Signature_Runners, 6=Prefill, 7=Decode_Generation
 #ifdef EBPF_TRACE_ENABLED
 #include <sys/sdt.h>
 
-// TODO:REMOVE Phase indices and use DTRACE_PROBEX API for dynamic Phase names
-#define TRACE_LOGIC_START(stage_idx) DTRACE_PROBE1(tflite_gen, logic_start, stage_idx)
-#define TRACE_LOGIC_END(stage_idx) DTRACE_PROBE1(tflite_gen, logic_end, stage_idx)
-#define TRACE_IO_START(stage_idx) DTRACE_PROBE1(tflite_gen, io_start, stage_idx)
-#define TRACE_IO_END(stage_idx) DTRACE_PROBE1(tflite_gen, io_end, stage_idx)
+#define TRACE_LOGIC_START DTRACE_PROBE(tflite_gen, logic_start)
+#define TRACE_LOGIC_END(stage_name) DTRACE_PROBE1(tflite_gen, logic_end, stage_name)
+
 #else
-#define TRACE_LOGIC_START(stage_idx)
-#define TRACE_LOGIC_END(stage_idx)
-#define TRACE_IO_START(stage_idx)
-#define TRACE_IO_END(stage_idx)
+#define TRACE_LOGIC_START
+#define TRACE_LOGIC_END(stage_name)
 #endif
 
 // abseil
@@ -74,27 +69,21 @@
 // ----------------------
 // absl::FLAGS definition
 // ----------------------
-ABSL_FLAG(std::string, tflite_model, "",
-          "Two-signature tflite model for text generation using ODML tools.");
+ABSL_FLAG(std::string, tflite_model, "", "Two-signature tflite model for text generation using ODML tools.");
 ABSL_FLAG(std::string, sentencepiece_model, "", "Path to the SentencePiece model file.");
 ABSL_FLAG(std::string, prompt, "Write an email:", "Input prompt for the model.");
-ABSL_FLAG(int, max_decode_steps, -1,
-          "Number of tokens to generate. Defaults to the KV cache limit.");
-ABSL_FLAG(std::string, start_token, "",
-          "Optional start token appended to the beginning of the input prompt.");
-ABSL_FLAG(std::string, stop_token, "",
-          "Optional stop token that stops the decoding loop if encountered.");
+ABSL_FLAG(int, max_decode_steps, -1, "Number of tokens to generate. Defaults to the KV cache limit.");
+ABSL_FLAG(std::string, start_token, "", "Optional start token appended to the beginning of the input prompt.");
+ABSL_FLAG(std::string, stop_token, "", "Optional stop token that stops the decoding loop if encountered.");
 ABSL_FLAG(int, num_threads, 4, "Number of threads to use. Defaults to 4.");
-ABSL_FLAG(std::string, weight_cache_path, "",
-          "Path for XNNPACK weight caching, e.g., /tmp/model.xnnpack_cache.");
+ABSL_FLAG(std::string, weight_cache_path, "", "Path for XNNPACK weight caching, e.g., /tmp/model.xnnpack_cache.");
 ABSL_FLAG(std::string, lora_path, "", "Optional path to a LoRA artifact.");
 ABSL_FLAG(float, temperature, 0.8f, "Temperature for sampling. Higher values make output more random. Defaults to 0.8");
 ABSL_FLAG(int, top_k, 40, "Top-k sampling parameter. Only consider the top k tokens. Defaults to 40.");
 ABSL_FLAG(float, top_p, 0.9f, "Top-p (nucleus) sampling parameter. Only consider tokens with cumulative probability <= top_p. Defaults to 0.9.");
 ABSL_FLAG(float, repetition_penalty, 1.2f, "Repetition penalty for sampling. Higher values reduce repetition. Defaults to 1.2.");
 ABSL_FLAG(bool, enable_repetition_penalty, false, "Enable repetition penalty. Defaults to false.");
-ABSL_FLAG(std::string, csv_profile_output_path, "",
-          "Path to save the profiling results in CSV format. If empty, no CSV output is generated.");
+ABSL_FLAG(std::string, csv_profile_output_path, "", "Path to save the profiling results in CSV format. If empty, no CSV output is generated.");
 namespace
 {
     using ai_edge_torch::examples::LoRA;
@@ -354,34 +343,34 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 
     //* ============ [Phase] 1. Load Model ============ */
     std::unique_ptr<tflite::FlatBufferModel> model;
-    TRACE_LOGIC_START(0);
-    TRACE_IO_START(0);
+    TRACE_LOGIC_START;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Model");
+
         model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
     }
-    TRACE_IO_END(0);
-    TRACE_LOGIC_END(0);
+    TRACE_LOGIC_END("Load_Model");
     MINIMAL_CHECK(model != nullptr);
 
     //* ============ [Phase] 2. Build Interpreter ============ */
-    TRACE_LOGIC_START(1);
-    TRACE_IO_START(1);
+
     std::unique_ptr<tflite::Interpreter> interpreter;
+    TRACE_LOGIC_START;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_Interpreter");
         // Register Ops
         tflite::ops::builtin::BuiltinOpResolver resolver;
         tflite::ops::custom::GenAIOpsRegisterer(&resolver); // Register GenAI custom ops
-
+        
         // Build the interpreter
         tflite::InterpreterBuilder builder(*model, resolver);
         MINIMAL_CHECK(builder.SetNumThreads(absl::GetFlag(FLAGS_num_threads)) == kTfLiteOk);
+
         builder(&interpreter);
+
         MINIMAL_CHECK(interpreter != nullptr);
     }
-    TRACE_IO_END(1);
-    TRACE_LOGIC_END(1);
+    TRACE_LOGIC_END("Build_Interpreter");
 
     // Create profiler if profiling is enabled
     constexpr int kProfilingBufferHeadrooms = 512;
@@ -394,6 +383,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     interpreter->SetProfiler(op_profiler.get());
 
     //* ============ [Phase] 3. Apply Delegate ============ */
+    TRACE_LOGIC_START;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Apply_Delegate");
         if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
@@ -401,32 +391,30 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
             ApplyXNNPACKWeightCaching(interpreter.get());
         }
     }
+    TRACE_LOGIC_END("Apply_Delegate");
 
     //* ============ [Phase] 4. Load Tokenizer ============ */
-    TRACE_LOGIC_START(2);
-    TRACE_IO_START(2);
+    TRACE_LOGIC_START;
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Tokenizer");
         sp_processor = LoadSentencePieceProcessor();
     }
-    TRACE_IO_END(2);
-    TRACE_LOGIC_END(2);
+    TRACE_LOGIC_END("Load_Tokenizer");
 
     //* ============ [Phase] 5. Build KV Cache ============ */
-    TRACE_LOGIC_START(3);
-    TRACE_IO_START(3);
+    TRACE_LOGIC_START;
     std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_KV_Cache");
         kv_cache = BuildKVCache(interpreter.get());
     }
-    TRACE_IO_END(3);
-    TRACE_LOGIC_END(3);
+    TRACE_LOGIC_END("Build_KV_Cache");
     MINIMAL_CHECK(!kv_cache.empty());
 
     // 5. Optionally load LoRA
     /*
+    TRACE_LOGIC_START;
     std::unique_ptr<ai_edge_torch::examples::LoRA> lora = nullptr;
     {
         custom::profiler::ScopeTimer timer("LoRA Loading");
@@ -436,11 +424,11 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
             MINIMAL_CHECK(lora != nullptr);
         }
     }
+    TRACE_LOGIC_END("LoRA Loading");
     */
 
     //* ============ [Phase] 6. Prepare Prompt ============ */
-    TRACE_LOGIC_START(4);
-    TRACE_IO_START(4);
+    TRACE_LOGIC_START;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Prompt");
         prompt = absl::GetFlag(FLAGS_prompt);
@@ -468,25 +456,28 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
             }
         }
     }
-    TRACE_IO_END(4);
-    TRACE_LOGIC_END(4);
+    TRACE_LOGIC_END("Prepare_Prompt");
     std::cout << "[INFO] Stop token ID: " << stop_token_id << " for token: " << stop_token << std::endl;
+
+
 
     //* ============ [Phase] 7. Prepare Signature Runners ============ */
     tflite::SignatureRunner *prefill_runner = nullptr;
     tflite::SignatureRunner *decode_runner = nullptr;
-    TRACE_LOGIC_START(5);
-    TRACE_IO_START(5);
+    TRACE_LOGIC_START;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Signature_Runners");
         std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
         prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
         decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
     }
-    TRACE_IO_END(5);
-    TRACE_LOGIC_END(5);
+    TRACE_LOGIC_END("Prepare_Signature_Runners");
     MINIMAL_CHECK(prefill_runner != nullptr || decode_runner != nullptr);
 
+
+
+
+    //* ============ [Phase] 8. Prepare Input Tensors ============ */
     TfLiteTensor *prefill_input = nullptr;
     TfLiteTensor *prefill_input_pos = nullptr;
     TfLiteTensor *decode_input = nullptr;
@@ -497,7 +488,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     int prefill_seq_size = 0;
     int seq_dim_index = 0;
 
-    //* ============ [Phase] 8. Prepare Input Tensors ============ */
+    TRACE_LOGIC_START;
     {
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Input_Tensor");
 
@@ -532,6 +523,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
             prefill_input_pos->data.i32[i] = i;
         }
     }
+    TRACE_LOGIC_END("Prepare_Input_Tensors");
     std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")" << std::endl;
 
     //* ============ [Phase] 9. Prefill Phase ============ */
@@ -541,24 +533,23 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     // Start op-level profiling
     op_profiler->Reset();
     op_profiler->StartProfiling();
-    TRACE_LOGIC_START(6);
-    TRACE_IO_START(6);
+    TRACE_LOGIC_START;
     {
         custom::profiler::ScopeTimer prefill_timer(prefill_time_ms);
         custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prefill");
         status = prefill_runner->Invoke(); // Execute the prefill runner
     }
-    TRACE_IO_END(6);
-    TRACE_LOGIC_END(6);
-    genai_metrics.RecordPrefillTime(prefill_time_ms);
+    TRACE_LOGIC_END("Prefill_xxxxxx");
     op_profiler->StopProfiling();
+    genai_metrics.RecordPrefillTime(prefill_time_ms);
     for (auto &out : op_profiler_outputs)
     {
         out.run_summarizer->ProcessProfiles(op_profiler->GetProfileEvents(), *interpreter);
     }
-
     MINIMAL_CHECK(status == kTfLiteOk);
     std::cout << "[INFO] Prefill Phase completed" << std::endl;
+
+
 
     //* ============ [Phase] 10. Decoding Phase ============ */
     // Determine how many tokens to generate
@@ -588,8 +579,8 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     {
         std::string stage_name = "Decode_" + std::to_string(i);
 
-        TRACE_LOGIC_START(7); // Decode_Generation
-        TRACE_IO_START(7);
+        
+        TRACE_LOGIC_START;
         op_profiler->Reset();
         op_profiler->StartProfiling();
 
@@ -637,8 +628,8 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
             }
         }
 
-        TRACE_IO_END(7);
-        TRACE_LOGIC_END(7);
+        TRACE_LOGIC_END(stage_name.c_str());
+
         genai_metrics.RecordDecodingTime(inference_time_ms, sampling_time_ms, detok_time_ms);
         op_profiler->StopProfiling();
         for (auto &out : op_profiler_outputs)

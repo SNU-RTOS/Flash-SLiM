@@ -61,8 +61,8 @@ clear_caches() {
     sleep 1
     
     log "Dropping swapped memory..."
-    sudo swapoff -a
-    sudo swapon -a
+    # sudo swapoff -a
+    # sudo swapon -a
     sleep 1
     
     log "Clearing CPU Caches..."

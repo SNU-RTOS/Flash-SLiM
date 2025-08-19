@@ -1,0 +1,311 @@
+#!/usr/bin/env bpftrace
+
+/*
+ * tflite_gen_profile_phase_renewal.bt
+ * 
+ * This BPFTrace script is designed to profile the tflite_gen application,
+ * focusing on phase-specific logic and I/O operations.
+ * It captures various metrics such as syscall times, page faults, and I/O operations.
+ */
+
+BEGIN
+{
+    printf("Attaching USDT probes for tflite_gen application with stage-specific logging...\n\n");
+    
+}
+
+// Syscall Module ───────────────────────────────────────────────────────────────────────────────
+
+// ───────────────────────────────────────────────────────────────────────────────
+// read()
+// ───────────────────────────────────────────────────────────────────────────────
+
+tracepoint:syscalls:sys_enter_read
+/@phase_ts_tid[tid]/
+{
+    @sys_enter_read_start_ns[tid] = nsecs;
+}
+tracepoint:syscalls:sys_exit_read
+/@sys_enter_read_start_ns[tid]/
+{
+    $sys_enter_read_end_ns = nsecs;
+    $sys_read_elapsed_time_ns = ($sys_enter_read_end_ns - @sys_enter_read_start_ns[tid]);
+
+    @sys_read_count[tid] += 1;
+    @sys_read_elapsed_time_total_ns[tid] += $sys_read_elapsed_time_ns;
+    @sys_read_bytes[tid] += args->ret >= 0 ? (uint64)args->ret : 0;
+    delete(@sys_enter_read_start_ns[tid]);
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// write()
+// ───────────────────────────────────────────────────────────────────────────────
+
+tracepoint:syscalls:sys_enter_write
+/@phase_ts_tid[tid]/
+{
+    @sys_enter_write_start_ns[tid] = nsecs;
+}
+tracepoint:syscalls:sys_exit_write
+/@sys_enter_write_start_ns[tid]/
+{
+    $sys_enter_write_end_ns = nsecs;
+    $sys_write_elapsed_time_ns = ($sys_enter_write_end_ns - @sys_enter_write_start_ns[tid]);
+
+    @sys_write_count[tid] += 1;
+    @sys_write_elapsed_time_total_ns[tid] += $sys_write_elapsed_time_ns;
+    @sys_write_bytes[tid] += args->ret >= 0 ? (uint64)args->ret : 0;
+    delete(@sys_enter_write_start_ns[tid]);
+}
+
+// Memory Management Module ───────────────────────────────────────────────────────────────────────────────
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Page fault (Major/Minor) Module 
+// ───────────────────────────────────────────────────────────────────────────────
+
+kprobe:handle_mm_fault
+/@phase_ts_tid[tid]/
+{
+    @pagefault_start_ns[tid] = nsecs;
+}
+
+kprobe:ondemand_readahead
+/@phase_ts_tid[tid]/
+{
+    @readahead_count[tid] += 1;
+}
+
+
+kretprobe:handle_mm_fault
+/@pagefault_start_ns[tid]/
+{
+    $pagefault_end_ns = nsecs;
+    $pagefault_elapsed_ns = ($pagefault_end_ns - @pagefault_start_ns[tid]);
+
+    $VM_FAULT_MAJOR = 4; // -> readahead만 발동 시킴 -> 거의 한 1000개?
+    $VM_FAULT_NOPAGE = 256; // -> 이게 대략 30000개
+    $VM_FAULT_LOCKED = 512; // -> 거의 영향 X
+    $VM_FAULT_RETRY = 1024; // -> 이게 대략 40000개
+
+    
+    if ((retval & $VM_FAULT_MAJOR) != 0)
+    {
+        @major_fault_count[tid] += 1;
+        @major_fault_elapsed_ns[tid] += $pagefault_elapsed_ns;
+    }
+    else
+    {
+        @minor_fault_count[tid] += 1;
+        @minor_fault_elapsed_ns[tid] += $pagefault_elapsed_ns;
+    }
+
+    delete(@pagefault_start_ns[tid]);
+}
+
+// Block IO Module ───────────────────────────────────────────────────────────────────────────────
+
+// block io issue
+tracepoint:block:block_io_start
+/@phase_ts_pid[pid]/
+{
+    @block_io_start_pid[args->dev, args->sector] = pid;
+    @block_io_start_ns[args->dev, args->sector] = nsecs;
+    @block_io_start_bytes[args->dev, args->sector] = args->bytes;
+    @block_io_start_rwbs[args->dev, args->sector] = args->rwbs;
+}
+
+tracepoint:block:block_io_done
+{
+    $start_ns = @block_io_start_ns[args->dev, args->sector];
+    $pid_orig = @block_io_start_pid[args->dev, args->sector];
+
+    if ($start_ns && $pid_orig) {
+        $bytes = @block_io_start_bytes[args->dev, args->sector];
+        $rwbs  = @block_io_start_rwbs[args->dev, args->sector];
+        $elapsed_ns = nsecs - $start_ns;
+
+        @block_io_time_total_ns_pid[$pid_orig] += $elapsed_ns;
+        @block_io_count_pid[$pid_orig] += 1;
+
+        if ($rwbs == "W") {
+            @block_write_bytes_total_pid[$pid_orig] += $bytes;
+        } else if ($rwbs == "R" || $rwbs == "RA") {
+            @block_read_bytes_total_pid[$pid_orig] += $bytes;
+        }
+
+        delete(@block_io_start_ns[args->dev, args->sector]);
+        delete(@block_io_start_pid[args->dev, args->sector]);
+        delete(@block_io_start_bytes[args->dev, args->sector]);
+        delete(@block_io_start_rwbs[args->dev, args->sector]);
+    }
+}
+
+
+
+// CPU Scheduler Module ───────────────────────────────────────────────────────────────────────────────
+
+tracepoint:sched:sched_stat_runtime
+/@phase_ts_pid[pid]/
+{
+    @cpu_runtime_ns[pid] += args->runtime;
+}
+
+tracepoint:sched:sched_stat_wait
+/@phase_ts_pid[pid]/
+{
+    @cpu_wait_ns[pid] += args->delay; 
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// User Probe
+// ───────────────────────────────────────────────────────────────────────────────
+
+usdt:./output/text_generator_main:tflite_gen:logic_start
+{
+    @phase_ts_tid[tid] = nsecs;
+    @phase_ts_pid[pid] = nsecs; // Store the start time for the phase
+}
+
+usdt:./output/text_generator_main:tflite_gen:logic_end
+/@phase_ts_tid[tid]/
+{
+    $logic_start_ns = @phase_ts_tid[tid];
+    $logic_end_ns = nsecs;
+    $wall_ms = ($logic_end_ns - $logic_start_ns) / 1000000;
+    $phase_name     = str(arg0);   // phase name
+
+    // Kernel mode I/O handling time measurements
+    $read_ms = @sys_read_elapsed_time_total_ns[tid] / 1000000;
+    $write_ms = @sys_write_elapsed_time_total_ns[tid] / 1000000;
+    $major_pf_ms = @major_fault_elapsed_ns[tid] / 1000000;
+    $minor_pf_ms = @minor_fault_elapsed_ns[tid] / 1000000;
+    $pf_ms = $major_pf_ms + $minor_pf_ms;
+    $total_io_ms = $read_ms + $write_ms + $pf_ms;
+    $total_non_io_ms = $wall_ms - $total_io_ms;
+
+    // IO Ratio
+    $io_ratio = ($wall_ms > 0) ? ($total_io_ms * 100 / $wall_ms) : 0;
+
+    // Total CPU runtime from sched_stat_runtime
+    $cpu_runtime_us = @cpu_runtime_ns[pid] / 1000;
+    $cpu_wait_us = @cpu_wait_ns[pid] / 1000;
+
+    // Block IO time
+    $block_io_time_us = @block_io_time_total_ns_pid[pid] / 1000;
+
+    printf("\n-------------------------------------------\n");
+    printf("[INFO] Phase %s Report \n\n", $phase_name);
+    //printf(" PID                                    : %lld\n", pid);
+    //printf(" TID                                    : %lld\n", tid);
+
+    printf("-- Elapsed Time Analysis --\n");
+    printf(" Wall Clock Time                            : %lld (ms)\n", $wall_ms);
+    printf("    - Non I/O Handling Time (Estimated)     : %lld (ms)\n", $total_non_io_ms);
+    printf("    - I/O Handling Time                     : %lld (ms)\n", $total_io_ms);
+    printf("        - Read Syscall                      : %lld (ms)\n", $read_ms);
+    printf("        - Write Syscall                     : %lld (ms)\n", $write_ms);
+    printf("        - PageFault                         : %lld (ms)\n", $pf_ms);
+    printf("            - Major PageFault               : %lld (ms)\n", $major_pf_ms);
+    printf("            - Minor PageFault               : %lld (ms)\n", $minor_pf_ms);
+    printf("\n");
+
+    printf("-- I/O Handling Stats --\n");
+    printf(" Major Fault Count                          : %llu\n", @major_fault_count[tid]);
+    printf(" Minor Fault Count                          : %llu\n", @minor_fault_count[tid]);
+    printf(" ReadAhead Count                            : %llu\n", @readahead_count[tid]);
+    printf(" Read Syscall Count                         : %llu\n", @sys_read_count[tid]);
+    printf(" Write Syscall Count                        : %llu\n", @sys_write_count[tid]);
+    printf(" Avg Major Fault Handling Time              : %lld (us)\n", (@major_fault_elapsed_ns[tid]  / (@major_fault_count[tid] ? @major_fault_count[tid] : 1))/1000);
+    printf(" Avg Minor Fault Handling Time              : %lld (us)\n", (@minor_fault_elapsed_ns[tid]  / (@minor_fault_count[tid] ? @minor_fault_count[tid] : 1))/1000);
+    printf("\n");
+
+    printf("-- Total Time --\n");
+    printf(" Total CPU Runtime                          : %lld (us)\n", $cpu_runtime_us);
+    printf(" Total CPU Wait Time                        : %lld (us)\n", $cpu_wait_us);
+    printf("\n");
+
+    printf("-- I/O Stats --\n");
+    printf(" Total Block I/O Time                       : %lld (us)\n", $block_io_time_us);
+    printf(" Total Block I/O Count                      : %llu\n", @block_io_count_pid[pid]);
+    printf(" Total Block I/O Read Bytes                 : %llu (bytes)\n", @block_read_bytes_total_pid[pid]);
+    printf(" Total Block I/O Write Bytes                : %llu (bytes)\n", @block_write_bytes_total_pid[pid]);
+    printf(" Avg Block I/O Time                         : %lld (us)\n", $block_io_time_us / (@block_io_count_pid[pid] ? @block_io_count_pid[pid] : 1));
+    printf(" Avg Block I/O Read Bytes                   : %lld (bytes)\n", @block_read_bytes_total_pid[pid] / (@block_io_count_pid[pid] ? @block_io_count_pid[pid] : 1));
+    printf(" Avg Block I/O Write Bytes                  : %lld (bytes)\n", @block_write_bytes_total_pid[pid] / (@block_io_count_pid[pid] ? @block_io_count_pid[pid] : 1));
+    printf(" Wall I/O Time (Last done - first start)    : \n");
+    printf(" I/O Parallelism ratio (Total IO / Wall IO) : \n");
+    printf(" I/O Stall ratio (Wall / Wall IO)           : %lld (%) \n", $io_ratio);
+    printf("\n");
+
+    // cleanup
+    delete(@phase_ts_tid[tid]);
+    delete(@cpu_runtime_ns[pid]);
+    delete(@cpu_wait_ns[pid]);
+
+    delete(@sys_read_count[tid]);
+    delete(@sys_write_count[tid]);
+    delete(@sys_read_bytes[tid]);
+    delete(@sys_write_bytes[tid]);
+    delete(@major_fault_count[tid]);
+    delete(@minor_fault_count[tid]);
+    
+    delete(@sys_enter_read_start_ns[tid]);
+    delete(@sys_enter_write_start_ns[tid]); 
+    delete(@pagefault_start_ns[tid]); 
+
+    delete(@sys_read_elapsed_time_total_ns[tid]);
+    delete(@sys_write_elapsed_time_total_ns[tid]);
+    delete(@major_fault_elapsed_ns[tid]);
+    delete(@minor_fault_elapsed_ns[tid]);
+
+    delete(@block_write_bytes_total_pid[pid]);
+    delete(@block_read_bytes_total_pid[pid]);
+    delete(@block_io_time_total_ns_pid[pid]);
+    delete(@block_io_count_pid[pid]);
+
+    delete(@readahead_count[tid]);
+}
+
+
+
+END
+{
+    printf("Cleaning up global tracking maps...\n");
+    clear(@phase_ts_tid);
+    clear(@phase_ts_pid);
+
+    clear(@sys_enter_read_start_ns);
+    clear(@sys_enter_write_start_ns);
+    clear(@pagefault_start_ns);
+    
+    clear(@sys_read_elapsed_time_total_ns);
+    clear(@sys_write_elapsed_time_total_ns);
+
+    clear(@major_fault_elapsed_ns);
+    clear(@minor_fault_elapsed_ns); 
+
+    clear(@sys_read_count);
+    clear(@sys_write_count);
+    clear(@block_io_count_pid);
+
+    clear(@minor_fault_count);
+    clear(@major_fault_count);
+    clear(@readahead_count);
+
+
+    clear(@sys_read_bytes);
+    clear(@sys_write_bytes);
+
+    clear(@cpu_runtime_ns); 
+    clear(@cpu_wait_ns);
+
+    clear(@block_io_start_ns);
+    clear(@block_io_start_bytes);
+    clear(@block_io_start_rwbs);
+    clear(@block_io_time_total_ns_pid);
+    clear(@block_read_bytes_total_pid);
+    clear(@block_write_bytes_total_pid);
+    printf("Cleanup complete.\n");
+}
