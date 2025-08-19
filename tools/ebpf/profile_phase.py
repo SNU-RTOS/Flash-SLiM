@@ -17,6 +17,14 @@ def naturalsort_key(s: str):
 BPF_TEXT = r"""
 #include <uapi/linux/ptrace.h>
 
+
+struct event_t {
+    u64 ts;          // ns, monotonic
+    u32 pid;         // tgid
+    int kind;        // 0 = start, 1 = end
+    char phase[96];  // update at end or check
+};
+
 struct pf_stat_t {
     u64 start_ns;         // PF 진입 시각 (0이면 비활성)
     u64 major_cnt;
@@ -26,61 +34,18 @@ struct pf_stat_t {
     u64 readahead_cnt;
 };
 
-struct event_t {
-    u64 ts;          // ns, monotonic
-    u32 pid;         // tgid
-    int kind;        // 0 = start, 1 = end
-    char phase[96];  // update at end or check
+// ── Read/Write Syscall Stats ──
+struct rw_stat_t {
+    u64 read_cnt;
+    u64 read_ns;
+    u64 read_bytes;
+
+    u64 write_cnt;
+    u64 write_ns;
+    u64 write_bytes;
+
+    u64 start_ns;   // sys_enter timestamp 저장용
 };
-
-BPF_PERF_OUTPUT(events);
-
-// ── Phase 활성화 여부(=측정 중) 표식: PID 키 ──
-BPF_HASH(phase_ts_pid, u32, u64);
-
-// ── Page Fault 측정 맵: PID 키 ──
-
-BPF_HASH(pfstat, u32, struct pf_stat_t);
-
-// ── Readahead 카운트: PID 키 ──
-BPF_HASH(readahead_count,         u32, u64);
-
-static __always_inline u32 get_pid() {
-    u64 id = bpf_get_current_pid_tgid();
-    return id >> 32; // tgid
-}
-
-// ===== USDT: logic_start =====
-int trace_logic_start(struct pt_regs *ctx) {
-    u64 now = bpf_ktime_get_ns();
-    u32 pid = get_pid();
-    phase_ts_pid.update(&pid, &now);
-
-    // ★ 시작 시 구조체를 0으로 리셋
-    struct pf_stat_t zero = {};
-    pfstat.update(&pid, &zero);
-
-    struct event_t e = {};
-    e.ts = now; e.pid = pid; e.kind = 0;
-    events.perf_submit(ctx, &e, sizeof(e));
-    return 0;
-}
-
-// ===== USDT: logic_end =====
-int trace_logic_end(struct pt_regs *ctx) {
-    u64 now = bpf_ktime_get_ns();
-    u32 pid = get_pid();
-
-    phase_ts_pid.delete(&pid);
-
-    struct event_t e = {};
-    e.ts = now; e.pid = pid; e.kind = 1;
-    u64 addr = 0;
-    bpf_usdt_readarg(1, ctx, &addr);
-    bpf_probe_read_user_str(e.phase, sizeof(e.phase), (void *)addr);
-    events.perf_submit(ctx, &e, sizeof(e));
-    return 0;
-}
 
 // ── VM_FAULT_* 플래그 (커널 버전에 따라 상수값 다를 수 있음) ──
 #define VM_FAULT_MAJOR   4
@@ -88,48 +53,200 @@ int trace_logic_end(struct pt_regs *ctx) {
 #define VM_FAULT_LOCKED  512
 #define VM_FAULT_RETRY   1024
 
-// ===== kprobe: handle_mm_fault (진입) =====
-int kprobe__handle_mm_fault(struct pt_regs *ctx) {
-    u32 pid = get_pid();
-    if (!phase_ts_pid.lookup(&pid)) return 0;
 
-    struct pf_stat_t *s = pfstat.lookup(&pid);
-    if (!s) return 0; // 이 경우 드묾(시작 직후 race)
-    s->start_ns = bpf_ktime_get_ns();   // ★ 단일 구조체 필드에 기록
+
+/* ---------- Minimal tracepoint ctx for sys_enter/exit ---------- */
+struct trace_event_raw_sys_enter {
+    unsigned long long unused;
+    long id;                   // __syscall_nr
+    unsigned long args[6];
+};
+struct trace_event_raw_sys_exit {
+    unsigned long long unused;
+    long id;                   // __syscall_nr
+    long ret;                  // return value
+};
+
+
+
+
+/* 01 BPF Maps */
+/* ---------- Maps ---------- */
+BPF_PERF_OUTPUT(events);
+
+// Phase 활성화 여부: PID(tgid) -> start_ts
+BPF_HASH(phase_ts_pid, u32, u64);
+
+// Page Fault 통계: KEY = u64(pid_tgid)
+BPF_HASH(pfstat, u64, struct pf_stat_t);
+
+// Read/Write 통계: KEY = u64(pid_tgid)
+BPF_HASH(rwstat, u64, struct rw_stat_t);
+
+// ── Readahead 카운트: PID 키 ──
+BPF_HASH(readahead_count, u32, u64);
+
+/* 02 BPF Helpers */
+static __always_inline u32 get_tgid(void) {
+    return (u32)(bpf_get_current_pid_tgid() >> 32);
+}
+static __always_inline u64 get_pid_tgid(void) {
+    return bpf_get_current_pid_tgid(); // [63:32]=tgid, [31:0]=tid
+}
+
+/* BPF Functions */
+/* ---------- USDT: logic_start / logic_end ---------- */
+int trace_logic_start(struct pt_regs *ctx) {
+    u64 now = bpf_ktime_get_ns();
+    u64 pid_tgid = get_pid_tgid();
+    u32 tgid = (u32)(pid_tgid >> 32);
+
+    // Phase 게이트 ON
+    phase_ts_pid.update(&tgid, &now);
+
+    // pfstat/rwstat은 TID 단위 lazy-init (여기서 초기화 불필요)
+
+    // 이벤트 알림
+    struct event_t e = {};
+    e.ts = now;
+    e.pid = tgid;
+    e.kind = 0;
+    events.perf_submit(ctx, &e, sizeof(e));
     return 0;
 }
 
-// ===== kretprobe: handle_mm_fault (복귀) =====
-int kretprobe__handle_mm_fault(struct pt_regs *ctx) {
-    u32 pid = get_pid();
-    struct pf_stat_t *s = pfstat.lookup(&pid);
+int trace_logic_end(struct pt_regs *ctx) {
+    u64 now = bpf_ktime_get_ns();
+    u32 tgid = get_tgid();
+
+    // Phase 게이트 OFF
+    phase_ts_pid.delete(&tgid);
+
+    // 이벤트 알림(+phase 문자열)
+    struct event_t e = {};
+    e.ts = now;
+    e.pid = tgid;
+    e.kind = 1;
+    u64 addr = 0;
+    bpf_usdt_readarg(1, ctx, &addr);
+    bpf_probe_read_user_str(e.phase, sizeof(e.phase), (void *)addr);
+    events.perf_submit(ctx, &e, sizeof(e));
+    return 0;
+}
+
+/* ---------- sys_read / sys_write (tracepoints) ---------- */
+int tracepoint__syscalls__sys_enter_read(struct trace_event_raw_sys_enter *ctx) {
+    u64 pid_tgid = get_pid_tgid();
+    u32 tgid = (u32)(pid_tgid >> 32);
+    if (!phase_ts_pid.lookup(&tgid)) return 0;
+
+    struct rw_stat_t zero = {};
+    struct rw_stat_t *s = rwstat.lookup_or_try_init(&pid_tgid, &zero);
     if (!s) return 0;
 
-    // 시작 안 찍혔으면 스킵
+    s->start_ns = bpf_ktime_get_ns();
+    return 0;
+}
+
+int tracepoint__syscalls__sys_exit_read(struct trace_event_raw_sys_exit *ctx) {
+    u64 pid_tgid = get_pid_tgid();
+    struct rw_stat_t *s = rwstat.lookup(&pid_tgid);
+    if (!s || s->start_ns == 0) return 0;
+
+    u64 delta = bpf_ktime_get_ns() - s->start_ns;
+    s->read_cnt++;
+    s->read_ns += delta;
+
+    long ret = ctx->ret; // bytes read or error(<0)
+    if (ret > 0) s->read_bytes += (u64)ret;
+
+    s->start_ns = 0;
+    return 0;
+}
+
+int tracepoint__syscalls__sys_enter_write(struct trace_event_raw_sys_enter *ctx) {
+    u64 pid_tgid = get_pid_tgid();
+    u32 tgid = (u32)(pid_tgid >> 32);
+    if (!phase_ts_pid.lookup(&tgid)) return 0;
+
+    struct rw_stat_t zero = {};
+    struct rw_stat_t *s = rwstat.lookup_or_try_init(&pid_tgid, &zero);
+    if (!s) return 0;
+
+    s->start_ns = bpf_ktime_get_ns();
+    return 0;
+}
+
+int tracepoint__syscalls__sys_exit_write(struct trace_event_raw_sys_exit *ctx) {
+    u64 pid_tgid = get_pid_tgid();
+    struct rw_stat_t *s = rwstat.lookup(&pid_tgid);
+    if (!s || s->start_ns == 0) return 0;
+
+    u64 delta = bpf_ktime_get_ns() - s->start_ns;
+    s->write_cnt++;
+    s->write_ns += delta;
+
+    long ret = ctx->ret; // bytes written or error(<0)
+    if (ret > 0) s->write_bytes += (u64)ret;
+
+    s->start_ns = 0;
+    return 0;
+}
+
+/* ---------- kprobe: handle_mm_fault ---------- */
+int kprobe__handle_mm_fault(struct pt_regs *ctx) {
+    u64 pid_tgid = get_pid_tgid();
+    u32 tgid = (u32)(pid_tgid >> 32);
+    if (!phase_ts_pid.lookup(&tgid)) return 0;
+
+    struct pf_stat_t zero = {};
+    struct pf_stat_t *s = pfstat.lookup_or_try_init(&pid_tgid, &zero);
+    if (!s) return 0;
+
+    s->start_ns = bpf_ktime_get_ns();
+    return 0;
+}
+
+/* ---------- kretprobe: handle_mm_fault ---------- */
+int kretprobe__handle_mm_fault(struct pt_regs *ctx) {
+    u64 pid_tgid = get_pid_tgid();
+    struct pf_stat_t *s = pfstat.lookup(&pid_tgid);
+    if (!s) return 0;
+
     u64 st = s->start_ns;
     if (st == 0) return 0;
 
     u64 delta = bpf_ktime_get_ns() - st;
-    s->start_ns = 0;                      // ★ 리셋(중첩 방지)
+    s->start_ns = 0;
 
     long retval = PT_REGS_RC(ctx);
-    if (retval & VM_FAULT_MAJOR) {
+
+    // RETRY: 실제 처리 미완 (major/minor로 세지 않음; 별도 계수 원하면 pf_stat_t에 필드 추가)
+    //if (retval & VM_FAULT_RETRY) {
+    //   return 0;
+    //}
+
+    if ((retval & VM_FAULT_MAJOR) != 0) {
         s->major_cnt++;
         s->major_ns += delta;
     } else {
+        // 커널에 'minor' 비트는 없음 → 'major 아님 && 에러 아님'을 minor로 취급
         s->minor_cnt++;
         s->minor_ns += delta;
     }
     return 0;
 }
 
-// ===== kprobe: ondemand_readahead =====
+/* ---------- kprobe: ondemand_readahead ---------- */
 int kprobe__ondemand_readahead(struct pt_regs *ctx) {
-    u32 pid = get_pid();
-    if (!phase_ts_pid.lookup(&pid)) return 0;
+    u64 pid_tgid = get_pid_tgid();
+    u32 tgid = (u32)(pid_tgid >> 32);
+    if (!phase_ts_pid.lookup(&tgid)) return 0;
 
-    struct pf_stat_t *s = pfstat.lookup(&pid);
+    struct pf_stat_t zero = {};
+    struct pf_stat_t *s = pfstat.lookup_or_try_init(&pid_tgid, &zero);
     if (!s) return 0;
+
     s->readahead_cnt++;
     return 0;
 }
@@ -251,86 +368,138 @@ import ctypes
 u32 = ctypes.c_uint
 u64 = ctypes.c_ulonglong
 
-def _read_and_clear_u64(tbl, pid):
-    key = u32(pid)
-    try:
-        val = tbl[key].value
-        del tbl[key]     # phase 경계에서 값 분리
-        return val
-    except KeyError:
-        return 0
+def _to_int(x):
+    """ctypes/int 혼재 안전 변환"""
+    return int(x.value) if hasattr(x, "value") else int(x)
 
-def _read_pfstat_sum_and_clear(tbl, pid):
+def _is_percpu_leaf(v):
+    # BPF_PERCPU_HASH면 leaf가 코어 수만큼 list로 들어옴
+    return isinstance(v, list)
+
+def _pf_leaf_add(total, leaf):
+    total['major_cnt']     += int(leaf.major_cnt)
+    total['minor_cnt']     += int(leaf.minor_cnt)
+    total['major_ns']      += int(leaf.major_ns)
+    total['minor_ns']      += int(leaf.minor_ns)
+    total['readahead_cnt'] += int(leaf.readahead_cnt)
+
+def _read_pfstat_sum_and_clear_per_tid(pfstat_map, pid):
     """
-    pfstat: BPF_HASH(pid -> struct pf_stat_t) 또는 BPF_PERCPU_HASH
+    pfstat_map: b["pfstat"], key = u64(pid_tgid)
+    pid       : tgid(u32)
     반환: dict(major_cnt, minor_cnt, major_ns, minor_ns, readahead_cnt)
+    동작: 상위 32비트가 pid인 엔트리만 합산 후 삭제
     """
-    key = u32(pid)
-    try:
-        val = tbl[key]      # Leaf 또는 [Leaf,...] (percpu일 경우)
-    except KeyError:
-        return {'major_cnt':0,'minor_cnt':0,'major_ns':0,'minor_ns':0,'readahead_cnt':0}
+    total = {'major_cnt':0,'minor_cnt':0,'major_ns':0,'minor_ns':0,'readahead_cnt':0}
+    to_delete = []
+    for k, v in pfstat_map.items():
+        key_u64 = _to_int(k)
+        tgid = (key_u64 >> 32) & 0xFFFFFFFF
+        if tgid != pid:
+            continue
 
-    # phase 경계에서 삭제하여 다음 phase와 분리
-    try:
-        del tbl[key]
-    except KeyError:
-        pass
+        if _is_percpu_leaf(v):
+            for leaf in v:
+                _pf_leaf_add(total, leaf)
+        else:
+            _pf_leaf_add(total, v)
+        to_delete.append(k)
 
-    def acc(total, leaf):
-        total['major_cnt']     += int(leaf.major_cnt)
-        total['minor_cnt']     += int(leaf.minor_cnt)
-        total['major_ns']      += int(leaf.major_ns)
-        total['minor_ns']      += int(leaf.minor_ns)
-        total['readahead_cnt'] += int(leaf.readahead_cnt)
-        return total
+    for k in to_delete:
+        try:
+            del pfstat_map[k]
+        except Exception:
+            pass
+    return total
 
-    # percpu이면 리스트, hash이면 단일 leaf
-    if isinstance(val, list):
-        total = {'major_cnt':0,'minor_cnt':0,'major_ns':0,'minor_ns':0,'readahead_cnt':0}
-        for leaf in val:
-            total = acc(total, leaf)
-        return total
-    else:
-        return acc({'major_cnt':0,'minor_cnt':0,'major_ns':0,'minor_ns':0,'readahead_cnt':0}, val)
+def _read_rwstat_sum_and_clear(rwstat_map, pid):
+    """
+    rwstat_map: b["rwstat"], key = u64(pid_tgid)
+    pid       : tgid(u32)
+    """
+    total = {"read_cnt":0,"read_ns":0,"read_bytes":0,
+             "write_cnt":0,"write_ns":0,"write_bytes":0}
+    to_delete = []
+    for k, v in rwstat_map.items():
+        key_u64 = _to_int(k)
+        tgid = (key_u64 >> 32) & 0xFFFFFFFF
+        if tgid != pid:
+            continue
 
-    
+        if _is_percpu_leaf(v):
+            # 보통 rwstat은 percpu 아니지만, 방어적으로 합산
+            for leaf in v:
+                total["read_cnt"]   += int(leaf.read_cnt)
+                total["read_ns"]    += int(leaf.read_ns)
+                total["read_bytes"] += int(leaf.read_bytes)
+                total["write_cnt"]  += int(leaf.write_cnt)
+                total["write_ns"]   += int(leaf.write_ns)
+                total["write_bytes"]+= int(leaf.write_bytes)
+        else:
+            total["read_cnt"]   += int(v.read_cnt)
+            total["read_ns"]    += int(v.read_ns)
+            total["read_bytes"] += int(v.read_bytes)
+            total["write_cnt"]  += int(v.write_cnt)
+            total["write_ns"]   += int(v.write_ns)
+            total["write_bytes"]+= int(v.write_bytes)
+
+        to_delete.append(k)
+
+    for k in to_delete:
+        try:
+            del rwstat_map[k]
+        except Exception:
+            pass
+    return total
+
 def on_event(cpu, data, size):
     global missing_start
     e = b["events"].event(data)
     if e.kind == 0:
-        last_start_ns[e.pid] = e.ts
+        last_start_ns[e.pid] = e.ts  # e.pid = tgid
         return
-    
+
     # kind == 1 (end)
     name = (e.phase.decode("utf-8", "replace").rstrip("\x00") or "<unknown>")
     start = last_start_ns.get(e.pid)
     if start is None:
-        missing_start += 1 # 비정상 순서 방어: start가 없으면 카운트만 증가
+        missing_start += 1  # 비정상 순서 방어
         return
-    
+
     dur_ns = e.ts - start
     del last_start_ns[e.pid]
-    
+
     # 집계(요약 표용)
     sum_ns[name] += dur_ns
     cnt[name]    += 1
     if dur_ns < min_ns[name]: min_ns[name] = dur_ns
     if dur_ns > max_ns[name]: max_ns[name] = dur_ns
     if SHOW_SEQUENCE:
-        seq.append((name, dur_ns / 1e6))  # ms로 표시
+        seq.append((name, dur_ns / 1e6))  # ms
+
+    # ===== PID(tgid) 기준 PageFault/ReadAhead 합산/클리어 (TID→PID) =====
+    pf_vals   = _read_pfstat_sum_and_clear_per_tid(b["pfstat"], e.pid)
+    major_cnt = pf_vals['major_cnt']
+    minor_cnt = pf_vals['minor_cnt']
+    major_ns  = pf_vals['major_ns']
+    minor_ns  = pf_vals['minor_ns']
+    ra_cnt    = pf_vals['readahead_cnt']
+
+    # ===== TID 기반 rwstat 합산/클리어 (PID로 모음) =====
+    rw_vals = _read_rwstat_sum_and_clear(b["rwstat"], e.pid)
+    sys_read_count = int(rw_vals["read_cnt"])
+    sys_write_count = int(rw_vals["write_cnt"])
+
+    # 파생치 계산
+    wall_ms       = int(dur_ns / 1e6)
+    pf_ms         = int((major_ns + minor_ns) / 1e6)
+    major_pf_ms   = int(major_ns / 1e6)
+    minor_pf_ms   = int(minor_ns / 1e6)
+    read_ms       = int(rw_vals["read_ns"] / 1e6)
+    write_ms      = int(rw_vals["write_ns"] / 1e6)
+    total_io_ms   = pf_ms + read_ms + write_ms
+
     
-    # ===== PID-based PageFault/ReadAhead 수거 =====
-    vals      = _read_pfstat_sum_and_clear(b["pfstat"], e.pid)
-    major_cnt = vals['major_cnt']
-    minor_cnt = vals['minor_cnt']
-    major_ns  = vals['major_ns']
-    minor_ns  = vals['minor_ns']
-    ra_cnt    = vals['readahead_cnt']
-    
-    pf_ms        = int((major_ns + minor_ns) / 1e6)
-    major_pf_ms  = int(major_ns / 1e6)
-    minor_pf_ms  = int(minor_ns / 1e6)
     # ===== rec 생성 (PageFault/ReadAhead 필드 채움) =====
     wall_ms = int(dur_ns / 1e6)
     rec = {
@@ -350,12 +519,12 @@ def on_event(cpu, data, size):
         'readahead_count': int(ra_cnt),
         
         # 아직 미집계 항목은 0 placeholder
-        'total_non_io_ms': 0,
-        'total_io_ms': 0,
-        'read_ms': 0,
-        'write_ms': 0,
-        'sys_read_count': 0,
-        'sys_write_count': 0,
+        'total_non_io_ms': wall_ms - total_io_ms,
+        'total_io_ms': total_io_ms,
+        'read_ms': read_ms,
+        'write_ms': write_ms,
+        'sys_read_count': sys_read_count,
+        'sys_write_count': sys_write_count,
         'cpu_runtime_us': 0,
         'cpu_wait_us': 0,
         'block_io_time_us': 0,
@@ -408,12 +577,6 @@ def print_report():
             cum += ratio
             print(f"{phase:<30} {avg:12.3f} {ratio:12.1f} {cum:12.1f}")
 
-    # ======== (NEW) Print per-phase breakdowns in sequence ========
-    if phase_records:
-        print("\n\n===== Phase Breakdown (per occurrence) =====")
-        for rec in phase_records:
-            print_phase_breakdown(rec)
-
     # Diagnostics
     if last_start_ns or missing_start:
         print("\n-- Diagnostics --")
@@ -421,8 +584,16 @@ def print_report():
             print(f"in-flight phases without END : {len(last_start_ns)}")
         if missing_start:
             print(f"END without prior START      : {missing_start}")
-
     print("=====================================\n")
+            
+    # ======== (NEW) Print per-phase breakdowns in sequence ========
+    if phase_records:
+        print("\n\n===== Phase Breakdown (per occurrence) =====")
+        for rec in phase_records:
+            print_phase_breakdown(rec)
+
+
+
 
 # ======== Setup / Main ========
 if __name__ == "__main__":
