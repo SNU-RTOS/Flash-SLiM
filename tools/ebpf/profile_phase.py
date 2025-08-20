@@ -25,8 +25,28 @@ BPF_TEXT = r"""
 #define VM_FAULT_NOPAGE  256
 #define VM_FAULT_LOCKED  512
 #define VM_FAULT_RETRY   1024
+// NOTE: These VM_FAULT_* constants may vary across kernel versions.
+//       Verify these against your target kernel headers if you see
+//       unexpected classification of page-fault types.
 
 
+/* ------------------------------------------------------------------
+ * BPF type & map declarations
+ * - This section groups all C struct/type definitions first, then the
+ *   perf outputs and BPF maps. The comments explain key types and map
+ *   key/value semantics so new readers can follow what is collected.
+ * ------------------------------------------------------------------ */
+
+/* --- Event type sent to userspace via perf buffer ---
+ * event_t: simple notification for phase START/END
+ *  - ts   : timestamp in ns (monotonic)
+ *  - pid  : tgid (process id) packed as u32 in userspace
+ *  - kind : 0=start, 1=end
+ *  - phase: null-terminated phase name (user-provided)
+ *
+ * NOTE: `phase` is limited to 64 bytes; long strings will be truncated
+ *       when read into this struct (userspace should handle truncation).
+ */
 struct event_t {
     u64 ts;          // ns, monotonic
     u32 pid;         // tgid
@@ -34,18 +54,28 @@ struct event_t {
     char phase[64];  // update at end or check
 };
 
+
+/* --- Page-fault accounting (per TID entry; summed to TGID in Python) ---
+ * pf_stat_t accumulates counts and elapsed ns for different PF types.
+ * Note: keys in the pfstat map are u64 pid_tgid (upper 32 bits = tgid,
+ * lower 32 bits = tid). The reader filters by tgid when summing.
+ */
 struct pf_stat_t {
-    u64 start_ns;         // PF 진입 시각 (0이면 비활성)
-    u64 major_cnt;  
-    u64 minor_cnt;
-    u64 minor_retry_cnt;
-    u64 major_ns;           // 누적 major 처리시간(ns)
-    u64 minor_ns;           // 누적 minor (NO_PAGE) 처리시간(ns)
-    u64 minor_retry_ns;    // 누적 minor (RETRY) 처리시간(ns)
-    u64 readahead_cnt;
+    u64 start_ns;         // PF entry ts (0 means inactive)
+    u64 major_cnt;        // major faults count
+    u64 minor_cnt;        // minor faults (no page) count
+    u64 minor_retry_cnt;  // minor-retry faults count
+    u64 major_ns;         // accumulated major handling time (ns)
+    u64 minor_ns;         // accumulated minor (NOPAGE) handling time (ns)
+    u64 minor_retry_ns;   // accumulated minor (RETRY) handling time (ns)
+    u64 readahead_cnt;    // readahead invocation count
 };
 
-// ── Read/Write Syscall Stats ──
+
+/* --- Read/Write syscall timing (per TID entry) ---
+ * - start_ns is used to record sys_enter timestamp; exit adds delta.
+ * - map key is u64 pid_tgid (tid-scoped) to avoid races between threads.
+ */
 struct rw_stat_t {
     u64 read_cnt;
     u64 read_ns;
@@ -55,45 +85,22 @@ struct rw_stat_t {
     u64 write_ns;
     u64 write_bytes;
 
-    u64 start_ns;   // sys_enter timestamp 저장용
+    u64 start_ns;   // sys_enter timestamp storage
 };
 
 
-/* ---------- Minimal tracepoint ctx for sys_enter/exit ---------- */
-struct trace_event_raw_sys_enter {
-    unsigned long long unused;
-    long id;                   // __syscall_nr
-    unsigned long args[6];
-};
-struct trace_event_raw_sys_exit {
-    unsigned long long unused;
-    long id;                   // __syscall_nr
-    long ret;                  // return value
-};
+/* --- Block I/O helper structs ---
+ * block_start_t : stored at issue time keyed by bio (dev,sector)
+ *  - pid_tgid records the originating pid/tid so completion can be
+ *    attributed back to the issuing thread.
+ * block_stat_t  : accumulator per pid_tgid for completed requests
+ * block_io_interval_t : optional interval payload (perf) used for
+ *    more advanced post-processing (interval-level events).
+ */
 
-
-
-
-/* 01 BPF Maps */
-/* ---------- Maps ---------- */
-BPF_PERF_OUTPUT(events);
-
-// Phase 활성화 여부: PID(tgid) -> start_ts
-BPF_HASH(phase_ts_pid, u32, u64);
-
-// Page Fault 통계: KEY = u64(pid_tgid)
-BPF_HASH(pfstat, u64, struct pf_stat_t);
-
-// Read/Write 통계: KEY = u64(pid_tgid)
-BPF_HASH(rwstat, u64, struct rw_stat_t);
-
-// ── Readahead 카운트: PID 키 ──
-BPF_HASH(readahead_count, u32, u64);
-
-// ── Block I/O Start/Stats ──
 struct block_start_t {
     u64 start_ns;
-    u64 pid_tgid;   // attribute to PID captured at start time
+    u64 pid_tgid;   // pid/tid captured at start time (u64: [63:32]=tgid)
     char op;        // 'R' or 'W' (from rwbs[0])
     u64 bytes;      // request size captured at start
 };
@@ -105,25 +112,121 @@ struct block_stat_t {
     u64 write_bytes;   // bytes completed for writes
 };
 
-// Key on (dev, sector) like the bpftrace prototype
 struct bio_key_t { u64 dev; u64 sector; };
-BPF_HASH(block_start, struct bio_key_t, struct block_start_t);
 
-// Accumulate per pid_tgid (sum to tgid at phase end)
-BPF_HASH(blockstat, u64, struct block_stat_t);
+struct block_io_interval_t {
+    u64 pid_tgid;      // pid/tid for the interval
+    u64 start_ns;      // interval start (ns)
+    u64 end_ns;        // interval end (ns)
+    u64 bytes;         // bytes processed in interval
+    char op;           // 'R' or 'W'
+};
 
-// ── CPU sched stats (runtime/wait) per pid_tgid ──
+
 struct sched_stat_t {
     u64 runtime_ns;
     u64 wait_ns;
 };
+
+/* --- Perf output endpoints (userspace consumers) --- */
+BPF_PERF_OUTPUT(events);     // phase start/end events -> Python handler
+/* PERF OUTPUT declared for detailed intervals. Currently optional: the
+ * BPF code in this file does not submit `intervals` in all code paths.
+ * Keep this endpoint if you later want per-IO interval payloads to be
+ * submitted to userspace; otherwise it can be removed.
+ */
+BPF_PERF_OUTPUT(intervals);  // optional detailed I/O intervals -> Python
+
+
+/* --- BPF Maps ---
+ * Naming & key conventions:
+ *  - phase_ts_pid : key=u32 (tgid) -> value=u64 start timestamp
+ *  - pfstat, rwstat, blockstat, schedstat : key=u64 (pid_tgid)
+ *      where upper 32 bits = tgid, lower 32 bits = tid. Python code
+ *      filters by tgid and sums per-thread entries into a per-process
+ *      aggregate for reporting.
+ *
+ * Python usage hint: when iterating map keys from userspace you can
+ * extract tgid with: `tgid = (key_u64 >> 32) & 0xffffffff` before
+ * deciding whether to include the entry in a per-process sum.
+ */
+/* --- Maps: purpose + key conventions (detailed) ---
+ *
+ * phase_ts_pid (u32 -> u64)
+ *  - Tracks whether a phase gate is active for a given process (tgid).
+ *  - Key: u32 tgid (process). Value: start timestamp (ns) when logic_start
+ *    was observed. Cleared at logic_end. Used as a fast membership test
+ *    inside many probes to avoid unnecessary work when no phase is active.
+ */
+BPF_HASH(phase_ts_pid, u32, u64);
+
+/*
+ * pfstat (u64 pid_tgid -> pf_stat_t)
+ *  - Per-thread (tid-scoped) page-fault accounting entries are stored here.
+ *  - Key: u64 pid_tgid (upper 32 bits = tgid, lower 32 bits = tid).
+ *  - Rationale: kprobe/kretprobe handlers execute on the faulting thread,
+ *    so keeping per-tid entries avoids races across threads. Python later
+ *    reads and reduces per-tid entries into a per-tgid summary for output.
+ */
+BPF_HASH(pfstat, u64, struct pf_stat_t);
+
+/*
+ * rwstat (u64 pid_tgid -> rw_stat_t)
+ *  - Tracks syscall enter/exit timing for read/write per-thread.
+ *  - start_ns is set on sys_enter and used on exit to compute elapsed ns.
+ */
+BPF_HASH(rwstat, u64, struct rw_stat_t);
+
+/*
+ * readahead_count (u32 tgid -> u64)
+ *  - Simple per-process counter incremented from the ondemand_readahead kprobe.
+ *  - Keyed by tgid because readahead is attributed to the process scope.
+ *
+ * DECLARED BUT UNUSED: this map exists for historical reasons. The current
+ * implementation increments readahead counters inside `pfstat` entries
+ * (pf_stat_t.readahead_cnt) and userspace reads that field. Consider
+ * removing this separate map or using it consistently.
+ */
+BPF_HASH(readahead_count, u32, u64);
+
+/*
+ * block_start : keyed by bio (dev,sector) -> block_start_t
+ *  - At BIO issue time we capture a small blob (start_ns, pid_tgid, bytes, op)
+ *    indexed by the bio key. On completion we lookup using the same key.
+ *  - Note: bio keys can collide or be reused by the kernel in some cases;
+ *    code defensively checks lookups and deletes entries after completion.
+ *  - NOTE: `bio_key_t` layout and alignment must match the kernel tracepoint
+ *    usage; key reuse/collisions are mitigated by defensive lookup logic.
+ */
+BPF_HASH(block_start, struct bio_key_t, struct block_start_t);
+
+/*
+ * blockstat (u64 pid_tgid -> block_stat_t)
+ *  - Accumulates completed block I/O statistics per issuing pid/tid.
+ *  - Key: u64 pid_tgid so that completions are attributed back to the
+ *    issuing thread. Python will combine per-tid entries into per-tgid
+ *    aggregates when generating the report.
+ */
+BPF_HASH(blockstat, u64, struct block_stat_t);
+
+/*
+ * schedstat (u64 pid_tgid -> sched_stat_t)
+ *  - Runtime/wait counters are accumulated via sched tracepoints and stored
+ *    per pid_tgid (thread-scoped) for the same reasons as other per-thread
+ *    counters. Summation into a per-process view is done in userspace.
+ */
 BPF_HASH(schedstat, u64, struct sched_stat_t);
 
 /* 02 BPF Helpers */
 static __always_inline u32 get_tgid(void) {
+    // Return the current process id (tgid). Use this in probes where we
+    // only need process-level membership (phase gate checks etc.).
     return (u32)(bpf_get_current_pid_tgid() >> 32);
 }
 static __always_inline u64 get_pid_tgid(void) {
+    // Return the raw 64-bit pid_tgid as produced by bpf_get_current_pid_tgid().
+    // Layout: upper 32 bits = tgid, lower 32 bits = tid. Many map keys use
+    // this packed value so consumers can recover both process and thread ids.
     return bpf_get_current_pid_tgid(); // [63:32]=tgid, [31:0]=tid
 }
 
@@ -167,8 +270,11 @@ int trace_logic_end(struct pt_regs *ctx) {
     return 0;
 }
 
-/* ---------- sys_read / sys_write (tracepoints) ---------- */
-int tracepoint__syscalls__sys_enter_read(struct trace_event_raw_sys_enter *ctx) {
+/* ---------- tracepoint: syscalls (read/write) ---------- */
+/* Replaced function-style tracepoint handlers with TRACEPOINT_PROBE to
+ * ensure the tracepoint `args` struct is available in BPF context.
+ */
+TRACEPOINT_PROBE(syscalls, sys_enter_read) {
     u64 pid_tgid = get_pid_tgid();
     u32 tgid = (u32)(pid_tgid >> 32);
     if (!phase_ts_pid.lookup(&tgid)) return 0;
@@ -181,7 +287,7 @@ int tracepoint__syscalls__sys_enter_read(struct trace_event_raw_sys_enter *ctx) 
     return 0;
 }
 
-int tracepoint__syscalls__sys_exit_read(struct trace_event_raw_sys_exit *ctx) {
+TRACEPOINT_PROBE(syscalls, sys_exit_read) {
     u64 pid_tgid = get_pid_tgid();
     struct rw_stat_t *s = rwstat.lookup(&pid_tgid);
     if (!s || s->start_ns == 0) return 0;
@@ -190,14 +296,14 @@ int tracepoint__syscalls__sys_exit_read(struct trace_event_raw_sys_exit *ctx) {
     s->read_cnt++;
     s->read_ns += delta;
 
-    long ret = ctx->ret; // bytes read or error(<0)
+    long ret = args->ret; // bytes read or error(<0)
     if (ret > 0) s->read_bytes += (u64)ret;
 
     s->start_ns = 0;
     return 0;
 }
 
-int tracepoint__syscalls__sys_enter_write(struct trace_event_raw_sys_enter *ctx) {
+TRACEPOINT_PROBE(syscalls, sys_enter_write) {
     u64 pid_tgid = get_pid_tgid();
     u32 tgid = (u32)(pid_tgid >> 32);
     if (!phase_ts_pid.lookup(&tgid)) return 0;
@@ -210,7 +316,7 @@ int tracepoint__syscalls__sys_enter_write(struct trace_event_raw_sys_enter *ctx)
     return 0;
 }
 
-int tracepoint__syscalls__sys_exit_write(struct trace_event_raw_sys_exit *ctx) {
+TRACEPOINT_PROBE(syscalls, sys_exit_write) {
     u64 pid_tgid = get_pid_tgid();
     struct rw_stat_t *s = rwstat.lookup(&pid_tgid);
     if (!s || s->start_ns == 0) return 0;
@@ -219,7 +325,7 @@ int tracepoint__syscalls__sys_exit_write(struct trace_event_raw_sys_exit *ctx) {
     s->write_cnt++;
     s->write_ns += delta;
 
-    long ret = ctx->ret; // bytes written or error(<0)
+    long ret = args->ret; // bytes written or error(<0)
     if (ret > 0) s->write_bytes += (u64)ret;
 
     s->start_ns = 0;
@@ -285,7 +391,7 @@ int kprobe__ondemand_readahead(struct pt_regs *ctx) {
 
 
 
-/* ---------- tracepoint: block_io_start (start) ---------- */
+/* ---------- tracepoint: block_io_start (start) / block_io_done (done) ---------- */
 TRACEPOINT_PROBE(block, block_io_start) {
     u32 tgid = get_tgid();
     if (!phase_ts_pid.lookup(&tgid)) return 0;
@@ -308,7 +414,6 @@ TRACEPOINT_PROBE(block, block_io_start) {
     return 0;
 }
 
-/* ---------- tracepoint: block_io_done (done) ---------- */
 TRACEPOINT_PROBE(block, block_io_done) {
     struct bio_key_t key = { .dev = args->dev, .sector = args->sector };
     struct block_start_t *st = block_start.lookup(&key);
@@ -332,7 +437,7 @@ TRACEPOINT_PROBE(block, block_io_done) {
     return 0;
 }
 
-/* ---------- sched tracepoints: runtime / wait ---------- */
+/* ---------- sched tracepoints: cpu runtime / cpu wait ---------- */
 TRACEPOINT_PROBE(sched, sched_stat_runtime) {
     u32 tgid = get_tgid();
     if (!phase_ts_pid.lookup(&tgid)) return 0;
@@ -399,14 +504,20 @@ class PhaseRecord:
     pid: int = 0
     tid: int = 0
     wall_ms: int = 0
-    total_non_io_ms: int = 0
-    total_io_ms: int = 0
-    read_ms: int = 0
-    write_ms: int = 0
+    wall_pid_non_io_ms: int = 0
+    wall_pid_io_ms: int = 0
+    wall_read_ms: int = 0
+    wall_write_ms: int = 0
+    wall_pf_ms: int = 0
+    wall_major_pf_ms: int = 0
+    wall_minor_pf_ms: int = 0
+    wall_minor_retry_pf_ms: int = 0
+    total_read_ms: int = 0
+    total_write_ms: int = 0
     pf_ms: int = 0
-    major_pf_ms: int = 0
-    minor_pf_ms: int = 0
-    minor_retry_pf_ms: int = 0
+    total_major_pf_ms: int = 0
+    total_minor_pf_ms: int = 0
+    total_minor_retry_pf_ms: int = 0
     avg_major_us: int = 0
     avg_minor_us: int = 0
     avg_minor_retry_us: int = 0
@@ -500,46 +611,40 @@ def _read_stat_generic(stat_map, pid, fields):
 
 
 def _read_pfstat_sum_and_clear(pfstat_map, pid):
-    """
-    pfstat_map: b["pfstat"], key = u64(pid_tgid)
-    pid       : tgid(u32)
-    반환: dict(major_cnt, minor_cnt, major_ns, minor_ns, readahead_cnt)
-    동작: 상위 32비트가 pid인 엔트리만 합산 후 삭제
-    """
-    total = {
-        "major_cnt": 0,
-        "minor_cnt": 0,
-        "minor_retry_cnt": 0,
-        "major_ns": 0,
-        "minor_ns": 0,
-        "minor_retry_ns": 0,
-        "readahead_cnt": 0,
-    }
+    # Sum totals per-TGID (as before) and also accumulate main-thread (tid==tgid).
+    fields = [
+        "major_cnt",
+        "minor_cnt",
+        "minor_retry_cnt",
+        "major_ns",
+        "minor_ns",
+        "minor_retry_ns",
+        "readahead_cnt",
+    ]
+    total = {f: 0 for f in fields}
+    main = {f: 0 for f in fields}
     to_delete = []
+
     for k, v in pfstat_map.items():
         key_u64 = _to_int(k)
         tgid = (key_u64 >> 32) & 0xFFFFFFFF
         if tgid != pid:
             continue
+        tid = key_u64 & 0xFFFFFFFF
+
+        def _acc(dst, obj):
+            for f in fields:
+                dst[f] += int(getattr(obj, f, 0))
 
         if _is_percpu_leaf(v):
             for leaf in v:
-                total["major_cnt"] += int(leaf.major_cnt)
-                total["minor_cnt"] += int(leaf.minor_cnt)
-                total["minor_retry_cnt"] += int(leaf.minor_retry_cnt)
-                total["major_ns"] += int(leaf.major_ns)
-                total["minor_ns"] += int(leaf.minor_ns)
-                total["minor_retry_ns"] += int(leaf.minor_retry_ns)
-                total["readahead_cnt"] += int(leaf.readahead_cnt)
-
+                _acc(total, leaf)
+                if tid == tgid:
+                    _acc(main, leaf)
         else:
-            total["major_cnt"] += int(v.major_cnt)
-            total["minor_cnt"] += int(v.minor_cnt)
-            total["minor_retry_cnt"] += int(v.minor_retry_cnt)
-            total["major_ns"] += int(v.major_ns)
-            total["minor_ns"] += int(v.minor_ns)
-            total["minor_retry_ns"] += int(v.minor_retry_ns)
-            total["readahead_cnt"] += int(v.readahead_cnt)
+            _acc(total, v)
+            if tid == tgid:
+                _acc(main, v)
 
         to_delete.append(k)
 
@@ -548,124 +653,208 @@ def _read_pfstat_sum_and_clear(pfstat_map, pid):
             del pfstat_map[k]
         except Exception:
             pass
-    return total
+
+    # Return a single dict compatible with existing callers, with main_* keys added
+    res = total.copy()
+    for f in fields:
+        res["main_" + f] = main[f]
+    return res
 
 
 def _read_rwstat_sum_and_clear(rwstat_map, pid):
-    """
-    rwstat_map: b["rwstat"], key = u64(pid_tgid)
-    pid       : tgid(u32)
-    """
-    total = {
-        "read_cnt": 0,
-        "read_ns": 0,
-        "read_bytes": 0,
-        "write_cnt": 0,
-        "write_ns": 0,
-        "write_bytes": 0,
-    }
-    to_delete = []
-    for k, v in rwstat_map.items():
-        key_u64 = _to_int(k)
-        tgid = (key_u64 >> 32) & 0xFFFFFFFF
-        if tgid != pid:
-            continue
-
-        if _is_percpu_leaf(v):
-            for leaf in v:
-                total["read_cnt"] += int(leaf.read_cnt)
-                total["read_ns"] += int(leaf.read_ns)
-                total["read_bytes"] += int(leaf.read_bytes)
-                total["write_cnt"] += int(leaf.write_cnt)
-                total["write_ns"] += int(leaf.write_ns)
-                total["write_bytes"] += int(leaf.write_bytes)
-        else:
-            total["read_cnt"] += int(v.read_cnt)
-            total["read_ns"] += int(v.read_ns)
-            total["read_bytes"] += int(v.read_bytes)
-            total["write_cnt"] += int(v.write_cnt)
-            total["write_ns"] += int(v.write_ns)
-            total["write_bytes"] += int(v.write_bytes)
-
-        to_delete.append(k)
-
-    for k in to_delete:
-        try:
-            del rwstat_map[k]
-        except Exception:
-            pass
-    return total
+    return _read_stat_generic(
+        rwstat_map,
+        pid,
+        [
+            "read_cnt",
+            "read_ns",
+            "read_bytes",
+            "write_cnt",
+            "write_ns",
+            "write_bytes",
+        ],
+    )
 
 
 def _read_blockstat_sum_and_clear(blockstat_map, pid):
-    """
-    blockstat_map: b["blockstat"], key = u64(pid_tgid)
-    pid         : tgid(u32)
-    반환: dict(time_ns, count, read_bytes, write_bytes)
-    동작: 상위 32비트가 pid인 엔트리만 합산 후 삭제
-    """
-    total = {
-        "time_ns": 0,
-        "count": 0,
-        "read_bytes": 0,
-        "write_bytes": 0,
-    }
-    to_delete = []
-    for k, v in blockstat_map.items():
-        key_u64 = _to_int(k)
-        tgid = (key_u64 >> 32) & 0xFFFFFFFF
-        if tgid != pid:
-            continue
-
-        if _is_percpu_leaf(v):
-            for leaf in v:
-                total["time_ns"] += int(leaf.time_ns)
-                total["count"] += int(leaf.count)
-                total["read_bytes"] += int(leaf.read_bytes)
-                total["write_bytes"] += int(leaf.write_bytes)
-        else:
-            total["time_ns"] += int(v.time_ns)
-            total["count"] += int(v.count)
-            total["read_bytes"] += int(v.read_bytes)
-            total["write_bytes"] += int(v.write_bytes)
-
-        to_delete.append(k)
-
-    for k in to_delete:
-        try:
-            del blockstat_map[k]
-        except Exception:
-            pass
-    return total
+    return _read_stat_generic(
+        blockstat_map,
+        pid,
+        ["time_ns", "count", "read_bytes", "write_bytes"],
+    )
 
 
 def _read_sched_sum_and_clear(sched_map, pid):
-    """
-    sched_map: b["schedstat"], key = u64(pid_tgid)
-    pid      : tgid(u32)
-    반환: dict(runtime_ns, wait_ns)
-    """
-    total = {"runtime_ns": 0, "wait_ns": 0}
-    to_delete = []
-    for k, v in sched_map.items():
-        key_u64 = _to_int(k)
-        tgid = (key_u64 >> 32) & 0xFFFFFFFF
-        if tgid != pid:
-            continue
-        if _is_percpu_leaf(v):
-            for leaf in v:
-                total["runtime_ns"] += int(leaf.runtime_ns)
-                total["wait_ns"] += int(leaf.wait_ns)
-        else:
-            total["runtime_ns"] += int(v.runtime_ns)
-            total["wait_ns"] += int(v.wait_ns)
-        to_delete.append(k)
-    for k in to_delete:
-        try:
-            del sched_map[k]
-        except Exception:
-            pass
-    return total
+    return _read_stat_generic(sched_map, pid, ["runtime_ns", "wait_ns"])
+
+
+# def _read_pfstat_sum_and_clear(pfstat_map, pid):
+#     """
+#     pfstat_map: b["pfstat"], key = u64(pid_tgid)
+#     pid       : tgid(u32)
+#     반환: dict(major_cnt, minor_cnt, major_ns, minor_ns, readahead_cnt)
+#     동작: 상위 32비트가 pid인 엔트리만 합산 후 삭제
+#     """
+#     total = {
+#         "major_cnt": 0,
+#         "minor_cnt": 0,
+#         "minor_retry_cnt": 0,
+#         "major_ns": 0,
+#         "minor_ns": 0,
+#         "minor_retry_ns": 0,
+#         "readahead_cnt": 0,
+#     }
+#     to_delete = []
+#     for k, v in pfstat_map.items():
+#         key_u64 = _to_int(k)
+#         tgid = (key_u64 >> 32) & 0xFFFFFFFF
+#         if tgid != pid:
+#             continue
+
+#         if _is_percpu_leaf(v):
+#             for leaf in v:
+#                 total["major_cnt"] += int(leaf.major_cnt)
+#                 total["minor_cnt"] += int(leaf.minor_cnt)
+#                 total["minor_retry_cnt"] += int(leaf.minor_retry_cnt)
+#                 total["major_ns"] += int(leaf.major_ns)
+#                 total["minor_ns"] += int(leaf.minor_ns)
+#                 total["minor_retry_ns"] += int(leaf.minor_retry_ns)
+#                 total["readahead_cnt"] += int(leaf.readahead_cnt)
+
+#         else:
+#             total["major_cnt"] += int(v.major_cnt)
+#             total["minor_cnt"] += int(v.minor_cnt)
+#             total["minor_retry_cnt"] += int(v.minor_retry_cnt)
+#             total["major_ns"] += int(v.major_ns)
+#             total["minor_ns"] += int(v.minor_ns)
+#             total["minor_retry_ns"] += int(v.minor_retry_ns)
+#             total["readahead_cnt"] += int(v.readahead_cnt)
+
+#         to_delete.append(k)
+
+#     for k in to_delete:
+#         try:
+#             del pfstat_map[k]
+#         except Exception:
+#             pass
+#     return total
+
+
+# def _read_rwstat_sum_and_clear(rwstat_map, pid):
+#     """
+#     rwstat_map: b["rwstat"], key = u64(pid_tgid)
+#     pid       : tgid(u32)
+#     """
+#     total = {
+#         "read_cnt": 0,
+#         "read_ns": 0,
+#         "read_bytes": 0,
+#         "write_cnt": 0,
+#         "write_ns": 0,
+#         "write_bytes": 0,
+#     }
+#     to_delete = []
+#     for k, v in rwstat_map.items():
+#         key_u64 = _to_int(k)
+#         tgid = (key_u64 >> 32) & 0xFFFFFFFF
+#         if tgid != pid:
+#             continue
+
+#         if _is_percpu_leaf(v):
+#             for leaf in v:
+#                 total["read_cnt"] += int(leaf.read_cnt)
+#                 total["read_ns"] += int(leaf.read_ns)
+#                 total["read_bytes"] += int(leaf.read_bytes)
+#                 total["write_cnt"] += int(leaf.write_cnt)
+#                 total["write_ns"] += int(leaf.write_ns)
+#                 total["write_bytes"] += int(leaf.write_bytes)
+#         else:
+#             total["read_cnt"] += int(v.read_cnt)
+#             total["read_ns"] += int(v.read_ns)
+#             total["read_bytes"] += int(v.read_bytes)
+#             total["write_cnt"] += int(v.write_cnt)
+#             total["write_ns"] += int(v.write_ns)
+#             total["write_bytes"] += int(v.write_bytes)
+
+#         to_delete.append(k)
+
+#     for k in to_delete:
+#         try:
+#             del rwstat_map[k]
+#         except Exception:
+#             pass
+#     return total
+
+
+# def _read_blockstat_sum_and_clear(blockstat_map, pid):
+#     """
+#     blockstat_map: b["blockstat"], key = u64(pid_tgid)
+#     pid         : tgid(u32)
+#     반환: dict(time_ns, count, read_bytes, write_bytes)
+#     동작: 상위 32비트가 pid인 엔트리만 합산 후 삭제
+#     """
+#     total = {
+#         "time_ns": 0,
+#         "count": 0,
+#         "read_bytes": 0,
+#         "write_bytes": 0,
+#     }
+#     to_delete = []
+#     for k, v in blockstat_map.items():
+#         key_u64 = _to_int(k)
+#         tgid = (key_u64 >> 32) & 0xFFFFFFFF
+#         if tgid != pid:
+#             continue
+
+#         if _is_percpu_leaf(v):
+#             for leaf in v:
+#                 total["time_ns"] += int(leaf.time_ns)
+#                 total["count"] += int(leaf.count)
+#                 total["read_bytes"] += int(leaf.read_bytes)
+#                 total["write_bytes"] += int(leaf.write_bytes)
+#         else:
+#             total["time_ns"] += int(v.time_ns)
+#             total["count"] += int(v.count)
+#             total["read_bytes"] += int(v.read_bytes)
+#             total["write_bytes"] += int(v.write_bytes)
+
+#         to_delete.append(k)
+
+#     for k in to_delete:
+#         try:
+#             del blockstat_map[k]
+#         except Exception:
+#             pass
+#     return total
+
+
+# def _read_sched_sum_and_clear(sched_map, pid):
+#     """
+#     sched_map: b["schedstat"], key = u64(pid_tgid)
+#     pid      : tgid(u32)
+#     반환: dict(runtime_ns, wait_ns)
+#     """
+#     total = {"runtime_ns": 0, "wait_ns": 0}
+#     to_delete = []
+#     for k, v in sched_map.items():
+#         key_u64 = _to_int(k)
+#         tgid = (key_u64 >> 32) & 0xFFFFFFFF
+#         if tgid != pid:
+#             continue
+#         if _is_percpu_leaf(v):
+#             for leaf in v:
+#                 total["runtime_ns"] += int(leaf.runtime_ns)
+#                 total["wait_ns"] += int(leaf.wait_ns)
+#         else:
+#             total["runtime_ns"] += int(v.runtime_ns)
+#             total["wait_ns"] += int(v.wait_ns)
+#         to_delete.append(k)
+#     for k in to_delete:
+#         try:
+#             del sched_map[k]
+#         except Exception:
+#             pass
+#     return total
 
 
 def _capture_phase_raw_record(
@@ -759,11 +948,29 @@ def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
     minor_pf_ns = int(pf_vals["minor_ns"])
     minor_pf_retry_ns = int(pf_vals["minor_retry_ns"])
 
-    major_pf_ms = int(major_pf_ns // 1e6)
-    minor_pf_ms = int(minor_pf_ns // 1e6)
-    minor_retry_pf_ms = int(minor_pf_retry_ns // 1e6)
 
-    pf_ms = int(major_pf_ms + minor_pf_ms + minor_retry_pf_ms)
+    total_major_pf_ms = int(major_pf_ns // 1e6)
+    total_minor_pf_ms = int(minor_pf_ns // 1e6)
+    total_minor_retry_pf_ms = int(minor_pf_retry_ns // 1e6)
+
+    total_pf_ms = int(total_major_pf_ms + total_minor_pf_ms + total_minor_retry_pf_ms)
+
+    # Use main-thread (tid==tgid) attribution provided by _read_pfstat_sum_and_clear
+    main_major_ns = int(pf_vals.get("main_major_ns", 0))
+    main_minor_ns = int(pf_vals.get("main_minor_ns", 0))
+    main_minor_retry_ns = int(pf_vals.get("main_minor_retry_ns", 0))
+
+    wall_pid_major_pf_ms = int(main_major_ns // 1e6)
+    wall_pid_minor_pf_ms = int(main_minor_ns // 1e6)
+    wall_pid_minor_retry_pf_ms = int(main_minor_retry_ns // 1e6)
+    # Cap attributed PF time so it doesn't exceed observed wall time
+    pid_pf_sum = wall_pid_major_pf_ms + wall_pid_minor_pf_ms + wall_pid_minor_retry_pf_ms
+    if pid_pf_sum > wall_ms and pid_pf_sum > 0:
+        scale = wall_ms / pid_pf_sum
+        wall_pid_major_pf_ms = int(wall_pid_major_pf_ms * scale)
+        wall_pid_minor_pf_ms = int(wall_pid_minor_pf_ms * scale)
+        wall_pid_minor_retry_pf_ms = int(wall_pid_minor_retry_pf_ms * scale)
+    wall_pid_pf_ms = wall_pid_major_pf_ms + wall_pid_minor_pf_ms + wall_pid_minor_retry_pf_ms
 
     avg_major_us = int((major_pf_ns // (major_pf_cnt if major_pf_cnt else 1)) // 1000)
     avg_minor_us = int((minor_pf_ns // (minor_pf_cnt if minor_pf_cnt else 1)) // 1000)
@@ -777,8 +984,12 @@ def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
     sys_read_count = rw_vals["read_cnt"]
     sys_write_count = rw_vals["write_cnt"]
 
-    read_ms = int(sys_read_ns // 1e6)
-    write_ms = int(sys_write_ns // 1e6)
+    total_read_ms = int(sys_read_ns // 1e6)
+    total_write_ms = int(sys_write_ns // 1e6)
+    
+    wall_pid_read_ms = 0
+    wall_pid_write_ms = 0
+    
     avg_read_us = int(
         (rw_vals["read_ns"] // (sys_read_count if sys_read_count else 1)) // 1e3
     )
@@ -801,8 +1012,8 @@ def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
     cpu_wait_us = sched_vals["wait_ns"] // 1_000
 
     # Compute derived
-
-    total_io_ms = pf_ms + read_ms + write_ms
+    wall_pid_io_ms = wall_pid_pf_ms + wall_pid_read_ms + wall_pid_write_ms
+    total_io_ms = total_pf_ms + total_read_ms + total_write_ms
 
     cpu_util_ratio = (cpu_runtime_us / 1_000) / wall_ms if wall_ms else 0.0
 
@@ -817,10 +1028,10 @@ def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
         pid=int(pid),
         tid=0,
         wall_ms=wall_ms,
-        pf_ms=pf_ms,
-        major_pf_ms=major_pf_ms,
-        minor_pf_ms=minor_pf_ms,
-        minor_retry_pf_ms=minor_retry_pf_ms,
+        pf_ms=total_pf_ms,
+        total_major_pf_ms=total_major_pf_ms,
+        total_minor_pf_ms=total_minor_pf_ms,
+        total_minor_retry_pf_ms=total_minor_retry_pf_ms,
         avg_major_us=avg_major_us,
         avg_minor_us=avg_minor_us,
         avg_minor_retry_us=avg_minor_retry_us,
@@ -828,10 +1039,10 @@ def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
         minor_fault_count=minor_pf_cnt,
         minor_fault_retry_count=minor_pf_retry_cnt,
         readahead_count=readahead_cnt,
-        total_non_io_ms=wall_ms - total_io_ms,
-        total_io_ms=total_io_ms,
-        read_ms=read_ms,
-        write_ms=write_ms,
+        wall_pid_non_io_ms=wall_ms - wall_pid_io_ms,
+        wall_pid_io_ms=wall_pid_io_ms,
+        total_read_ms=total_read_ms,
+        total_write_ms=total_write_ms,
         sys_read_count=sys_read_count,
         sys_write_count=sys_write_count,
         avg_read_us=avg_read_us,
@@ -867,14 +1078,16 @@ def _print_phase_breakdown(rec: PhaseRecord):
 
     print("-- Elapsed Time Analysis (main pid only) --")
     print(f" Wall Clock Time                            : {rec.wall_ms} (ms)")
-    print(f"    - Non I/O Handling Time (Estimated)     : {rec.total_non_io_ms} (ms)")
-    print(f"    - I/O Handling Time                     : {rec.total_io_ms} (ms)")
-    print(f"        - Read Syscall                      : {rec.read_ms} (ms)")
-    print(f"        - Write Syscall                     : {rec.write_ms} (ms)")
-    print(f"        - PageFault                         : {rec.pf_ms} (ms)")
-    print(f"            - Major PageFault               : {rec.major_pf_ms} (ms)")
-    print(f"            - Minor PageFault (NOPAGE)      : {rec.minor_pf_ms} (ms)")
-    print(f"            - Minor PageFault (RETRY)       : {rec.minor_retry_pf_ms} (ms)")
+    print(f"    - Non I/O Handling Time (Estimated)     : {rec.wall_pid_non_io_ms} (ms)")
+    print(f"    - I/O Handling Time                     : {rec.wall_pid_io_ms} (ms)")
+    print(f"        - Read Syscall                      : {rec.wall_read_ms} (ms)")
+    print(f"        - Write Syscall                     : {rec.wall_write_ms} (ms)")
+    print(f"        - PageFault                         : {rec.wall_pf_ms} (ms)")
+    print(f"            - Major PageFault               : {rec.wall_major_pf_ms} (ms)")
+    print(f"            - Minor PageFault (NOPAGE)      : {rec.wall_minor_pf_ms} (ms)")
+    print(
+        f"            - Minor PageFault (RETRY)       : {rec.wall_minor_retry_pf_ms} (ms)"
+    )
     print("")
 
     print("-- I/O Handling Stats --")
@@ -886,9 +1099,11 @@ def _print_phase_breakdown(rec: PhaseRecord):
     )
     print(f" ReadAhead Count                            : {rec.readahead_count}")
     print("")
-    print(f" Total Major PageFault Time                 : {rec.major_pf_ms} (ms)")
-    print(f" Total Minor PageFault Time (NOPAGE)        : {rec.minor_pf_ms} (ms)")
-    print(f" Total Minor PageFault Time (RETRY)         : {rec.minor_retry_pf_ms} (ms)")
+    print(f" Total Major PageFault Time                 : {rec.total_major_pf_ms} (ms)")
+    print(f" Total Minor PageFault Time (NOPAGE)        : {rec.total_minor_pf_ms} (ms)")
+    print(
+        f" Total Minor PageFault Time (RETRY)         : {rec.total_minor_retry_pf_ms} (ms)"
+    )
     print(f" Avg Major Fault Handling Time              : {rec.avg_major_us} (us)")
     print(f" Avg Minor Fault Handling Time (NOPAGE)     : {rec.avg_minor_us} (us)")
     print(
@@ -899,8 +1114,8 @@ def _print_phase_breakdown(rec: PhaseRecord):
     print(f" Read Syscall Count                         : {rec.sys_read_count}")
     print(f" Write Syscall Count                        : {rec.sys_write_count}")
     print("")
-    print(f" Total Read Syscall Time                    : {rec.read_ms} (ms)")
-    print(f" Total Write Syscall Time                   : {rec.write_ms} (ms)")
+    print(f" Total Read Syscall Time                    : {rec.total_read_ms} (ms)")
+    print(f" Total Write Syscall Time                   : {rec.total_write_ms} (ms)")
     print(f" Avg Read Syscall Handling Time             : {rec.avg_read_us} (us)")
     print(f" Avg Write Syscall Handling Time            : {rec.avg_write_us} (us)")
     print("")
