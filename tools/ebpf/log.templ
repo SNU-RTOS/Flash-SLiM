@@ -1,0 +1,53 @@
+-------------------------------------------
+[INFO] Phase {NAME} Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : {ms}
+    - Non I/O Handling Time (Estimated)     : {ms}
+    - I/O Handling Time                     : {ms}
+        - Read Syscall                      : {ms}
+        - Write Syscall                     : {ms}
+        - PageFault                         : {ms}
+            - Major PageFault               : {ms}
+            - Minor PageFault (NOPAGE)      : {ms}
+            - Minor PageFault (OTHER)       : {ms}
+
+-- I/O Handling Stats --
+ Total Read Syscall Time                    : {ms}
+ Total Write Syscall Time                   : {ms}
+ Total Major PageFault Time                 : {ms}
+ Total Minor PageFault Time (NOPAGE)        : {ms}
+ Total Minor PageFault Time (OTHER)         : {ms}
+
+ Read Syscall Count                         : {cnt}
+ Write Syscall Count                        : {cnt}
+ Major Fault Count                          : {cnt}
+ Minor Fault Count (NOPAGE)                 : {cnt}
+ Minor Fault Count (OTHER)                  : {cnt}
+ ReadAhead Count                            : {cnt}
+
+ Avg Read Syscall Handling Time             : {us}
+ Avg Write Syscall Handling Time            : {us}
+ Avg Major Fault Handling Time              : {us}
+ Avg Minor Fault Handling Time (NOPAGE)     : {us}
+ Avg Minor Fault Handling Time (OTHER)      : {us}
+
+-- Total Time --
+ Total CPU Runtime                          : {us}
+ Total CPU Wait Time                        : {us}
+
+-- I/O Stats --
+ Total Block I/O Time                       : {us}
+ Total Block I/O Count                      : {cnt}
+ Total Block I/O Read Bytes                 : {bytes}
+ Total Block I/O Write Bytes                : {bytes}
+ Avg Block I/O Time                         : {us}
+ Avg Block I/O Read Bytes                   : {bytes}
+ Avg Block I/O Write Bytes                  : {bytes}
+ Wall I/O Time (Last done - first start)    : {ms}
+ Merged I/O Stall Time (interval merge)     : {ms}
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : {CPU Runtime / Wall Clock Time}
+ I/O Stall Ratio                            : {Merged I/O Stall Time / Wall Clock Time}
+ I/O Parallelism Ratio                      : {Total I/O Time / Wall I/O Time}

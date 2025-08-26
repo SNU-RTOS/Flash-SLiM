@@ -83,3 +83,7 @@ Subgraph 6: prefill (Total Nodes: 87, Including Nested: 537, STABLEHLO_COMPOSITE
   [0002] CONCATENATION
   ...
 ```
+
+## Future Plans
+
+- [] Support Tensor info dump

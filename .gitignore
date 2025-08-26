@@ -21,7 +21,7 @@ bazel-*
 lib/
 obj/
 tools/bin
-tools/model_dump/tflite
+tools/model_dump/*/tflite
 tools/model_dump/logs
 
 output/

@@ -55,7 +55,18 @@
 #define COLOR_BLUE "\033[1;34m"
 #define COLOR_CYAN "\033[1;36m"
 
-std::pair<double, double> get_core_cpu_time(int core_id);
+
+// USDT Probes for eBPF tracing with Phase index
+#ifdef EBPF_TRACE_ENABLED
+#include <sys/sdt.h>
+
+#define TRACE_LOGIC_START DTRACE_PROBE(tflite_gen, logic_start)
+#define TRACE_LOGIC_END(phase_name) DTRACE_PROBE1(tflite_gen, logic_end, phase_name)
+
+#else
+#define TRACE_LOGIC_START
+#define TRACE_LOGIC_END(phase_name)
+#endif
 
 namespace custom::profiler
 {
@@ -241,15 +252,19 @@ namespace custom::profiler
             ctx_.signal_cv.notify_all();
             ctx_.signal_cv.wait(lock_, [&]()
                                 { return !ctx_.log_requested.load(); });
+
+            TRACE_LOGIC_START;
         }
 
         ~ScopeEventPrefetcher()
         {
+            TRACE_LOGIC_END(ctx_.current_phase_name);
+            
             ctx_.log_requested.store(true);
             ctx_.phase_status = 1; // End phase
             ctx_.signal_cv.notify_all();
             ctx_.signal_cv.wait(lock_, [&]()
-                                { return !ctx_.log_requested.load(); });
+            { return !ctx_.log_requested.load(); });
         }
 
     private:
