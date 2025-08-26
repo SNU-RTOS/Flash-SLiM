@@ -43,7 +43,7 @@ log "  GPU_FLAGS: $GPU_FLAGS"
 log "  GPU_COPT_FLAGS: $GPU_COPT_FLAGS"
 
 APP_BASE=text_generator_main
-OUT_DIR=output
+OUT_DIR=bin
 BAZEL_BIN="bazel-bin/flash-slim/${APP_BASE}"
 OUTPUT_BIN="${OUT_DIR}/${APP_BASE}"
 

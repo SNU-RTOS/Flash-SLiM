@@ -3,7 +3,7 @@ from bcc import BPF, USDT
 import atexit, signal, sys, re
 
 
-binary_path = "./output/text_generator_main"
+binary_path = "./bin/text_generator_main"
 
 # ======== Config ========
 SHOW_SEQUENCE = False  # 시퀀스 테이블이 필요할 때만 True
@@ -19,6 +19,8 @@ def naturalsort_key(s: str):
 # ======== eBPF text ========
 BPF_TEXT = r"""
 #include <uapi/linux/ptrace.h>
+#include <linux/sched.h>
+#include <linux/blkdev.h>
 
 // ── VM_FAULT_* 플래그 (커널 버전에 따라 상수값 다를 수 있음) ──
 #define VM_FAULT_MAJOR   4

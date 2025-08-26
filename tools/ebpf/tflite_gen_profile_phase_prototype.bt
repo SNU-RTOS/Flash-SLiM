@@ -162,13 +162,13 @@ tracepoint:sched:sched_stat_wait
 // User Probe
 // ───────────────────────────────────────────────────────────────────────────────
 
-usdt:./output/text_generator_main:tflite_gen:logic_start
+usdt:./bin/text_generator_main:tflite_gen:logic_start
 {
     @phase_ts_tid[tid] = nsecs;
     @phase_ts_pid[pid] = nsecs; // Store the start time for the phase
 }
 
-usdt:./output/text_generator_main:tflite_gen:logic_end
+usdt:./bin/text_generator_main:tflite_gen:logic_end
 /@phase_ts_tid[tid]/
 {
     $logic_start_ns = @phase_ts_tid[tid];
