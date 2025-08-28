@@ -761,9 +761,9 @@ if __name__ == "__main__":
     # (NEW) per-occurrence breakdown records
     phase_raw_records = []
 
-    # Perf buffer 등록
+    # Buffer 등록: perf(events) + ring(intervals)
     b["events"].open_perf_buffer(on_phase_event)
-    b["intervals"].open_perf_buffer(on_interval_event)  # IO interval 버퍼 추가
+    b["intervals"].open_ring_buffer(on_interval_event)
 
     # Exit hooks
     atexit.register(print_report)
@@ -772,6 +772,8 @@ if __name__ == "__main__":
     print("Tracing USDT probes and IO intervals... Ctrl-C to stop.")
     try:
         while True:
-            b.perf_buffer_poll()
+            # Poll both: perf (phase events) and ring (I/O intervals)
+            b.perf_buffer_poll(timeout=50)
+            b.ring_buffer_poll(timeout=0)
     except KeyboardInterrupt:
         pass

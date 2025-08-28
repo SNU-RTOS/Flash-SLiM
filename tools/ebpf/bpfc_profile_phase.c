@@ -116,14 +116,12 @@ struct sched_stat_t
     u64 wait_ns;
 };
 
-/* --- Perf output endpoints (userspace consumers) --- */
+/* --- User outputs --- */
+// Keep perf buffer for low-rate phase events
 BPF_PERF_OUTPUT(events); // phase start/end events -> Python handler
-/* PERF OUTPUT declared for detailed intervals. Currently optional: the
- * BPF code in this file does not submit `intervals` in all code paths.
- * Keep this endpoint if you later want per-IO interval payloads to be
- * submitted to userspace; otherwise it can be removed.
- */
-BPF_PERF_OUTPUT(intervals); // optional detailed I/O intervals -> Python
+// Switch high-rate I/O intervals to ring buffer to reduce overhead
+// Note: argument is number of pages, not bytes. 4096 pages * 4KB = 16MB
+BPF_RINGBUF_OUTPUT(intervals, 4096);
 
 /* --- BPF Maps ---
  * Naming & key conventions:
@@ -453,13 +451,14 @@ TRACEPOINT_PROBE(block, block_io_done)
             bs->read_bytes += st->bytes;
     }
 
+    // Submit exact interval via ring buffer (copy helper for broad BCC compatibility)
     struct block_io_interval_t iv = {};
     iv.pid_tgid = st->pid_tgid;
     iv.start_ns = st->start_ns;
     iv.end_ns = now;
     iv.bytes = st->bytes;
     iv.op = st->op;
-    intervals.perf_submit(args, &iv, sizeof(iv));
+    intervals.ringbuf_output(&iv, sizeof(iv), 0);
 
     block_start.delete(&key);
 
