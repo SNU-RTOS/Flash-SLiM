@@ -93,9 +93,9 @@ class PhaseRecord:
     avg_block_io_read_bytes: int = 0
     avg_block_io_write_bytes: int = 0
     wall_block_io_time_ms: int = 0
-    io_util_ratio: float = 0.0
-    cpu_util_ratio: float = 0.0
-    io_stall_ratio: float = 0.0
+    io_concurrency_factor: float = 0.0
+    cpu_parallelism_factor: float = 0.0
+    block_io_time_ratio: float = 0.0
 
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "PhaseRecord":
@@ -536,9 +536,9 @@ def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
     
     wall_block_io_time_ms = int(wall_block_io_time_ns / 1e6)
 
-    cpu_util_ratio = total_cpu_runtime_ms / wall_clock_time_ms if wall_clock_time_ms else 0.0
-    block_io_util_ratio = total_block_io_time_ms / wall_block_io_time_ms if wall_block_io_time_ms else 0.0
-    block_io_stall_ratio = wall_block_io_time_ms / wall_clock_time_ms if wall_clock_time_ms else 0.0
+    cpu_parallelism_factor = total_cpu_runtime_ms / wall_clock_time_ms if wall_clock_time_ms else 0.0
+    io_concurrency_factor = total_block_io_time_ms / wall_block_io_time_ms if wall_block_io_time_ms else 0.0
+    block_io_time_ratio = (wall_block_io_time_ms / wall_clock_time_ms) * 100 if wall_clock_time_ms else 0.0
 
     rec = PhaseRecord(
         phase=phase_name,
@@ -588,9 +588,9 @@ def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
         avg_block_io_write_bytes=avg_block_io_write_bytes,
         
         wall_block_io_time_ms=wall_block_io_time_ms,
-        cpu_util_ratio=cpu_util_ratio,
-        io_util_ratio=block_io_util_ratio,
-        io_stall_ratio=block_io_stall_ratio,
+        cpu_parallelism_factor=cpu_parallelism_factor,
+        io_concurrency_factor=io_concurrency_factor,
+        block_io_time_ratio=block_io_time_ratio,
     )
     return rec
 
@@ -671,9 +671,9 @@ def _print_phase_breakdown(rec: PhaseRecord):
     print(f" Wall Clock Time                            : {rec.wall_clock_time_ms} (ms)")
     print(f" Wall Block IO Time                         : {rec.wall_block_io_time_ms} (ms)")
     print("")
-    print(f" CPU Utilization Ratio                      : {rec.cpu_util_ratio:.3f} (%, Total CPU / Wall Clock Time)")
-    print(f" IO Utilization Ratio                       : {rec.io_util_ratio:.3f} (%, Total Block IO / Wall Block IO Time)")
-    print(f" IO Stall Ratio                             : {rec.io_stall_ratio:.3f} (%, Wall Clock Time / Wall IO Time)")
+    print(f" CPU Parallelism Factor                     : {rec.cpu_parallelism_factor:.3f} (CPU cores equivalent) (Total CPU / Wall Clock Time)")
+    print(f" IO Concurrency Factor                      : {rec.io_concurrency_factor:.3f} (Concurrent IO operations) (Total Block IO / Wall Block IO Time)")
+    print(f" IO Time Ratio                              : {rec.block_io_time_ratio:.3f} (%) (Wall IO Time / Wall Clock Time)")
     print("")
 
 
