@@ -622,7 +622,7 @@ int main(int argc, char *argv[])
     std::cout.precision(5);
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout << std::boolalpha;
-    std::cout << "\n[INFO] Text Generation App on LiteRT Interperter\n";
+    std::cout << "\n[INFO] Text Generation App on LiteRT Interpreter\n";
 
 #ifdef EBPF_TRACE_ENABLED
     std::cout << "\n[INFO] eBPF tracing is enabled. USDT probes will be used.\n";
@@ -663,23 +663,25 @@ int main(int argc, char *argv[])
 
     // Init Tflite Internal Op-level Profiler
     std::unique_ptr<tflite::profiling::BufferedProfiler> op_profiler; // Create op_profiler pointer
-    ProfilerOutput pf_out_default = {
-        // Init Tflite Internal Op-level Profiler: Default Log output
-        .formatter = std::make_shared<tflite::profiling::ProfileSummaryDefaultFormatter>(),
-        .init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(pf_out_default.formatter),
-        .run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(pf_out_default.formatter),
-        .output_type = "log",
-        .output_path = "",
-    };
+
+    // Avoid self-referential initialization by constructing formatters first
+    auto default_formatter = std::make_shared<tflite::profiling::ProfileSummaryDefaultFormatter>();
+    ProfilerOutput pf_out_default;
+    pf_out_default.formatter = default_formatter;
+    pf_out_default.init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(default_formatter);
+    pf_out_default.run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(default_formatter);
+    pf_out_default.output_type = "log";
+    pf_out_default.output_path = "";
+
     std::string csv_path = absl::GetFlag(FLAGS_csv_profile_output_path);
-    ProfilerOutput pf_out_csv = {
-        // Init Tflite Internal Op-level Profiler: CSV Log output
-        .formatter = std::make_shared<tflite::profiling::ProfileSummaryCSVFormatter>(),
-        .init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(pf_out_csv.formatter),
-        .run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(pf_out_csv.formatter),
-        .output_type = "csv",
-        .output_path = csv_path.empty() ? "" : csv_path,
-    };
+    auto csv_formatter = std::make_shared<tflite::profiling::ProfileSummaryCSVFormatter>();
+    ProfilerOutput pf_out_csv;
+    pf_out_csv.formatter = csv_formatter;
+    pf_out_csv.init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(csv_formatter);
+    pf_out_csv.run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(csv_formatter);
+    pf_out_csv.output_type = "csv";
+    pf_out_csv.output_path = csv_path.empty() ? "" : csv_path;
+
     std::vector<ProfilerOutput> op_profiler_outputs{pf_out_default, pf_out_csv}; // Initialize profiler outputs
 
     //* ============ Run Threads ============ */

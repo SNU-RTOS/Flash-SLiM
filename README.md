@@ -58,22 +58,52 @@ The ultimate goal is to build a fully functional, prefetch-aware runtime that im
 ## Project Structure
 
 ```text
-├── flash-slim/             # Core C++ source code for the inference engine.
+├── flash-slim/               # Core C++ source code for the inference engine.
 │   ├── text_generator_main.cc # Main application logic with multi-level profiling.
 │   ├── profiler.{h,cc}        # Custom scope profiler implementation.
-│   └── ...
-├── scripts/                  # All shell scripts for building, running, and analysis.
-│   ├── build.sh              # Unified build script for all C++ targets.
-│   ├── run.sh                # Comprehensive script for multi-run benchmarks.
-│   ├── run_once.sh           # A simple script for a single, quick test run.
-│   ├── run_benchmark_util.sh # Script for benchmarking non-LLM TFLite models.
+│   ├── kv_cache_manager.{h,cc} # External KV cache buffer management.
+│   ├── sampler.{h,cc}         # Token sampling strategies.
+│   ├── lora_adapter.{h,cc}    # LoRA adapter implementation.
+│   └── utils.{h,cc}           # Utility functions and helpers.
+├── build.sh                  # Unified build script for all C++ targets.
+├── run.sh                    # Comprehensive script for multi-run benchmarks.
+├── run_benchmark_util.sh     # Script for benchmarking non-LLM TFLite models.
+├── run_ebpf.sh               # Script for eBPF profiling runs.
+├── configure                 # Configuration script.
+├── configure.py              # Python configuration script.
+├── scripts/                  # Utility scripts for setup and analysis.
 │   ├── install_prerequisites.sh # Installs all necessary build dependencies.
-│   └── utils.sh                # Centralized shell utility and helper functions.
+│   ├── utils.sh              # Centralized shell utility and helper functions.
+│   ├── build-benchmark_util.sh # Build script for benchmark utilities.
+│   └── convert-llama3.2-3b.sh # Model conversion script.
+├── tools/                    # Analysis and debugging tools.
+│   ├── benchmark/            # Benchmark analysis tools.
+│   ├── cache/                # Cache clearing utilities for different architectures.
+│   ├── ebpf/                 # eBPF profiling scripts and tools.
+│   ├── flamegraph/           # Flamegraph generation tools.
+│   ├── model_dump/           # Model analysis and parsing tools.
+│   ├── plot/                 # Data visualization and plotting tools.
+│   ├── power_analysis/       # Power consumption analysis tools.
+│   └── prompt/               # Prompt processing utilities.
 ├── models/                   # Model storage. See models/README.md for the required structure.
+├── prompt/                   # JSON prompt files with hyperparameters.
 ├── benchmark/                # Default output directory for benchmark logs and results.
-├── util/                     # Source code for host-side C++ utilities (e.g., cache clearing tool).
-├── test/                     # Test files, PoC scripts, and non-LLM models.
-│   └── conceptual_streaming_prototype/ # Contains PoC code for the roadmap.
+│   ├── llm_infer_results/    # LLM inference benchmark results.
+│   ├── model_analysis_results/ # Model analysis outputs.
+│   ├── benchmark_model_results/ # Non-LLM model benchmark results.
+│   ├── ebpf/                 # eBPF profiling results.
+│   └── power/                # Power measurement logs.
+├── bin/                      # Output directory for compiled binaries.
+├── docs/                     # Project documentation.
+│   ├── CLAUDE.md             # Claude Code guidance documentation.
+│   ├── dev_log.md            # Development log.
+│   └── *.md                  # Additional technical documentation.
+├── test/                     # Test files, PoC scripts, and experimental code.
+│   ├── conceptual_streaming_prototype/ # Contains PoC code for weight streaming.
+│   ├── direct_io/            # Direct I/O testing code.
+│   ├── ebpf/                 # eBPF testing scripts.
+│   └── io_uring/             # I/O uring experimental code.
+├── external/                 # External dependencies (LiteRT, XNNPACK).
 ├── bazel/                    # Patches and BUILD files for third-party dependencies.
 ├── .bazelrc                  # Bazel run commands configuration.
 ├── MODULE.bazel              # Bazel module file defining project dependencies.
@@ -102,24 +132,37 @@ cp .env.sample .env
 
 ### 3. Build the Project
 
-Use the unified build script, which acts as a wrapper around Bazel. The main binary, `text_generator_main`, will be placed in the `output/` directory (which is git-ignored).
+Use the unified build script, which acts as a wrapper around Bazel. The main binary, `text_generator_main`, will be placed in the `bin/` directory.
 
 ```sh
 # Build the main binary in release mode (optimized)
 ./build.sh
 
+# Build all targets
+./build.sh all
+
 # Build in debug mode with debugging symbols
 ./build.sh debug
+
+# Clean build artifacts
+./build.sh clean
+
+# Run tests
+./build.sh test
 ```
 
 ## Usage
 
-### Quick Test Run (`run_once.sh`)
+### Quick Test Run
 
-For a simple, default test run to verify the build and basic functionality. This script is not configurable via CLI arguments and always logs its output to `result_run_once/output.log`.
+For a simple, default test run to verify the build and basic functionality:
 
 ```sh
-./run_once.sh
+# Quick test with default settings
+./run.sh
+
+# Run with logging enabled
+./run.sh --log
 ```
 
 ### Advanced Benchmarking (`run.sh`)
