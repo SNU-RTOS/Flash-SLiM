@@ -18,7 +18,7 @@ with open(ebpf_path, "r") as f:
 
 # ======== Dtypes ======
 import ctypes
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field, fields as _dc_fields
 from typing import Any, Dict, Union, List
 
@@ -36,7 +36,7 @@ class PhaseRaw:
     rw_vals: Dict[str, Any] = field(default_factory=dict)
     blk_vals: Dict[str, Any] = field(default_factory=dict)
     sched_vals: Dict[str, Any] = field(default_factory=dict)
-    io_wall_time_us: int = 0
+    io_wall_time_ns: int = 0
 
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "PhaseRaw":
@@ -55,43 +55,45 @@ class PhaseRecord:
     phase: str = "<unknown>"
     pid: int = 0
     tid: int = 0
-    wall_ms: int = 0
-    wall_pid_non_io_ms: int = 0
-    wall_pid_io_ms: int = 0
-    wall_read_ms: int = 0
-    wall_write_ms: int = 0
-    wall_pid_pf_ms: int = 0
-    wall_pid_major_pf_ms: int = 0
-    wall_pid_minor_pf_ms: int = 0
-    wall_pid_minor_retry_pf_ms: int = 0
-    total_read_ms: int = 0
-    total_write_ms: int = 0
-    pf_ms: int = 0
-    total_major_pf_ms: int = 0
-    total_minor_pf_ms: int = 0
-    total_minor_retry_pf_ms: int = 0
-    avg_major_us: int = 0
-    avg_minor_us: int = 0
-    avg_minor_retry_us: int = 0
-    major_fault_count: int = 0
-    minor_fault_count: int = 0
-    minor_fault_retry_count: int = 0
+    wall_clock_time_ms: int = 0
+    single_thread_non_io_handle_time_ms: int = 0
+    single_thread_io_handle_time_ms: int = 0
+    single_thread_read_sys_time_ms: int = 0
+    single_thread_write_sys_time_ms: int = 0
+    single_thread_pf_time_ms: int = 0
+    single_thread_major_pf_time_ms: int = 0
+    single_thread_minor_pf_time_ms: int = 0
+    single_thread_minor_retry_pf_time_ms: int = 0
+    total_sys_read_time_ms: int = 0
+    total_sys_write_time_ms: int = 0
+    total_pf_time_ms: int = 0
+    total_major_pf_time_ms: int = 0
+    total_minor_pf_time_ms: int = 0
+    total_minor_retry_pf_time_ms: int = 0
+    avg_major_pf_time_us: int = 0
+    avg_minor_pf_time_us: int = 0
+    avg_minor_retry_pf_time_us: int = 0
+    total_major_pf_count: int = 0
+    total_minor_pf_count: int = 0
+    total_minor_pf_retry_count: int = 0
     readahead_count: int = 0
-    sys_read_count: int = 0
-    sys_write_count: int = 0
-    avg_read_us: int = 0
-    avg_write_us: int = 0
-    cpu_runtime_us: int = 0
-    cpu_wait_us: int = 0
-    block_io_time_us: int = 0
-    block_io_count: int = 0
-    block_read_bytes: int = 0
-    block_write_bytes: int = 0
-    avg_block_io_us: int = 0
-    avg_block_read_bytes: int = 0
-    avg_block_write_bytes: int = 0
-    io_wall_time_us: int = 0
-    io_parallel_ratio: float = 0.0
+    total_sys_read_count: int = 0
+    total_sys_write_count: int = 0
+    avg_sys_read_time_us: int = 0
+    avg_sys_write_time_us: int = 0
+    total_cpu_runtime_us: int = 0
+    total_cpu_runtime_ms: int = 0
+    total_cpu_waittime_us: int = 0
+    total_block_io_time_us: int = 0
+    total_block_io_time_ms: int = 0
+    total_block_io_count: int = 0
+    total_block_io_read_bytes: int = 0
+    total_block_io_write_bytes: int = 0
+    avg_block_io_time_us: int = 0
+    avg_block_io_read_bytes: int = 0
+    avg_block_io_write_bytes: int = 0
+    wall_block_io_time_ms: int = 0
+    io_util_ratio: float = 0.0
     cpu_util_ratio: float = 0.0
     io_stall_ratio: float = 0.0
 
@@ -101,6 +103,68 @@ class PhaseRecord:
         for f in _dc_fields(PhaseRecord):
             kw[f.name] = d.get(f.name, getattr(f, "default", None))
         return PhaseRecord(**kw)
+
+
+# ======== IO Interval 처리 추가 ========
+# IO interval 버퍼 (from profile_phase_io_backup.py)
+interval_buf = defaultdict(deque)  # pid -> deque[(start_ns, end_ns, bytes, op)]
+
+
+def on_interval_event(cpu, data, size):
+    """IO interval 이벤트 핸들러 - interval_buf에 저장"""
+    global interval_buf
+    
+    iv = b["intervals"].event(data)
+    pid = int((iv.pid_tgid >> 32) & 0xFFFFFFFF)
+    start = int(iv.start_ns)
+    end = int(iv.end_ns)
+    op_str = iv.op.decode("latin-1") if isinstance(iv.op, bytes) else str(iv.op)
+    
+    interval_buf[pid].append((start, end, int(iv.bytes), op_str))
+
+
+def compute_io_wall_and_total(pid: int, phase_start_ns: int, phase_end_ns: int):
+    """Phase 창 내에서 IO interval을 병합하여 wall time 계산"""
+    global interval_buf
+    
+    buf = interval_buf.get(pid)
+    if not buf:
+        return 0, 0, 0
+
+    # Phase 창 내의 interval들을 클리핑하고 수집
+    items = []
+    total_ns = 0
+    for s, e, _bytes, _op in list(buf):
+        if s > phase_end_ns:
+            break  # 미래 interval들
+        if s < phase_start_ns:
+            s = phase_start_ns
+        if e <= s:
+            continue
+        if e > phase_end_ns:
+            e = phase_end_ns
+        if e <= s:
+            continue
+        items.append((s, e))
+        total_ns += e - s
+
+    if not items:
+        return 0, 0, 0
+
+    # Interval 병합 (시작 시간으로 정렬 후 유니온 계산)
+    items.sort(key=lambda x: x[0])
+    merged_ns = 0
+    cs, ce = items[0]
+    for s, e in items[1:]:
+        if s <= ce:
+            if e > ce:
+                ce = e
+        else:
+            merged_ns += ce - cs
+            cs, ce = s, e
+    merged_ns += ce - cs
+
+    return merged_ns, total_ns, len(items)
 
 
 # ======== Helpers and Event Handler  ========
@@ -265,11 +329,11 @@ def _read_pfstat_sum_and_clear(pfstat_map, pid):
         for f in fields:
             total[f] += tid_acc[f]
 
-    # determine "main" as the smallest tid seen for this tgid (if any)
-    main = {f: 0 for f in fields}
+    # determine "base" as the smallest tid seen for this tgid (if any)
+    base = {f: 0 for f in fields}
     if per_thread:
         min_tid = min(per_thread.keys())
-        main = per_thread[min_tid].copy()
+        base = per_thread[min_tid].copy()
 
     for k in to_delete:
         try:
@@ -277,10 +341,10 @@ def _read_pfstat_sum_and_clear(pfstat_map, pid):
         except Exception:
             pass
 
-    # Return a single dict compatible with existing callers, with main_* keys added
+    # Return a single dict compatible with existing callers, with single_thread_* keys added
     res = total.copy()
     for f in fields:
-        res["main_" + f] = main[f]
+        res["single_thread_" + f] = base[f]
 
     return res
 
@@ -325,6 +389,14 @@ def _capture_phase_raw_record(
     blk_vals = _read_blockstat_sum_and_clear(b["blockstat"], pid)
     sched_vals = _read_sched_sum_and_clear(b["schedstat"], pid)
 
+    # 새로 추가: I/O wall time 계산
+    io_wall_ns, total_io_ns, count_used = compute_io_wall_and_total(pid, start_ns, end_ns)
+    
+    # interval_buf에서 이 phase에서 사용된 interval들 정리
+    # phase가 끝나면 관련 I/O도 모두 끝난 것으로 간주하고 버퍼를 비웁니다.
+    if pid in interval_buf:
+        del interval_buf[pid]
+
     return PhaseRaw(
         pid=pid,
         phase_name=phase_name,
@@ -334,11 +406,11 @@ def _capture_phase_raw_record(
         rw_vals=rw_vals,
         blk_vals=blk_vals,
         sched_vals=sched_vals,
-        io_wall_time_us=0,
+        io_wall_time_ns=int(io_wall_ns),  # 계산된 IO wall time 설정
     )
 
 
-def on_event(cpu, data, size):
+def on_phase_event(cpu, data, size):
     global missing_start
     e = b["events"].event(data)
     if e.kind == 0:
@@ -374,6 +446,7 @@ def on_event(cpu, data, size):
 # ======== Reporting ========
 
 
+#TODO 변수명.... BPFC의 것과 일치 필요..
 def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
     """
     Build final report record from raw capture data.
@@ -386,137 +459,138 @@ def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
     rw_vals = raw_rec.rw_vals
     blk_vals = raw_rec.blk_vals
     sched_vals = raw_rec.sched_vals
-    io_wall_time_us = raw_rec.io_wall_time_us
+    wall_block_io_time_ns = raw_rec.io_wall_time_ns
 
     # Base metrics
-    wall_ns = end_ns - start_ns
-    wall_ms = int((end_ns - start_ns) / 1e6)
+    wall_clock_time_ns = int(end_ns - start_ns)
+    wall_clock_time_ms = int(wall_clock_time_ns / 1e6)
 
     # Pagefault metrics
-    major_pf_cnt = int(pf_vals["major_cnt"])
-    minor_pf_cnt = int(pf_vals["minor_cnt"])
-    minor_pf_retry_cnt = int(pf_vals["minor_retry_cnt"])
+    total_major_pf_count = int(pf_vals["major_cnt"])
+    total_minor_pf_count = int(pf_vals["minor_cnt"])
+    total_minor_pf_retry_count = int(pf_vals["minor_retry_cnt"])
 
-    readahead_cnt = int(pf_vals["readahead_cnt"])
+    readahead_count = int(pf_vals["readahead_cnt"])
 
-    major_pf_ns = int(pf_vals["major_ns"])
-    minor_pf_ns = int(pf_vals["minor_ns"])
-    minor_pf_retry_ns = int(pf_vals["minor_retry_ns"])
+    total_major_pf_time_ns = int(pf_vals["major_ns"])
+    total_minor_pf_time_ns = int(pf_vals["minor_ns"])
+    total_minor_retry_pf_time_ns = int(pf_vals["minor_retry_ns"])
 
-    total_major_pf_ms = int(major_pf_ns // 1e6)
-    total_minor_pf_ms = int(minor_pf_ns // 1e6)
-    total_minor_retry_pf_ms = int(minor_pf_retry_ns // 1e6)
+    total_major_pf_time_ms = int(total_major_pf_time_ns // 1e6)
+    total_minor_pf_time_ms = int(total_minor_pf_time_ns // 1e6)
+    total_minor_retry_pf_time_ms = int(total_minor_retry_pf_time_ns // 1e6)
 
-    total_pf_ms = int(total_major_pf_ms + total_minor_pf_ms + total_minor_retry_pf_ms)
+    total_pf_time_ms = int(total_major_pf_time_ms + total_minor_pf_time_ms + total_minor_retry_pf_time_ms)
 
-    # Use main-thread (tid==tgid) attribution provided by _read_pfstat_sum_and_clear
-    main_major_ns = int(pf_vals["main_major_ns"])
-    main_minor_ns = int(pf_vals["main_minor_ns"])
-    main_minor_retry_ns = int(pf_vals["main_minor_retry_ns"])
-
-    print(f"{main_major_ns} {main_minor_ns} {main_minor_retry_ns}")
+    # Use base thread (smallest tid) attribution provided by _read_pfstat_sum_and_clear
+    single_thread_major_pf_time_ns = int(pf_vals["single_thread_major_ns"])
+    single_thread_minor_pf_time_ns = int(pf_vals["single_thread_minor_ns"])
+    single_thread_minor_retry_pf_time_ns = int(pf_vals["single_thread_minor_retry_ns"])
 
     # Wall time for page faults
-    wall_pid_major_pf_ms = int(main_major_ns // 1e6)
-    wall_pid_minor_pf_ms = int(main_minor_ns // 1e6)
-    wall_pid_minor_retry_pf_ms = int(main_minor_retry_ns // 1e6)
+    single_thread_major_pf_time_ms = int(single_thread_major_pf_time_ns // 1e6)
+    single_thread_minor_pf_time_ms = int(single_thread_minor_pf_time_ns // 1e6)
+    single_thread_minor_retry_pf_time_ms = int(single_thread_minor_retry_pf_time_ns // 1e6)
 
-    wall_pid_pf_ms = (
-        wall_pid_major_pf_ms + wall_pid_minor_pf_ms + wall_pid_minor_retry_pf_ms
-    )
+    single_thread_pf_time_ms = (single_thread_major_pf_time_ms + single_thread_minor_pf_time_ms + single_thread_minor_retry_pf_time_ms)
 
-    avg_major_us = int((major_pf_ns // (major_pf_cnt if major_pf_cnt else 1)) // 1000)
-    avg_minor_us = int((minor_pf_ns // (minor_pf_cnt if minor_pf_cnt else 1)) // 1000)
-    avg_minor_retry_us = int(
-        (minor_pf_retry_ns // (minor_pf_retry_cnt if minor_pf_retry_cnt else 1)) // 1000
-    )
+    avg_major_pf_time_us = int((total_major_pf_time_ns // (total_major_pf_count if total_major_pf_count else 1)) // 1000)
+    avg_minor_pf_time_us = int((total_minor_pf_time_ns // (total_minor_pf_count if total_minor_pf_count else 1)) // 1000)
+    avg_minor_retry_pf_time_us = int((total_minor_retry_pf_time_ns // (total_minor_pf_retry_count if total_minor_pf_retry_count else 1)) // 1000)
 
     # Syscall metrics
-    sys_read_ns = rw_vals["read_ns"]
-    sys_write_ns = rw_vals["write_ns"]
-    sys_read_count = rw_vals["read_cnt"]
-    sys_write_count = rw_vals["write_cnt"]
+    total_sys_read_ns = rw_vals["read_ns"]
+    total_sys_write_ns = rw_vals["write_ns"]
+    total_sys_read_count = rw_vals["read_cnt"]
+    total_sys_write_count = rw_vals["write_cnt"]
 
-    total_read_ms = int(sys_read_ns // 1e6)
-    total_write_ms = int(sys_write_ns // 1e6)
+    total_sys_read_time_ms = int(total_sys_read_ns // 1e6)
+    total_sys_write_time_ms = int(total_sys_write_ns // 1e6)
 
-    wall_pid_read_ms = 0
-    wall_pid_write_ms = 0
+    #TODO: BPFC 코드와 이것과 연동시켜야함, 
+    single_thread_read_sys_time_ms = 0
+    single_thread_write_sys_time_ms = 0
 
-    avg_read_us = int(
-        (rw_vals["read_ns"] // (sys_read_count if sys_read_count else 1)) // 1e3
-    )
-    avg_write_us = int(
-        (rw_vals["write_ns"] // (sys_write_count if sys_write_count else 1)) // 1e3
-    )
+    avg_sys_read_time_us = int((rw_vals["read_ns"] // (total_sys_read_count if total_sys_read_count else 1)) // 1e3)
+    avg_sys_write_time_us = int((rw_vals["write_ns"] // (total_sys_write_count if total_sys_write_count else 1)) // 1e3)
 
-    # Block I/O
-    block_io_time_us = int(blk_vals["time_ns"] / 1e3)
-    block_io_count = int(blk_vals["count"])
-    block_read_bytes = int(blk_vals["read_bytes"])
-    block_write_bytes = int(blk_vals["write_bytes"])
+    # Block IO
+    total_block_io_time_us = int(blk_vals["time_ns"] / 1e3)
+    total_block_io_time_ms = int(blk_vals["time_ns"] / 1e6)
+    total_block_io_count = int(blk_vals["count"])
+    total_block_io_read_bytes = int(blk_vals["read_bytes"])
+    total_block_io_write_bytes = int(blk_vals["write_bytes"])
 
-    avg_block_io_us = int(_safe_div(block_io_time_us, block_io_count))
-    avg_block_read_bytes = int(_safe_div(block_read_bytes, block_io_count))
-    avg_block_write_bytes = int(_safe_div(block_write_bytes, block_io_count))
+    avg_block_io_time_us = int(_safe_div(total_block_io_time_us, total_block_io_count))
+    avg_block_io_read_bytes = int(_safe_div(total_block_io_read_bytes, total_block_io_count))
+    avg_block_io_write_bytes = int(_safe_div(total_block_io_write_bytes, total_block_io_count))
 
     # CPU
-    cpu_runtime_us = sched_vals["runtime_ns"] // 1_000
-    cpu_wait_us = sched_vals["wait_ns"] // 1_000
+    total_cpu_runtime_us = int(sched_vals["runtime_ns"] // 1e3)
+    total_cpu_runtime_ms = int(sched_vals["runtime_ns"] // 1e6)
+    total_cpu_waittime_us = int(sched_vals["wait_ns"] // 1e3)
 
     # Compute derived
-    wall_pid_io_ms = wall_pid_pf_ms + wall_pid_read_ms + wall_pid_write_ms
-    total_io_ms = total_pf_ms + total_read_ms + total_write_ms
+    single_thread_io_handle_time_ms = single_thread_pf_time_ms + single_thread_read_sys_time_ms + single_thread_write_sys_time_ms
+    single_thread_non_io_handle_time_ms = wall_clock_time_ms - single_thread_io_handle_time_ms
+    
+    wall_block_io_time_ms = int(wall_block_io_time_ns / 1e6)
 
-    cpu_util_ratio = (cpu_runtime_us / 1_000) / wall_ms if wall_ms else 0.0
-
-    io_stall_ratio = (io_wall_time_us / wall_ms) if wall_ms else 0.0
-
-    io_parallel_ratio = (
-        (total_io_ms / (io_wall_time_us / 1_000)) if io_wall_time_us else 0.0
-    )
+    cpu_util_ratio = total_cpu_runtime_ms / wall_clock_time_ms if wall_clock_time_ms else 0.0
+    block_io_util_ratio = total_block_io_time_ms / wall_block_io_time_ms if wall_block_io_time_ms else 0.0
+    block_io_stall_ratio = wall_block_io_time_ms / wall_clock_time_ms if wall_clock_time_ms else 0.0
 
     rec = PhaseRecord(
         phase=phase_name,
         pid=int(pid),
         tid=0,
-        wall_ms=wall_ms,
-        pf_ms=total_pf_ms,
-        total_major_pf_ms=total_major_pf_ms,
-        total_minor_pf_ms=total_minor_pf_ms,
-        total_minor_retry_pf_ms=total_minor_retry_pf_ms,
-        avg_major_us=avg_major_us,
-        avg_minor_us=avg_minor_us,
-        avg_minor_retry_us=avg_minor_retry_us,
-        major_fault_count=major_pf_cnt,
-        minor_fault_count=minor_pf_cnt,
-        minor_fault_retry_count=minor_pf_retry_cnt,
-        readahead_count=readahead_cnt,
-        wall_pid_non_io_ms=wall_ms - wall_pid_io_ms,
-        wall_pid_io_ms=wall_pid_io_ms,
-        wall_pid_pf_ms=wall_pid_pf_ms,
-        wall_pid_major_pf_ms=wall_pid_major_pf_ms,
-        wall_pid_minor_pf_ms=wall_pid_minor_pf_ms,
-        wall_pid_minor_retry_pf_ms=wall_pid_minor_retry_pf_ms,
-        total_read_ms=total_read_ms,
-        total_write_ms=total_write_ms,
-        sys_read_count=sys_read_count,
-        sys_write_count=sys_write_count,
-        avg_read_us=avg_read_us,
-        avg_write_us=avg_write_us,
-        cpu_runtime_us=cpu_runtime_us,
-        cpu_wait_us=cpu_wait_us,
-        block_io_time_us=block_io_time_us,
-        block_io_count=block_io_count,
-        block_read_bytes=block_read_bytes,
-        block_write_bytes=block_write_bytes,
-        avg_block_io_us=avg_block_io_us,
-        avg_block_read_bytes=avg_block_read_bytes,
-        avg_block_write_bytes=avg_block_write_bytes,
-        io_wall_time_us=io_wall_time_us,
-        io_parallel_ratio=io_parallel_ratio,
+        wall_clock_time_ms=wall_clock_time_ms,
+        
+        single_thread_non_io_handle_time_ms=single_thread_non_io_handle_time_ms,
+        single_thread_io_handle_time_ms=single_thread_io_handle_time_ms,
+        single_thread_pf_time_ms=single_thread_pf_time_ms,
+        single_thread_major_pf_time_ms=single_thread_major_pf_time_ms,
+        single_thread_minor_pf_time_ms=single_thread_minor_pf_time_ms,
+        single_thread_minor_retry_pf_time_ms=single_thread_minor_retry_pf_time_ms,
+        single_thread_read_sys_time_ms=single_thread_read_sys_time_ms,
+        single_thread_write_sys_time_ms=single_thread_write_sys_time_ms,
+        
+        total_pf_time_ms=total_pf_time_ms,
+        total_major_pf_time_ms=total_major_pf_time_ms,
+        total_minor_pf_time_ms=total_minor_pf_time_ms,
+        total_minor_retry_pf_time_ms=total_minor_retry_pf_time_ms,
+        total_major_pf_count=total_major_pf_count,
+        total_minor_pf_count=total_minor_pf_count,
+        total_minor_pf_retry_count=total_minor_pf_retry_count,
+        avg_major_pf_time_us=avg_major_pf_time_us,
+        avg_minor_pf_time_us=avg_minor_pf_time_us,
+        avg_minor_retry_pf_time_us=avg_minor_retry_pf_time_us,
+        readahead_count=readahead_count,
+        
+        total_sys_write_time_ms=total_sys_write_time_ms,
+        total_sys_write_count=total_sys_write_count,
+        avg_sys_write_time_us=avg_sys_write_time_us,
+        total_sys_read_time_ms=total_sys_read_time_ms,
+        total_sys_read_count=total_sys_read_count,
+        avg_sys_read_time_us=avg_sys_read_time_us,
+        
+        total_cpu_runtime_us=total_cpu_runtime_us,
+        total_cpu_runtime_ms=total_cpu_runtime_ms,
+        total_cpu_waittime_us=total_cpu_waittime_us,
+        
+        total_block_io_time_us=total_block_io_time_us,
+        total_block_io_time_ms=total_block_io_time_ms,
+        total_block_io_count=total_block_io_count,
+        total_block_io_read_bytes=total_block_io_read_bytes,
+        total_block_io_write_bytes=total_block_io_write_bytes,
+        avg_block_io_time_us=avg_block_io_time_us,
+        avg_block_io_read_bytes=avg_block_io_read_bytes,
+        avg_block_io_write_bytes=avg_block_io_write_bytes,
+        
+        wall_block_io_time_ms=wall_block_io_time_ms,
         cpu_util_ratio=cpu_util_ratio,
-        io_stall_ratio=io_stall_ratio,
+        io_util_ratio=block_io_util_ratio,
+        io_stall_ratio=block_io_stall_ratio,
     )
     return rec
 
@@ -533,84 +607,73 @@ def _print_phase_breakdown(rec: PhaseRecord):
     # print(f" PID                                    : {pid}")
     # print(f" TID                                    : {tid}")
 
-    print("-- Elapsed Time Analysis (main pid only) --")
-    print(f" Wall Clock Time                            : {rec.wall_ms} (ms)")
-    print(
-        f"    - Non I/O Handling Time (Estimated)     : {rec.wall_pid_non_io_ms} (ms)"
-    )
-    print(f"    - I/O Handling Time                     : {rec.wall_pid_io_ms} (ms)")
-    print(f"        - Read Syscall                      : {rec.wall_read_ms} (ms)")
-    print(f"        - Write Syscall                     : {rec.wall_write_ms} (ms)")
-    print(f"        - PageFault                         : {rec.wall_pid_pf_ms} (ms)")
-    print(
-        f"            - Major PageFault               : {rec.wall_pid_major_pf_ms} (ms)"
-    )
-    print(
-        f"            - Minor PageFault (NOPAGE)      : {rec.wall_pid_minor_pf_ms} (ms)"
-    )
-    print(
-        f"            - Minor PageFault (RETRY)       : {rec.wall_pid_minor_retry_pf_ms} (ms)"
-    )
+    print("-- Elapsed Time Stats (single thread only, if multi-threaded, it shows the first thread's stats) --")
+    print(f" Wall Clock Time                            : {rec.wall_clock_time_ms} (ms)")
+    print(f"    - Non IO Handling Time (Estimated)      : {rec.single_thread_non_io_handle_time_ms} (ms)")
+    print(f"    - IO Handling Time                      : {rec.single_thread_io_handle_time_ms} (ms)")
+    print(f"        - Read Syscall                      : {rec.single_thread_read_sys_time_ms} (ms)")
+    print(f"        - Write Syscall                     : {rec.single_thread_write_sys_time_ms} (ms)")
+    print(f"        - PageFault                         : {rec.single_thread_pf_time_ms} (ms)")
+    print(f"            - Major PageFault               : {rec.single_thread_major_pf_time_ms} (ms)")
+    print(f"            - Minor PageFault (NOPAGE)      : {rec.single_thread_minor_pf_time_ms} (ms)")
+    print(f"            - Minor PageFault (RETRY)       : {rec.single_thread_minor_retry_pf_time_ms} (ms)")
     print("")
 
-    print("-- I/O Handling Stats --")
-    print(f" ## PageFault ##")
-    print(f" Major Fault Count                          : {rec.major_fault_count}")
-    print(f" Minor Fault Count (NOPAGE)                 : {rec.minor_fault_count}")
-    print(
-        f" Minor Fault Count (RETRY)                  : {rec.minor_fault_retry_count}"
-    )
-    print(f" ReadAhead Count                            : {rec.readahead_count}")
+    print("-- IO Handling Stats --")    
+    print(f"- Syscall")
+    print(f" Total Read Syscall Handling Time           : {rec.total_sys_read_time_ms} (ms)")
+    print(f" Total Read Syscall Count                   : {rec.total_sys_read_count} (count)")
+    print(f" Avg Read Syscall Handling Time             : {rec.avg_sys_read_time_us} (us/count)")
     print("")
-    print(f" Total Major PageFault Time                 : {rec.total_major_pf_ms} (ms)")
-    print(f" Total Minor PageFault Time (NOPAGE)        : {rec.total_minor_pf_ms} (ms)")
-    print(
-        f" Total Minor PageFault Time (RETRY)         : {rec.total_minor_retry_pf_ms} (ms)"
-    )
-    print(f" Avg Major Fault Handling Time              : {rec.avg_major_us} (us)")
-    print(f" Avg Minor Fault Handling Time (NOPAGE)     : {rec.avg_minor_us} (us)")
-    print(
-        f" Avg Minor Fault Handling Time (RETRY)      : {rec.avg_minor_retry_us} (us)"
-    )
+    print(f" Total Write Syscall Handling Time          : {rec.total_sys_write_time_ms} (ms)")
+    print(f" Total Write Syscall Count                  : {rec.total_sys_write_count} (count)")
+    print(f" Avg Write Syscall Handling Time            : {rec.avg_sys_write_time_us} (us/count)")
     print("")
-    print(f" ## Syscall ##")
-    print(f" Read Syscall Count                         : {rec.sys_read_count}")
-    print(f" Write Syscall Count                        : {rec.sys_write_count}")
+    
+    total_pf_count=rec.total_major_pf_count+rec.total_minor_pf_count+rec.total_minor_pf_retry_count
+    avg_pf_time_us=rec.avg_major_pf_time_us + rec.avg_minor_pf_time_us + rec.avg_minor_retry_pf_time_us
+    print(f"- PageFault")
+    print(f" Total PageFault Time                       : {rec.total_pf_time_ms} (ms)")
+    print(f"    - Total Major PageFault Time            : {rec.total_major_pf_time_ms} (ms)")
+    print(f"    - Total Minor PageFault Time (NOPAGE)   : {rec.total_minor_pf_time_ms} (ms)")
+    print(f"    - Total Minor PageFault Time (RETRY)    : {rec.total_minor_retry_pf_time_ms} (ms)")
+    print(f" Total PageFault Count                      : {total_pf_count} (count)")
+    print(f"    - Major Fault Count                     : {rec.total_major_pf_count} (count)")
+    print(f"    - Minor Fault Count (NOPAGE)            : {rec.total_minor_pf_count} (count)")
+    print(f"    - Minor Fault Count (RETRY)             : {rec.total_minor_pf_retry_count} (count)")
+    print(f" Avg PageFault Time                         : {avg_pf_time_us} (us/count)")
+    print(f"    - Avg Major Fault Handling Time         : {rec.avg_major_pf_time_us} (us/count)")
+    print(f"    - Avg Minor Fault Handling Time (NOPAGE): {rec.avg_minor_pf_time_us} (us/count)")
+    print(f"    - Avg Minor Fault Handling Time (RETRY) : {rec.avg_minor_retry_pf_time_us} (us/count)")
+    print(f" Total ReadAhead Count                      : {rec.readahead_count} (count)")
     print("")
-    print(f" Total Read Syscall Time                    : {rec.total_read_ms} (ms)")
-    print(f" Total Write Syscall Time                   : {rec.total_write_ms} (ms)")
-    print(f" Avg Read Syscall Handling Time             : {rec.avg_read_us} (us)")
-    print(f" Avg Write Syscall Handling Time            : {rec.avg_write_us} (us)")
+    
+    
+    print("-- CPU Stats --")
+    print(f" Total CPU Runtime                          : {rec.total_cpu_runtime_us} (us)")
+    # print(f" Total CPU Wait Time                        : {rec.total_cpu_waittime_us} (us)")
     print("")
 
-    print("-- Total Time --")
-    print(f" Total CPU Runtime                          : {rec.cpu_runtime_us} (us)")
-    print(f" Total CPU Wait Time                        : {rec.cpu_wait_us} (us)")
-    print("")
-
-    print("-- I/O Stats --")
-    print(f" Total Block I/O Time                       : {rec.block_io_time_us} (us)")
-    print(f" Total Block I/O Count                      : {rec.block_io_count}")
-    print(
-        f" Total Block I/O Read Bytes                 : {rec.block_read_bytes} (bytes)"
-    )
-    print(
-        f" Total Block I/O Write Bytes                : {rec.block_write_bytes} (bytes)"
-    )
-    print(f" Avg Block I/O Time                         : {rec.avg_block_io_us} (us)")
-    print(
-        f" Avg Block I/O Read Bytes                   : {rec.avg_block_read_bytes} (bytes)"
-    )
-    print(
-        f" Avg Block I/O Write Bytes                  : {rec.avg_block_write_bytes} (bytes)"
-    )
-    print(f" Wall I/O Time (interval merged)            : {rec.io_wall_time_us} (us)")
+    print("-- IO Stats --")
+    print(f" Total Block IO Time                        : {rec.total_block_io_time_us} (us)")
+    print(f" Total Block IO Count                       : {rec.total_block_io_count} (count)")
+    print(f" Total Block IO Read Bytes                  : {rec.total_block_io_read_bytes} (bytes)")
+    print(f" Total Block IO Write Bytes                 : {rec.total_block_io_write_bytes} (bytes)")
+    print(f" Avg Block IO Time                          : {rec.avg_block_io_time_us} (us/block)")
+    print(f" Avg Block IO Read Bytes                    : {rec.avg_block_io_read_bytes} (bytes/block)")
+    print(f" Avg Block IO Write Bytes                   : {rec.avg_block_io_write_bytes} (bytes/block)")
     print("")
 
     print("-- Derived Metrics --")
-    print(f" CPU Utilization Ratio                      : {rec.cpu_util_ratio:.2f}")
-    print(f" I/O Stall Ratio                            : {rec.io_stall_ratio:.2f}")
-    print(f" I/O Parallelism Ratio                      : {rec.io_parallel_ratio:.2f}")
+    print(f" Total CPU Runtime                          : {rec.total_cpu_runtime_ms} (ms)")
+    print(f" Total Block IO Time                        : {rec.total_block_io_time_ms} (ms)")
+    print("")
+    print(f" Wall Clock Time                            : {rec.wall_clock_time_ms} (ms)")
+    print(f" Wall Block IO Time                         : {rec.wall_block_io_time_ms} (ms)")
+    print("")
+    print(f" CPU Utilization Ratio                      : {rec.cpu_util_ratio:.3f} (%, Total CPU / Wall Clock Time)")
+    print(f" IO Utilization Ratio                       : {rec.io_util_ratio:.3f} (%, Total Block IO / Wall Block IO Time)")
+    print(f" IO Stall Ratio                             : {rec.io_stall_ratio:.3f} (%, Wall Clock Time / Wall IO Time)")
     print("")
 
 
@@ -699,13 +762,14 @@ if __name__ == "__main__":
     phase_raw_records = []
 
     # Perf buffer 등록
-    b["events"].open_perf_buffer(on_event)
+    b["events"].open_perf_buffer(on_phase_event)
+    b["intervals"].open_perf_buffer(on_interval_event)  # IO interval 버퍼 추가
 
     # Exit hooks
     atexit.register(print_report)
 
     # Start tracing
-    print("Tracing USDT probes... Ctrl-C to stop.")
+    print("Tracing USDT probes and IO intervals... Ctrl-C to stop.")
     try:
         while True:
             b.perf_buffer_poll()

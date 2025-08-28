@@ -118,10 +118,10 @@ namespace
     }
 
     // --------------------------------------------------------------------------
-    // Constructs KV cache input structures for decode, based on the decode signature
+    // Allocates KV cache memory structures for decode, based on the decode signature
     // --------------------------------------------------------------------------
     std::map<std::string, std::vector<float, AlignedAllocator<float>>>
-    BuildKVCache(tflite::Interpreter *interpreter)
+    AllocateKVCache(tflite::Interpreter *interpreter)
     {
         tflite::SignatureRunner *runner = interpreter->GetSignatureRunner("decode");
         if (runner == nullptr)
@@ -382,11 +382,11 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
         sp_processor = LoadSentencePieceProcessor();
     }
 
-    //* ============ [Phase] 5. Build KV Cache ============ */
+    //* ============ [Phase] 5. Allocate KV Cache ============ */
     std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
     {
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_KV_Cache");
-        kv_cache = BuildKVCache(interpreter.get());
+        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Allocate_KV_Cache_Memory");
+        kv_cache = AllocateKVCache(interpreter.get());
     }
     MINIMAL_CHECK(!kv_cache.empty());
 

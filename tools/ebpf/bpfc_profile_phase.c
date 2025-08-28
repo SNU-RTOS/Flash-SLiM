@@ -3,14 +3,13 @@
 #include <linux/blkdev.h>
 
 // ── VM_FAULT_* 플래그 (커널 버전에 따라 상수값 다를 수 있음) ──
-#define VM_FAULT_MAJOR   4
-#define VM_FAULT_NOPAGE  256
-#define VM_FAULT_LOCKED  512
-#define VM_FAULT_RETRY   1024
+#define VM_FAULT_MAJOR 4
+#define VM_FAULT_NOPAGE 256
+#define VM_FAULT_LOCKED 512
+#define VM_FAULT_RETRY 1024
 // NOTE: These VM_FAULT_* constants may vary across kernel versions.
 //       Verify these against your target kernel headers if you see
 //       unexpected classification of page-fault types.
-
 
 /* ------------------------------------------------------------------
  * BPF type & map declarations
@@ -29,36 +28,37 @@
  * NOTE: `phase` is limited to 64 bytes; long strings will be truncated
  *       when read into this struct (userspace should handle truncation).
  */
-struct event_t {
-    u64 ts;          // ns, monotonic
-    u32 pid;         // tgid
-    int kind;        // 0 = start, 1 = end
-    char phase[64];  // update at end or check
+struct event_t
+{
+    u64 ts;         // ns, monotonic
+    u32 pid;        // tgid
+    int kind;       // 0 = start, 1 = end
+    char phase[64]; // update at end or check
 };
-
 
 /* --- Page-fault accounting (per TID entry; summed to TGID in Python) ---
  * pf_stat_t accumulates counts and elapsed ns for different PF types.
  * Note: keys in the pfstat map are u64 pid_tgid (upper 32 bits = tgid,
  * lower 32 bits = tid). The reader filters by tgid when summing.
  */
-struct pf_stat_t {
-    u64 start_ns;         // PF entry ts (0 means inactive)
-    u64 major_cnt;        // major faults count
-    u64 minor_cnt;        // minor faults (no page) count
-    u64 minor_retry_cnt;  // minor-retry faults count
-    u64 major_ns;         // accumulated major handling time (ns)
-    u64 minor_ns;         // accumulated minor (NOPAGE) handling time (ns)
-    u64 minor_retry_ns;   // accumulated minor (RETRY) handling time (ns)
-    u64 readahead_cnt;    // readahead invocation count
+struct pf_stat_t
+{
+    u64 start_ns;        // PF entry ts (0 means inactive)
+    u64 major_cnt;       // major faults count
+    u64 minor_cnt;       // minor faults (no page) count
+    u64 minor_retry_cnt; // minor-retry faults count
+    u64 major_ns;        // accumulated major handling time (ns)
+    u64 minor_ns;        // accumulated minor (NOPAGE) handling time (ns)
+    u64 minor_retry_ns;  // accumulated minor (RETRY) handling time (ns)
+    u64 readahead_cnt;   // readahead invocation count
 };
-
 
 /* --- Read/Write syscall timing (per TID entry) ---
  * - start_ns is used to record sys_enter timestamp; exit adds delta.
  * - map key is u64 pid_tgid (tid-scoped) to avoid races between threads.
  */
-struct rw_stat_t {
+struct rw_stat_t
+{
     u64 read_cnt;
     u64 read_ns;
     u64 read_bytes;
@@ -67,9 +67,8 @@ struct rw_stat_t {
     u64 write_ns;
     u64 write_bytes;
 
-    u64 start_ns;   // sys_enter timestamp storage
+    u64 start_ns; // sys_enter timestamp storage
 };
-
 
 /* --- Block I/O helper structs ---
  * block_start_t : stored at issue time keyed by bio (dev,sector)
@@ -80,45 +79,51 @@ struct rw_stat_t {
  *    more advanced post-processing (interval-level events).
  */
 
-struct block_start_t {
+struct block_start_t
+{
     u64 start_ns;
-    u64 pid_tgid;   // pid/tid captured at start time (u64: [63:32]=tgid)
-    char op;        // 'R' or 'W' (from rwbs[0])
-    u64 bytes;      // request size captured at start
+    u64 pid_tgid; // pid/tid captured at start time (u64: [63:32]=tgid)
+    char op;      // 'R' or 'W' (from rwbs[0])
+    u64 bytes;    // request size captured at start
 };
 
-struct block_stat_t {
-    u64 time_ns;       // total elapsed between issue and complete
-    u64 count;         // number of completed requests
-    u64 read_bytes;    // bytes completed for reads
-    u64 write_bytes;    // bytes completed for writes
+struct block_stat_t
+{
+    u64 time_ns;     // total elapsed between issue and complete
+    u64 count;       // number of completed requests
+    u64 read_bytes;  // bytes completed for reads
+    u64 write_bytes; // bytes completed for writes
 };
 
-struct bio_key_t { u64 dev; u64 sector; };
-
-struct block_io_interval_t {
-    u64 pid_tgid;      // pid/tid for the interval
-    u64 start_ns;      // interval start (ns)
-    u64 end_ns;        // interval end (ns)
-    u64 bytes;         // bytes processed in interval
-    char op;           // 'R' or 'W'
+struct bio_key_t
+{
+    u64 dev;
+    u64 sector;
 };
 
+struct block_io_interval_t
+{
+    u64 pid_tgid; // pid/tid for the interval
+    u64 start_ns; // interval start (ns)
+    u64 end_ns;   // interval end (ns)
+    u64 bytes;    // bytes processed in interval
+    char op;      // 'R' or 'W'
+};
 
-struct sched_stat_t {
+struct sched_stat_t
+{
     u64 runtime_ns;
     u64 wait_ns;
 };
 
 /* --- Perf output endpoints (userspace consumers) --- */
-BPF_PERF_OUTPUT(events);     // phase start/end events -> Python handler
+BPF_PERF_OUTPUT(events); // phase start/end events -> Python handler
 /* PERF OUTPUT declared for detailed intervals. Currently optional: the
  * BPF code in this file does not submit `intervals` in all code paths.
  * Keep this endpoint if you later want per-IO interval payloads to be
  * submitted to userspace; otherwise it can be removed.
  */
-BPF_PERF_OUTPUT(intervals);  // optional detailed I/O intervals -> Python
-
+BPF_PERF_OUTPUT(intervals); // optional detailed I/O intervals -> Python
 
 /* --- BPF Maps ---
  * Naming & key conventions:
@@ -200,12 +205,14 @@ BPF_HASH(blockstat, u64, struct block_stat_t);
 BPF_HASH(schedstat, u64, struct sched_stat_t);
 
 /* 02 BPF Helpers */
-static __always_inline u32 get_tgid(void) {
+static __always_inline u32 get_tgid(void)
+{
     // Return the current process id (tgid). Use this in probes where we
     // only need process-level membership (phase gate checks etc.).
     return (u32)(bpf_get_current_pid_tgid() >> 32);
 }
-static __always_inline u64 get_pid_tgid(void) {
+static __always_inline u64 get_pid_tgid(void)
+{
     // Return the raw 64-bit pid_tgid as produced by bpf_get_current_pid_tgid().
     // Layout: upper 32 bits = tgid, lower 32 bits = tid. Many map keys use
     // this packed value so consumers can recover both process and thread ids.
@@ -214,7 +221,8 @@ static __always_inline u64 get_pid_tgid(void) {
 
 /* BPF Functions */
 /* ---------- USDT: logic_start / logic_end ---------- */
-int trace_logic_start(struct pt_regs *ctx) {
+int trace_logic_start(struct pt_regs *ctx)
+{
     u64 now = bpf_ktime_get_ns();
     u64 pid_tgid = get_pid_tgid();
     u32 tgid = (u32)(pid_tgid >> 32);
@@ -222,7 +230,6 @@ int trace_logic_start(struct pt_regs *ctx) {
     // Phase 게이트 ON
     phase_ts_pid.update(&tgid, &now);
 
-    // pfstat/rwstat은 TID 단위 lazy-init (여기서 초기화 불필요)
 
     // 이벤트 알림
     struct event_t e = {};
@@ -233,7 +240,8 @@ int trace_logic_start(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_logic_end(struct pt_regs *ctx) {
+int trace_logic_end(struct pt_regs *ctx)
+{
     u64 now = bpf_ktime_get_ns();
     u32 tgid = get_tgid();
 
@@ -256,127 +264,153 @@ int trace_logic_end(struct pt_regs *ctx) {
 /* Replaced function-style tracepoint handlers with TRACEPOINT_PROBE to
  * ensure the tracepoint `args` struct is available in BPF context.
  */
-TRACEPOINT_PROBE(syscalls, sys_enter_read) {
+TRACEPOINT_PROBE(syscalls, sys_enter_read)
+{
     u64 pid_tgid = get_pid_tgid();
     u32 tgid = (u32)(pid_tgid >> 32);
-    if (!phase_ts_pid.lookup(&tgid)) return 0;
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
 
     struct rw_stat_t zero = {};
     struct rw_stat_t *s = rwstat.lookup_or_try_init(&pid_tgid, &zero);
-    if (!s) return 0;
+    if (!s)
+        return 0;
 
     s->start_ns = bpf_ktime_get_ns();
     return 0;
 }
 
-TRACEPOINT_PROBE(syscalls, sys_exit_read) {
+TRACEPOINT_PROBE(syscalls, sys_exit_read)
+{
     u64 pid_tgid = get_pid_tgid();
     struct rw_stat_t *s = rwstat.lookup(&pid_tgid);
-    if (!s || s->start_ns == 0) return 0;
+    if (!s || s->start_ns == 0)
+        return 0;
 
     u64 delta = bpf_ktime_get_ns() - s->start_ns;
     s->read_cnt++;
     s->read_ns += delta;
 
     long ret = args->ret; // bytes read or error(<0)
-    if (ret > 0) s->read_bytes += (u64)ret;
+    if (ret > 0)
+        s->read_bytes += (u64)ret;
 
     s->start_ns = 0;
     return 0;
 }
 
-TRACEPOINT_PROBE(syscalls, sys_enter_write) {
+TRACEPOINT_PROBE(syscalls, sys_enter_write)
+{
     u64 pid_tgid = get_pid_tgid();
     u32 tgid = (u32)(pid_tgid >> 32);
-    if (!phase_ts_pid.lookup(&tgid)) return 0;
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
 
     struct rw_stat_t zero = {};
     struct rw_stat_t *s = rwstat.lookup_or_try_init(&pid_tgid, &zero);
-    if (!s) return 0;
+    if (!s)
+        return 0;
 
     s->start_ns = bpf_ktime_get_ns();
     return 0;
 }
 
-TRACEPOINT_PROBE(syscalls, sys_exit_write) {
+TRACEPOINT_PROBE(syscalls, sys_exit_write)
+{
     u64 pid_tgid = get_pid_tgid();
     struct rw_stat_t *s = rwstat.lookup(&pid_tgid);
-    if (!s || s->start_ns == 0) return 0;
+    if (!s || s->start_ns == 0)
+        return 0;
 
     u64 delta = bpf_ktime_get_ns() - s->start_ns;
     s->write_cnt++;
     s->write_ns += delta;
 
     long ret = args->ret; // bytes written or error(<0)
-    if (ret > 0) s->write_bytes += (u64)ret;
+    if (ret > 0)
+        s->write_bytes += (u64)ret;
 
     s->start_ns = 0;
     return 0;
 }
 
 /* ---------- kprobe: handle_mm_fault ---------- */
-int kprobe__handle_mm_fault(struct pt_regs *ctx) {
+int kprobe__handle_mm_fault(struct pt_regs *ctx)
+{
     u64 pid_tgid = get_pid_tgid();
     u32 tgid = (u32)(pid_tgid >> 32);
-    if (!phase_ts_pid.lookup(&tgid)) return 0;
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
 
     struct pf_stat_t zero = {};
     struct pf_stat_t *s = pfstat.lookup_or_try_init(&pid_tgid, &zero);
-    if (!s) return 0;
+    if (!s)
+        return 0;
 
     s->start_ns = bpf_ktime_get_ns();
     return 0;
 }
 
 /* ---------- kretprobe: handle_mm_fault ---------- */
-int kretprobe__handle_mm_fault(struct pt_regs *ctx) {
+int kretprobe__handle_mm_fault(struct pt_regs *ctx)
+{
     u64 pid_tgid = get_pid_tgid();
     struct pf_stat_t *s = pfstat.lookup(&pid_tgid);
-    if (!s) return 0;
+    if (!s)
+        return 0;
 
     u64 st = s->start_ns;
-    if (st == 0) return 0;
+    if (st == 0)
+        return 0;
 
     u64 delta = bpf_ktime_get_ns() - st;
     s->start_ns = 0;
 
     long retval = PT_REGS_RC(ctx);
 
-    if ((retval & VM_FAULT_MAJOR) != 0) {
+    if ((retval & VM_FAULT_MAJOR) != 0)
+    {
         s->major_cnt++;
         s->major_ns += delta;
-    } else if ((retval & VM_FAULT_RETRY) != 0) { // Retry 전용
+    }
+    else if ((retval & VM_FAULT_RETRY) != 0)
+    { // Retry 전용
         s->minor_retry_cnt++;
         s->minor_retry_ns += delta;
-    } else  { 
+    }
+    else
+    {
         // 커널에 'minor' 비트는 없음 → 'major 아님 && 에러 아님'을 minor로 취급
         s->minor_cnt++;
         s->minor_ns += delta;
     }
-    
+
     return 0;
 }
 
 /* ---------- kprobe: ondemand_readahead ---------- */
-int kprobe__ondemand_readahead(struct pt_regs *ctx) {
+int kprobe__ondemand_readahead(struct pt_regs *ctx)
+{
     u64 pid_tgid = get_pid_tgid();
     u32 tgid = (u32)(pid_tgid >> 32);
-    if (!phase_ts_pid.lookup(&tgid)) return 0;
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
 
     struct pf_stat_t zero = {};
     struct pf_stat_t *s = pfstat.lookup_or_try_init(&pid_tgid, &zero);
-    if (!s) return 0;
+    if (!s)
+        return 0;
 
     s->readahead_cnt++;
     return 0;
 }
 
-
-
 /* ---------- tracepoint: block_io_start (start) / block_io_done (done) ---------- */
-TRACEPOINT_PROBE(block, block_io_start) {
+TRACEPOINT_PROBE(block, block_io_start)
+{
     u32 tgid = get_tgid();
-    if (!phase_ts_pid.lookup(&tgid)) return 0;
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
 
     struct block_start_t st = {};
     st.start_ns = bpf_ktime_get_ns();
@@ -386,58 +420,77 @@ TRACEPOINT_PROBE(block, block_io_start) {
 
     char c = 0;
     bpf_probe_read_kernel(&c, sizeof(c), &args->rwbs[0]);
-    if (c == 'W') st.op = 'W';
-    else st.op = 'R';
+    if (c == 'W')
+        st.op = 'W';
+    else
+        st.op = 'R';
 
-    struct bio_key_t key = { .dev = args->dev, .sector = args->sector };
+    struct bio_key_t key = {.dev = args->dev, .sector = args->sector};
     block_start.update(&key, &st);
 
-   
     return 0;
 }
 
-TRACEPOINT_PROBE(block, block_io_done) {
-    struct bio_key_t key = { .dev = args->dev, .sector = args->sector };
+TRACEPOINT_PROBE(block, block_io_done)
+{
+    struct bio_key_t key = {.dev = args->dev, .sector = args->sector};
     struct block_start_t *st = block_start.lookup(&key);
-    if (!st) return 0;
+    if (!st)
+        return 0;
 
     u64 now = bpf_ktime_get_ns();
     u64 delta = now - st->start_ns;
 
     struct block_stat_t zero = {};
     struct block_stat_t *bs = blockstat.lookup_or_try_init(&st->pid_tgid, &zero);
-    if (bs) {
+    if (bs)
+    {
         bs->time_ns += delta;
         bs->count += 1;
-        if (st->op == 'W') bs->write_bytes += st->bytes;
-        else bs->read_bytes += st->bytes;
+        if (st->op == 'W')
+            bs->write_bytes += st->bytes;
+        else
+            bs->read_bytes += st->bytes;
     }
+
+    struct block_io_interval_t iv = {};
+    iv.pid_tgid = st->pid_tgid;
+    iv.start_ns = st->start_ns;
+    iv.end_ns = now;
+    iv.bytes = st->bytes;
+    iv.op = st->op;
+    intervals.perf_submit(args, &iv, sizeof(iv));
 
     block_start.delete(&key);
 
-    
     return 0;
 }
 
 /* ---------- sched tracepoints: cpu runtime / cpu wait ---------- */
-TRACEPOINT_PROBE(sched, sched_stat_runtime) {
+TRACEPOINT_PROBE(sched, sched_stat_runtime)
+{
     u32 tgid = get_tgid();
-    if (!phase_ts_pid.lookup(&tgid)) return 0;
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
     u64 pid_tgid = get_pid_tgid();
     struct sched_stat_t zero = {};
     struct sched_stat_t *s = schedstat.lookup_or_try_init(&pid_tgid, &zero);
-    if (!s) return 0;
+    if (!s)
+        return 0;
     s->runtime_ns += args->runtime;
     return 0;
 }
 
-TRACEPOINT_PROBE(sched, sched_stat_wait) {
+TRACEPOINT_PROBE(sched, sched_stat_wait)
+{
     u32 tgid = get_tgid();
-    if (!phase_ts_pid.lookup(&tgid)) return 0;
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
     u64 pid_tgid = get_pid_tgid();
     struct sched_stat_t zero = {};
     struct sched_stat_t *s = schedstat.lookup_or_try_init(&pid_tgid, &zero);
-    if (!s) return 0;
+    if (!s)
+        return 0;
     s->wait_ns += args->delay;
     return 0;
 }
