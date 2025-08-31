@@ -12,7 +12,7 @@
 #   - "valid=1" rows only are used for integration and stats.
 #   - batt path expects Discharging -> current_now negative; we flip sign so P_draw>0.
 
-import argparse, csv, math, os, signal, sys, time, statistics
+import argparse, csv, math, os, signal, sys, time, statistics, subprocess
 from typing import Tuple, Optional
 
 DEFAULT_BATT = "/sys/class/power_supply/qcom-battmgr-bat"
@@ -331,11 +331,32 @@ def print_logger_metadata(args, hwmon_base: Optional[str] = None):
     else:
         print(f" Hwmon Path       : {args.hwmon if args.hwmon else 'Auto-detected'}")
     print(f" Busy Fraction    : {args.busy_fraction}")
+    if hasattr(args, 'exec') and args.exec:
+        print(f" Execute Command  : {args.exec}")
 
 
 def run_logger_mode(args):
     """Execute power logging mode - samples power and writes to CSV."""
     print("[INFO] Running in LOGGER mode")
+
+    # Try to set real-time scheduling for better timing precision
+    if hasattr(args, 'realtime') and args.realtime:
+        try:
+            priority = getattr(args, 'rt_priority', 99)
+            os.sched_setscheduler(0, os.SCHED_FIFO, os.sched_param(priority))
+            print(f"[INFO] Real-time scheduling enabled with priority {priority}")
+            
+            # Verify scheduling was applied
+            current_policy = os.sched_getscheduler(0)
+            current_priority = os.sched_getparam(0).sched_priority
+            policy_names = {os.SCHED_OTHER: "SCHED_OTHER", os.SCHED_FIFO: "SCHED_FIFO", os.SCHED_RR: "SCHED_RR"}
+            policy_name = policy_names.get(current_policy, f"UNKNOWN({current_policy})")
+            print(f"[INFO] Current scheduling: {policy_name}, priority: {current_priority}")
+            
+        except PermissionError:
+            print("[WARN] Real-time scheduling failed: Permission denied (need root or CAP_SYS_NICE)")
+        except OSError as e:
+            print(f"[WARN] Real-time scheduling failed: {e}")
 
     # Detect hwmon path early so metadata can show actual path
     hwmon_base = detect_hwmon_path(args.hwmon)
@@ -349,28 +370,40 @@ def run_logger_mode(args):
         # print info here but metadata will also show hwmon_base
         print(f"[INFO] hwmon fallback path: {hwmon_base} (name={name})")
 
+    # Start external process if requested
+    external_process = None
+    if hasattr(args, 'exec') and args.exec:
+        def reset_scheduling():
+            """Reset child process to normal scheduling policy."""
+            try:
+                # Reset to normal scheduling (SCHED_OTHER) with priority 0
+                os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
+            except OSError:
+                pass  # Ignore errors in child process
+        
+        try:
+            external_process = subprocess.Popen(
+                args.exec, 
+                shell=True,
+                preexec_fn=reset_scheduling  # Reset scheduling for child process
+            )
+            print(f"[INFO] Started external process: {args.exec} (PID: {external_process.pid})")
+            print(f"[INFO] Child process uses normal scheduling (SCHED_OTHER)")
+        except Exception as e:
+            print(f"[ERROR] Failed to start external process: {e}", file=sys.stderr)
+            sys.exit(1)
+
     # Print metadata before logging
     print_logger_metadata(args, hwmon_base=hwmon_base)
 
-    # Wait Until User Input
-    # try:
-    #     input("\n[INFO] Press Enter to start logging..\n")
-    # except KeyboardInterrupt:
-    #     print("\n[INFO] Logging stopped by user.")
-    #     sys.exit(0)
-    
     print("\n[INFO] Logging started...")
 
     # Validate hardware paths
     if not os.path.isdir(args.batt):
         print(f"[WARN] battery path not present: {args.batt}", file=sys.stderr)
 
-    # (hwmon_base already detected above)
-
     # Calculate timing parameters
     dt = 1.0 / max(args.hz, 0.1)
-    busy_frac = max(0.0, min(args.busy_fraction, 0.9))
-    busy_wait_threshold = busy_frac * dt
 
     # Setup signal handling
     stop = False
@@ -389,25 +422,54 @@ def run_logger_mode(args):
         wr = csv.writer(f)
         # 기록 단위를 mW로 변경해서 해상도 향상
         wr.writerow(["t_mono_ns", "power_mW", "src", "valid"])
-        next_t = time.monotonic()
 
+        # 절대 시간 기준 스케줄링
+        next_sample_time = time.monotonic()
+        
         while not stop:
-            t_ns = time.monotonic_ns()
-            pw, src, valid = read_power_w(args.batt, hwmon_base)
-            # CSV에는 mW 단위로 저장 (파서에서 mW->W로 복원)
-            pw_mw = pw * 1000.0 if not math.isnan(pw) else pw
-            wr.writerow([t_ns, f"{pw_mw:.3f}" if not math.isnan(pw_mw) else "nan", src, int(valid)])
+            # Check if external process finished
+            if external_process and external_process.poll() is not None:
+                print(f"\n[INFO] External process finished (exit code: {external_process.returncode})")
+                print("[INFO] Stopping power measurement...")
+                break
+                
+            # 현재 샘플링 시간
+            current_time = time.monotonic()
+            
+            # 예정된 시간이 되었거나 지났으면 샘플링
+            if current_time >= next_sample_time:
+                t_ns = time.monotonic_ns()
+                pw, src, valid = read_power_w(args.batt, hwmon_base)
+                # CSV에는 mW 단위로 저장 (파서에서 mW->W로 복원)
+                pw_mw = pw * 1000.0 if not math.isnan(pw) else pw
+                wr.writerow([t_ns, f"{pw_mw:.3f}" if not math.isnan(pw_mw) else "nan", src, int(valid)])
 
-            if t_end and time.monotonic() >= t_end:
+                # 다음 샘플링 시간 계산 (drift 방지)
+                next_sample_time += dt
+                
+                # 너무 많이 밀렸으면 리셋 (시스템 과부하 대응)
+                if next_sample_time < current_time - dt:
+                    next_sample_time = current_time + dt
+
+            if t_end and current_time >= t_end:
                 break
 
-            # Hybrid timing: sleep most of the time, then busy-wait for precision
-            next_t += dt
-            sleep_for = next_t - time.monotonic()
-            if sleep_for > busy_wait_threshold:
-                time.sleep(sleep_for - busy_wait_threshold)
-            while time.monotonic() < next_t:
-                pass
+            # 다음 샘플링까지 남은 시간만큼 sleep
+            sleep_time = next_sample_time - time.monotonic()
+            if sleep_time > 0:
+                time.sleep(min(sleep_time, dt * 0.1))  # 최대 5ms씩만 sleep
+
+    # Wait for external process to finish completely
+    if external_process:
+        try:
+            external_process.wait(timeout=5)  # 5초 대기
+        except subprocess.TimeoutExpired:
+            print("[WARN] External process did not finish cleanly, terminating...")
+            external_process.terminate()
+            try:
+                external_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                external_process.kill()
 
     # Run CSV analysis and reporting after logging
     analyze_and_report_csv(args.csv, args.hz)
@@ -478,6 +540,22 @@ def main():
         type=float,
         default=0.05,
         help="fraction of dt to busy-wait for timing precision (default: %(default)s)",
+    )
+    logger_group.add_argument(
+        "--realtime",
+        action="store_true",
+        help="enable real-time scheduling (requires root or CAP_SYS_NICE)",
+    )
+    logger_group.add_argument(
+        "--rt-priority",
+        type=int,
+        default=50,
+        help="real-time priority (1-99, higher is more priority) (default: %(default)s)",
+    )
+    logger_group.add_argument(
+        "--exec",
+        type=str,
+        help="command to execute and monitor (measurement stops when process exits)",
     )
 
     # Parser mode specific arguments
