@@ -753,6 +753,11 @@ Decode_2                           3667.020          3.1         23.5
  IO Concurrency Factor                      : 9.621 (Concurrent IO operations) (Total Block IO / Wall Block IO Time)
  IO Time Ratio                              : 79.372 (%) (Wall IO Time / Wall Clock Time)
 
+sudo fio --name=maxread --filename=/dev/sda \
+    --rw=read --bs=1M --direct=1 \
+    --numjobs=4 --iodepth=64 \
+    --time_based --runtime=5 --size=4G \
+    --group_reporting
 
 -------------------------------------------
 [INFO] Phase Decode_2 Report 
