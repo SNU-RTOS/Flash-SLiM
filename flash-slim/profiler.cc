@@ -277,7 +277,16 @@ namespace custom::profiler
     }
 
     
+    ScopeEventHandler::ScopeEventHandler(const std::string &name){
+        current_phase_name_= name;
+        TRACE_LOGIC_START(current_phase_name_.c_str());
+    }
 
+    ScopeEventHandler::~ScopeEventHandler()
+    {
+        TRACE_LOGIC_END(current_phase_name_.c_str());
+
+    }
 
 
     /* ScopeEventPrefetcher */

@@ -90,3 +90,6 @@ evaluation/*
 
 tmp
 utils
+*.zip
+memo.txt
+CLAUDE.md

@@ -161,6 +161,15 @@ namespace custom::profiler
         TimerUtility timer_;
     };
 
+    class ScopeEventHandler
+    {
+    public:
+        explicit ScopeEventHandler(const std::string &name);
+        ~ScopeEventHandler();
+    private:
+        std::string current_phase_name_;
+    };
+
     // --------------------------------------------------------------------------
     // ScopeLogger: composed version with TimerUtility and profiling
     // --------------------------------------------------------------------------
@@ -210,7 +219,6 @@ namespace custom::profiler
     // --------------------------------------------------------------------------
     // ScopeEventPrefetcher: signals phase start/end events but doesn't log time
     // --------------------------------------------------------------------------
-
     struct PhaseContext
     {
         std::mutex mutex;
@@ -232,6 +240,7 @@ namespace custom::profiler
         std::unique_lock<std::mutex> lock_;
     };
 
+    
     class ScopeEventListener
     {
     public:

@@ -72,6 +72,7 @@ ABSL_FLAG(float, top_p, 0.9f, "Top-p (nucleus) sampling parameter. Only consider
 ABSL_FLAG(float, repetition_penalty, 1.2f, "Repetition penalty for sampling. Higher values reduce repetition. Defaults to 1.2.");
 ABSL_FLAG(bool, enable_repetition_penalty, false, "Enable repetition penalty. Defaults to false.");
 ABSL_FLAG(std::string, csv_profile_output_path, "", "Path to save the profiling results in CSV format. If empty, no CSV output is generated.");
+
 namespace
 {
     using ai_edge_torch::examples::LoRA;
@@ -302,26 +303,96 @@ namespace
 
 } // end anonymous namespace
 
-void __set_affinity_to_cores(const std::vector<int> &cores)
+
+void __run_main(custom::profiler::GenAIMetrics &genai_metrics,
+                std::unique_ptr<tflite::profiling::BufferedProfiler> &op_profiler,
+                const std::vector<ProfilerOutput> &op_profiler_outputs);
+
+// =======================================================================
+// main() entry
+// =======================================================================
+int main(int argc, char *argv[])
 {
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    for (int core : cores)
-    {
-        CPU_SET(core, &cpuset);
-    }
-    if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0)
-    {
-        perror("Failed to set affinity");
-    }
+    // Set precision
+    std::cout.precision(5);
+    std::cout.setf(std::ios::fixed, std::ios::floatfield);
+    std::cout << std::boolalpha;
+    std::cout << "\n[INFO] Text Generation App on LiteRT Interpreter\n";
+
+#ifdef EBPF_TRACE_ENABLED
+    std::cout << "\n[INFO] eBPF tracing is enabled. USDT probes will be used.\n";
+#endif
+
+    // Parse flags
+    std::cout << "\n[INFO] Preparing Required Components" << std::endl;
+    absl::ParseCommandLine(argc, argv);
+
+    // Check which cores we're actually running on
+    std::vector<int> active_cores;
+    custom::profiler::detect_active_cores(active_cores);
+
+    std::cout << "[INFO] Cores used for text generation: ";
+    for (const auto &core : active_cores) std::cout << core << " ";
+    std::cout << "\n[INFO] Start Generating Text" << std::endl;
+
+    // Init Custom GenAI Metrics Profiler
+    custom::profiler::GenAIMetrics genai_metrics;
+
+    // Init Tflite Internal Op-level Profiler
+    std::unique_ptr<tflite::profiling::BufferedProfiler> op_profiler; // Create op_profiler pointer
+
+    // Avoid self-referential initialization by constructing formatters first
+    std::vector<ProfilerOutput> op_profiler_outputs;
+
+    /*
+    auto default_formatter = std::make_shared<tflite::profiling::ProfileSummaryDefaultFormatter>();
+    ProfilerOutput pf_out_default;
+    pf_out_default.formatter = default_formatter;
+    pf_out_default.init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(default_formatter);
+    pf_out_default.run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(default_formatter);
+    pf_out_default.output_type = "log";
+    pf_out_default.output_path = "";
+    op_profiler_outputs.emplace_back(pf_out_default);
+    */
+
+    std::string csv_path = absl::GetFlag(FLAGS_csv_profile_output_path);
+    auto csv_formatter = std::make_shared<tflite::profiling::ProfileSummaryCSVFormatter>();
+    ProfilerOutput pf_out_csv;
+    pf_out_csv.formatter = csv_formatter;
+    pf_out_csv.init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(csv_formatter);
+    pf_out_csv.run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(csv_formatter);
+    pf_out_csv.output_type = "csv";
+    pf_out_csv.output_path = csv_path.empty() ? "" : csv_path;
+    op_profiler_outputs.emplace_back(pf_out_csv);
+
+    //* ============ Generate Token ============ */
+
+    __run_main(genai_metrics, op_profiler, op_profiler_outputs);
+
+    //* ============ Print Results ============ */
+
+    // Print genai metrics (inference vs. sampling)
+    genai_metrics.Print();
+
+    // Print Op-level profiling results
+    std::cout << "\n[INFO] Generating Ops-level profiling (log)" << std::endl;
+
+    // pf_out_default.formatter->HandleOutput(pf_out_default.init_summarizer->GetOutputString(),
+    //                                     pf_out_default.run_summarizer->GetOutputString(), pf_out_default.output_path);
+    pf_out_csv.formatter->HandleOutput(pf_out_csv.init_summarizer->GetOutputString(),
+                                       pf_out_csv.run_summarizer->GetOutputString(), pf_out_csv.output_path);
+    std::cout << "\n[INFO] Text Generation App completed successfully.\n";
+    std::cout << "---------------------------------------------------\n\n";
+
+    return 0;
 }
 
-void __run_main(custom::profiler::PhaseContext &phase_ctx,
-                custom::profiler::GenAIMetrics &genai_metrics,
+
+
+void __run_main(custom::profiler::GenAIMetrics &genai_metrics,
                 std::unique_ptr<tflite::profiling::BufferedProfiler> &op_profiler,
                 const std::vector<ProfilerOutput> &op_profiler_outputs)
 {
-
     // Declare local variables
     std::vector<int> prompt_tokens;
     std::string prompt, start_token, stop_token;
@@ -332,8 +403,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     //* ============ [Phase] 1. Load Model ============ */
     std::unique_ptr<tflite::FlatBufferModel> model;
     {
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Model");
-
+        custom::profiler::ScopeEventHandler handler("Load_Model");
         model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
     }
     MINIMAL_CHECK(model != nullptr);
@@ -342,19 +412,17 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 
     std::unique_ptr<tflite::Interpreter> interpreter;
     {
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Build_Interpreter");
+        custom::profiler::ScopeEventHandler handler("Build_Interpreter");
         // Register Ops
         tflite::ops::builtin::BuiltinOpResolver resolver;
         tflite::ops::custom::GenAIOpsRegisterer(&resolver); // Register GenAI custom ops
 
         // Build the interpreter
         tflite::InterpreterBuilder builder(*model, resolver);
-        MINIMAL_CHECK(builder.SetNumThreads(absl::GetFlag(FLAGS_num_threads)) == kTfLiteOk);
-
+        builder.SetNumThreads(absl::GetFlag(FLAGS_num_threads));
         builder(&interpreter);
-
-        MINIMAL_CHECK(interpreter != nullptr);
     }
+    MINIMAL_CHECK(interpreter != nullptr);
 
     // Create profiler if profiling is enabled
     constexpr int kProfilingBufferHeadrooms = 512;
@@ -368,7 +436,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 
     //* ============ [Phase] 3. Apply Delegate ============ */
     {
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Apply_Delegate");
+        custom::profiler::ScopeEventHandler handler("Apply_Delegate");
         if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
         {
             ApplyXNNPACKWeightCaching(interpreter.get());
@@ -378,14 +446,14 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     //* ============ [Phase] 4. Load Tokenizer ============ */
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Load_Tokenizer");
+        custom::profiler::ScopeEventHandler handler("Load_Tokenizer");
         sp_processor = LoadSentencePieceProcessor();
     }
 
     //* ============ [Phase] 5. Allocate KV Cache ============ */
     std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
     {
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Allocate_KV_Cache_Memory");
+        custom::profiler::ScopeEventHandler handler("Allocate_KV_Cache_Memory");
         kv_cache = AllocateKVCache(interpreter.get());
     }
     MINIMAL_CHECK(!kv_cache.empty());
@@ -405,7 +473,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 
     //* ============ [Phase] 6. Prepare Prompt ============ */
     {
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Prompt");
+        custom::profiler::ScopeEventHandler handler("Prepare_Prompt");
         prompt = absl::GetFlag(FLAGS_prompt);
         MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
 
@@ -437,7 +505,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     tflite::SignatureRunner *prefill_runner = nullptr;
     tflite::SignatureRunner *decode_runner = nullptr;
     {
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Signature_Runners");
+        custom::profiler::ScopeEventHandler handler("Prepare_Signature_Runners");
         std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
         prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
         decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
@@ -454,9 +522,8 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     int kv_cache_max_size = 0;
     int prefill_seq_size = 0;
     int seq_dim_index = 0;
-
     {
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prepare_Input_Tensor");
+        custom::profiler::ScopeEventHandler handler("Prepare_Input_Tensor");
 
         prefill_input = prefill_runner->input_tensor("tokens");
         prefill_input_pos = prefill_runner->input_tensor("input_pos");
@@ -500,15 +567,13 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
     op_profiler->StartProfiling();
     {
         custom::profiler::ScopeTimer prefill_timer(prefill_time_ms);
-        custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, "Prefill");
+        custom::profiler::ScopeEventHandler handler("Prefill");
         status = prefill_runner->Invoke(); // Execute the prefill runner
     }
     op_profiler->StopProfiling();
     genai_metrics.RecordPrefillTime(prefill_time_ms);
-    for (auto &out : op_profiler_outputs)
-    {
-        out.run_summarizer->ProcessProfiles(op_profiler->GetProfileEvents(), *interpreter);
-    }
+    for (auto &out : op_profiler_outputs) out.run_summarizer->ProcessProfiles(op_profiler->GetProfileEvents(), *interpreter);
+
     MINIMAL_CHECK(status == kTfLiteOk);
     std::cout << "[INFO] Prefill Phase completed" << std::endl;
 
@@ -545,7 +610,7 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 
         std::string single_decoded_text;
         {
-            custom::profiler::ScopeEventPrefetcher prefetcher(phase_ctx, phase_name);
+            custom::profiler::ScopeEventHandler handler(phase_name);
 
             // 1) Model Inference
             {
@@ -589,141 +654,19 @@ void __run_main(custom::profiler::PhaseContext &phase_ctx,
 
         genai_metrics.RecordDecodingTime(inference_time_ms, sampling_time_ms, detok_time_ms);
         op_profiler->StopProfiling();
-        for (auto &out : op_profiler_outputs)
-        {
-            out.run_summarizer->ProcessProfiles(op_profiler->GetProfileEvents(), *interpreter);
-        }
+        for (auto &out : op_profiler_outputs) out.run_summarizer->ProcessProfiles(op_profiler->GetProfileEvents(), *interpreter);
 
         // Check if the next token is a stop token
-        if (next_token_id == stop_token_id)
-            break;
+        if (next_token_id == stop_token_id) break;
 
         // Add the generated token to previously generated tokens for repetition penalty
-        if (absl::GetFlag(FLAGS_enable_repetition_penalty))
-        {
-            previously_generated_tokens.insert(next_token_id);
-        }
+        if (absl::GetFlag(FLAGS_enable_repetition_penalty)) previously_generated_tokens.insert(next_token_id);
 
         std::cout << single_decoded_text << std::flush;
         next_position++;
     }
 
     std::cout << "\n\n\n";
-    std::cout << "[INFO] Decoded " << decode_steps << " tokens.\n";
-    std::cout << "\n[INFO] Decoding Phase completed" << std::endl;
-}
-
-// =======================================================================
-// main() entry
-// =======================================================================
-int main(int argc, char *argv[])
-{
-    // Set precision
-    std::cout.precision(5);
-    std::cout.setf(std::ios::fixed, std::ios::floatfield);
-    std::cout << std::boolalpha;
-    std::cout << "\n[INFO] Text Generation App on LiteRT Interpreter\n";
-
-#ifdef EBPF_TRACE_ENABLED
-    std::cout << "\n[INFO] eBPF tracing is enabled. USDT probes will be used.\n";
-#endif
-
-    // Parse flags
-    std::cout << "\n[INFO] Preparing Required Components" << std::endl;
-    absl::ParseCommandLine(argc, argv);
-
-    // Check which cores we're actually running on
-    std::vector<int> active_cores;
-    custom::profiler::detect_active_cores(active_cores);
-
-    if (active_cores.size() < 2)
-    {
-        std::cerr << "[ERROR] At least 2 cores are required.\n";
-        return -1;
-    }
-
-    // Set core affinity for the main thread and monitor thread
-    // Just monitor the cores we're allowed to run on (should be only core 0 with taskset)
-    std::vector<int> monitor_core({active_cores[0]});
-    std::vector<int> worker_cores(active_cores.begin() + 1, active_cores.end());
-    std::cout << "[INFO] Core used for logging and monitoring: " << monitor_core[0] << std::endl;
-    std::cout << "[INFO] Cores used for text generation: ";
-    for (const auto &core : worker_cores)
-    {
-        std::cout << core << " ";
-    }
-    std::cout << "\n[INFO] Start Generating Text" << std::endl;
-
-    // Init Custom Phase-level Profiler
-    custom::profiler::PhaseContext profile_ctx;
-    std::vector<custom::profiler::RUsageRecord> rusage_records;
-
-    // Init Custom GenAI Metrics Profiler
-    custom::profiler::GenAIMetrics genai_metrics;
-
-    // Init Tflite Internal Op-level Profiler
-    std::unique_ptr<tflite::profiling::BufferedProfiler> op_profiler; // Create op_profiler pointer
-
-    // Avoid self-referential initialization by constructing formatters first
-    auto default_formatter = std::make_shared<tflite::profiling::ProfileSummaryDefaultFormatter>();
-    ProfilerOutput pf_out_default;
-    pf_out_default.formatter = default_formatter;
-    pf_out_default.init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(default_formatter);
-    pf_out_default.run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(default_formatter);
-    pf_out_default.output_type = "log";
-    pf_out_default.output_path = "";
-
-    std::string csv_path = absl::GetFlag(FLAGS_csv_profile_output_path);
-    auto csv_formatter = std::make_shared<tflite::profiling::ProfileSummaryCSVFormatter>();
-    ProfilerOutput pf_out_csv;
-    pf_out_csv.formatter = csv_formatter;
-    pf_out_csv.init_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(csv_formatter);
-    pf_out_csv.run_summarizer = std::make_shared<tflite::profiling::ProfileSummarizer>(csv_formatter);
-    pf_out_csv.output_type = "csv";
-    pf_out_csv.output_path = csv_path.empty() ? "" : csv_path;
-
-    std::vector<ProfilerOutput> op_profiler_outputs{pf_out_default, pf_out_csv}; // Initialize profiler outputs
-
-    //* ============ Run Threads ============ */
-    std::thread monitor_thread([&]()
-                               {
-        __set_affinity_to_cores(monitor_core);
-        custom::profiler::ScopeEventListener listener(profile_ctx, false, &rusage_records);
-        listener.Run(); });
-
-    std::thread main_thread([&]()
-                            {
-        __set_affinity_to_cores(worker_cores);
-        __run_main(profile_ctx, genai_metrics, op_profiler, op_profiler_outputs); });
-
-    main_thread.join(); // Wait for the main thread to finish
-    profile_ctx.generation_done.store(true);
-    profile_ctx.signal_cv.notify_all();
-    monitor_thread.join(); // Wait for the monitor thread to finish
-
-    //* ============ Print Results ============ */
-    // Print Phase-level profiling results
-    // custom::profiler::print_rusage_records(rusage_records);
-
-    // Print genai metrics (inference vs. sampling)
-    genai_metrics.Print();
-
-    // Print Op-level profiling results
-    std::cout << "\n[INFO] Generating Ops-level profiling (log)" << std::endl;
-
-    auto out_default = op_profiler_outputs[0];
-    auto out_csv = op_profiler_outputs[1];
-    // out_default.formatter->HandleOutput(out_default.init_summarizer->GetOutputString(),
-    //                                     out_default.run_summarizer->GetOutputString(), out_default.output_path);
-    out_csv.formatter->HandleOutput(out_csv.init_summarizer->GetOutputString(),
-                                    out_csv.run_summarizer->GetOutputString(), out_csv.output_path);
-    // for (auto &out : op_profiler_outputs)
-    // {
-    //     out.formatter->HandleOutput(out.init_summarizer->GetOutputString(),
-    //                                 out.run_summarizer->GetOutputString(), out.output_path);
-    // }
-    std::cout << "\n[INFO] Text Generation App completed successfully.\n";
-    std::cout << "---------------------------------------------------\n\n";
-
-    return 0;
+    std::cout << "[INFO] Decoded " << decode_steps << " tokens."<< std::endl;
+    std::cout << "[INFO] Decoding Phase completed" << std::endl;
 }
