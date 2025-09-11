@@ -1,7 +1,7 @@
 #!/usr/bin/env bpftrace
 
 BEGIN {
-    printf("=== Attaching XNNPACK operator-level detailed logging ===\n");
+    printf("=== Attaching text_gen operator-level detailed logging ===\n");
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ tracepoint:sched:sched_stat_runtime {
 // ───────────────────────────────────────────────────────────────────────────────
 // USDT Probes: operator 시작 시점에만 baseline 세팅
 // ───────────────────────────────────────────────────────────────────────────────
-usdt:./bin/text_generator_main:xnnpack:operator_timer_start
+usdt:./bin/text_generator_main:text_gen:operator_timer_start
 {
     @op_start_ns[tid]        = nsecs;
 
@@ -98,7 +98,7 @@ usdt:./bin/text_generator_main:xnnpack:operator_timer_start
 // ───────────────────────────────────────────────────────────────────────────────
 // USDT Probes: operator 완료 시점에 delta 계산 & 출력
 // ───────────────────────────────────────────────────────────────────────────────
-usdt:./bin/text_generator_main:xnnpack:operator_timer_check
+usdt:./bin/text_generator_main:text_gen:operator_timer_check
 /@op_start_ns[tid]/
 {
     $idx      = arg0;        // operator index

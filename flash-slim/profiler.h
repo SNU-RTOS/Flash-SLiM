@@ -60,11 +60,11 @@
 #ifdef EBPF_TRACE_ENABLED
 #include <sys/sdt.h>
 
-#define TRACE_LOGIC_START(phase_name) DTRACE_PROBE1(tflite_gen, logic_start, phase_name)
-#define TRACE_LOGIC_END(phase_name)   DTRACE_PROBE1(tflite_gen, logic_end, phase_name)
+#define TRACE_LOGIC_START(phase_name) DTRACE_PROBE1(text_gen, phase_start, phase_name)
+#define TRACE_LOGIC_END(phase_name)   DTRACE_PROBE1(text_gen, phase_end, phase_name)
 
 #else
-#define TRACE_LOGIC_START
+#define TRACE_LOGIC_START(phase_name)
 #define TRACE_LOGIC_END(phase_name)
 #endif
 
@@ -166,55 +166,8 @@ namespace custom::profiler
     public:
         explicit ScopeEventHandler(const std::string &name);
         ~ScopeEventHandler();
-    private:
-        std::string current_phase_name_;
+        std::string current_phase_name_="Idle";
     };
-
-    // --------------------------------------------------------------------------
-    // ScopeLogger: composed version with TimerUtility and profiling
-    // --------------------------------------------------------------------------
-    // class ScopeLogger
-    // {
-    // public:
-    //     ScopeLogger(const std::string &name,
-    //                 struct rusage &usage_start,
-    //                 struct rusage &usage_end,
-    //                 bool log_stdout = true,
-    //                 std::vector<custom::profiler::RUsageRecord> *usage_records = nullptr,
-    //                 double *out_duration_ms = nullptr)
-    //         : timer_(name), name_(name),
-    //           usage_start_(usage_start), usage_end_(usage_end), log_stdout_(log_stdout),
-    //           usage_records_(usage_records), out_duration_ms_(out_duration_ms)
-    //     {
-    //         timer_.Start();
-    //         getrusage(RUSAGE_SELF, &usage_start_);
-    //     }
-
-    //     ~ScopeLogger()
-    //     {
-    //         duration_ms_ = timer_.Stop();
-    //         getrusage(RUSAGE_SELF, &usage_end_);
-
-    //         if (log_stdout_)
-    //         {
-    //             custom::profiler::print_rusage(usage_start_, usage_end_, duration_ms_, name_);
-    //         }
-    //         if (usage_records_)
-    //             usage_records_->emplace_back(usage_start_, usage_end_, duration_ms_);
-    //         if (out_duration_ms_)
-    //             *out_duration_ms_ = duration_ms_;
-    //     }
-
-    // private:
-    //     TimerUtility timer_;
-    //     std::string name_;
-    //     double duration_ms_;
-    //     struct rusage &usage_start_;
-    //     struct rusage &usage_end_;
-    //     bool log_stdout_;
-    //     std::vector<RUsageRecord> *usage_records_;
-    //     double *out_duration_ms_;
-    // };
 
     // --------------------------------------------------------------------------
     // ScopeEventPrefetcher: signals phase start/end events but doesn't log time

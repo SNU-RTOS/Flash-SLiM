@@ -78,21 +78,6 @@ namespace
     using ai_edge_torch::examples::LoRA;
     using ai_edge_torch::mem::AlignedAllocator;
 
-    int count_total_nodes(tflite::Interpreter *interpreter)
-    {
-        int total_nodes = 0;
-        if (!interpreter)
-            return 0;
-
-        for (int i = 0; i < interpreter->subgraphs_size(); ++i)
-        {
-            total_nodes += static_cast<int>(interpreter->subgraph(i)->nodes_size());
-            // std::cout << "[INFO] Subgraph " << i
-            //           << " has " << interpreter->subgraph(i)->nodes_size() << " nodes." << std::endl;
-        }
-        return total_nodes;
-    }
-
     struct ProfilerOutput
     {
         std::shared_ptr<tflite::profiling::ProfileSummaryFormatter> formatter;
@@ -299,6 +284,21 @@ namespace
         // Default fallback: assume sequence dimension is at index 1
         std::cout << "[INFO] Using default: sequence dimension at index 1\n";
         return 1;
+    }
+
+    int count_total_nodes(tflite::Interpreter *interpreter)
+    {
+        int total_nodes = 0;
+        if (!interpreter)
+            return 0;
+
+        for (int i = 0; i < interpreter->subgraphs_size(); ++i)
+        {
+            total_nodes += static_cast<int>(interpreter->subgraph(i)->nodes_size());
+            // std::cout << "[INFO] Subgraph " << i
+            //           << " has " << interpreter->subgraph(i)->nodes_size() << " nodes." << std::endl;
+        }
+        return total_nodes;
     }
 
 } // end anonymous namespace

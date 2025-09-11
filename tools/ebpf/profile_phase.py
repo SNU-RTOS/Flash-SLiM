@@ -742,8 +742,8 @@ if __name__ == "__main__":
 
     # --- Attach USDT ---
     usdt = USDT(path=binary_path)
-    usdt.enable_probe_or_bail("tflite_gen:logic_start", "trace_logic_start")
-    usdt.enable_probe_or_bail("tflite_gen:logic_end", "trace_logic_end")
+    usdt.enable_probe_or_bail("text_gen:phase_start", "trace_phase_start")
+    usdt.enable_probe_or_bail("text_gen:phase_end", "trace_phase_end")
 
     b = BPF(text=BPF_TEXT, usdt_contexts=[usdt])
 

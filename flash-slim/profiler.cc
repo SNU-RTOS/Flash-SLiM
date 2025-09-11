@@ -277,42 +277,42 @@ namespace custom::profiler
     }
 
     
-    ScopeEventHandler::ScopeEventHandler(const std::string &name){
-        current_phase_name_= name;
+    ScopeEventHandler::ScopeEventHandler(const std::string &name)
+        : current_phase_name_(name)
+    {
         TRACE_LOGIC_START(current_phase_name_.c_str());
     }
 
     ScopeEventHandler::~ScopeEventHandler()
     {
         TRACE_LOGIC_END(current_phase_name_.c_str());
-
     }
 
 
     /* ScopeEventPrefetcher */
     // Constructor implementation
-    ScopeEventPrefetcher::ScopeEventPrefetcher(PhaseContext &ctx, const std::string &name)
-        : ctx_(ctx), lock_(ctx_.mutex)
-        {
-            ctx_.current_phase_name = name;
-            ctx_.log_requested.store(true);
-            ctx_.phase_status = 0; // Start phase
-            ctx_.signal_cv.notify_all();
-            ctx_.signal_cv.wait(lock_, [&]() { return !ctx_.log_requested.load(); });
+    // ScopeEventPrefetcher::ScopeEventPrefetcher(PhaseContext &ctx, const std::string &name)
+    //     : ctx_(ctx), lock_(ctx_.mutex)
+    //     {
+    //         ctx_.current_phase_name = name;
+    //         ctx_.log_requested.store(true);
+    //         ctx_.phase_status = 0; // Start phase
+    //         ctx_.signal_cv.notify_all();
+    //         ctx_.signal_cv.wait(lock_, [&]() { return !ctx_.log_requested.load(); });
 
-            TRACE_LOGIC_START(ctx_.current_phase_name.c_str());
-        }
+    //         TRACE_LOGIC_START(ctx_.current_phase_name.c_str());
+    //     }
 
-    // Destructor implementation
-    ScopeEventPrefetcher::~ScopeEventPrefetcher()
-        {
-            TRACE_LOGIC_END(ctx_.current_phase_name.c_str());
+    // // Destructor implementation
+    // ScopeEventPrefetcher::~ScopeEventPrefetcher()
+    //     {
+    //         TRACE_LOGIC_END(ctx_.current_phase_name.c_str());
 
-            ctx_.log_requested.store(true);
-            ctx_.phase_status = 1; // End phase
-            ctx_.signal_cv.notify_all();
-            ctx_.signal_cv.wait(lock_, [&]() { return !ctx_.log_requested.load(); });
-        }
+    //         ctx_.log_requested.store(true);
+    //         ctx_.phase_status = 1; // End phase
+    //         ctx_.signal_cv.notify_all();
+    //         ctx_.signal_cv.wait(lock_, [&]() { return !ctx_.log_requested.load(); });
+    //     }
 
 
     /* ScopeEventListener */
