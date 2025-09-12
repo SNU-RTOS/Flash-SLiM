@@ -4,6 +4,8 @@ import atexit, signal, sys, re, os
 
 
 binary_path = "bin/text_generator_main"
+# binary_path = "tools/bin/benchmark_model"  # 추적할 바이너리 경로
+
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # ======== Config ========
@@ -535,20 +537,21 @@ def _generate_record(raw_rec: PhaseRaw) -> PhaseRecord:
     return rec
 
 
-def _print_phase_breakdown(rec: PhaseRecord):
+def _print_phase_breakdown(rec: PhaseRecord,index:int):
     """Prints the breakdown of a specific phase using PhaseRecord attributes.
 
     This simplifies printing by assuming callers pass a PhaseRecord built by
     `_generate_record`.
     """
 
-    print("\n-------------------------------------------")
-    print(f"[INFO] Phase {rec.phase}[{rec.op_index},{rec.obj_index}] Report \n")
+    # print("\n-------------------------------------------")
+    # print(f"[INFO] Phase {rec.phase}[{rec.op_index},{rec.obj_index}] Report \n")
     # print(f" PID                                    : {pid}")
     # print(f" TID                                    : {tid}")
-
-    print("-- Elapsed Time Stats (single thread only, if multi-threaded, it shows the first thread's stats) --")
-    print(f" Wall Clock Time                            : {rec.wall_clock_time_ms} (ms)")
+    print(f"[{index}] Operator {rec.phase}[{rec.op_index},{rec.obj_index}]: Elapsed {rec.wall_clock_time_ms} (ms)")
+    
+    # print("-- Elapsed Time Stats (single thread only, if multi-threaded, it shows the first thread's stats) --")
+    # print(f" Wall Clock Time                            : {rec.wall_clock_time_ms} (ms)")
     # print(f"    - Non IO Handling Time (Estimated)      : {rec.single_thread_non_io_handle_time_ms} (ms)")
     # print(f"    - IO Handling Time                      : {rec.single_thread_io_handle_time_ms} (ms)")
     # print(f"        - Read Syscall                      : {rec.single_thread_read_sys_time_ms} (ms)")
@@ -665,9 +668,9 @@ def print_report():
     if phase_raw_records:
         print("\n\n===== ops Breakdown (per occurrence) =====")
         print(f"Total occurrences recorded: {len(phase_raw_records)}")
-        for raw_record in phase_raw_records:
+        for i, raw_record in enumerate(phase_raw_records):
             record = _generate_record(raw_record)
-            _print_phase_breakdown(record)
+            _print_phase_breakdown(record,i)
 
 
 # ======== Setup / Main ========

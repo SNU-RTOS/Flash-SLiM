@@ -90,7 +90,7 @@ namespace
     // --------------------------------------------------------------------------
     // Utility for applying XNNPACK weight caching
     // --------------------------------------------------------------------------
-    void ApplyXNNPACKWeightCaching(tflite::Interpreter *interpreter)
+    void ApplyXNNPACKWithWeightCaching(tflite::Interpreter *interpreter)
     {
         auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
         std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
@@ -389,9 +389,7 @@ int main(int argc, char *argv[])
 
 
 
-void __run_main(custom::profiler::GenAIMetrics &genai_metrics,
-                std::unique_ptr<tflite::profiling::BufferedProfiler> &op_profiler,
-                const std::vector<ProfilerOutput> &op_profiler_outputs)
+void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<tflite::profiling::BufferedProfiler> &op_profiler, const std::vector<ProfilerOutput> &op_profiler_outputs)
 {
     // Declare local variables
     std::vector<int> prompt_tokens;
@@ -439,10 +437,10 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics,
         custom::profiler::ScopeEventHandler handler("Apply_Delegate");
         if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
         {
-            ApplyXNNPACKWeightCaching(interpreter.get());
+            ApplyXNNPACKWithWeightCaching(interpreter.get());
         }
     }
-
+    
     //* ============ [Phase] 4. Load Tokenizer ============ */
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {

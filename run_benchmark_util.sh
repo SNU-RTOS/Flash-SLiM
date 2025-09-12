@@ -31,7 +31,8 @@ banner "Benchmark Utility Configuration"
 
 # --- Model and Binary Settings ---
 # MODEL_PATH="./models/test/mobileone_s0.tflite"
-MODEL_PATH="./models/SmolLM-135M/smollm_q8_ekv1280.tflite"
+# MODEL_PATH="./models/SmolLM-135M/smollm_q8_ekv1280.tflite"
+MODEL_PATH="./models/Llama3.2-3B/llama3.2_q8_ekv1024.tflite"
 OUTPUT_DIR="./benchmark/benchmark_model_results/tmp"
 BENCHMARK_BIN="./tools/bin/benchmark_model"
 
@@ -107,7 +108,11 @@ run_benchmark() {
         --enable_op_profiling=true
         --use_xnnpack="$USE_XNNPACK"
         --use_gpu="$USE_GPU"
-        --report_peak_memory_footprint=true
+        --min_secs=0
+        --warmup_min_secs=0
+        --warmup_runs=0
+        --num_runs=1
+        --report_peak_memory_footprint=false
         --op_profiling_output_mode=csv
         --op_profiling_output_file="$csv_file"
     )

@@ -322,7 +322,7 @@ run_single_prompt() {
             --top_p "${TOP_P}"
             --repetition_penalty "${REPETITION_PENALTY}"
             --csv_profile_output_path "$CSV_FILE"
-    )
+        )
     else
         local CMD=(
             "${BIN}"
@@ -351,6 +351,7 @@ run_single_prompt() {
     [[ "${CORE_LIST}" != "all" ]] && CMD=(taskset -c "${CORE_LIST}" "${CMD[@]}")
 
     banner "--- C++ Binary Execution START ---"
+    banner "Command: ${CMD[*]}"
     # Execute command with or without memory limit
     if [[ -n "$MEMORY_LIMIT" ]]; then
         # Memory-constrained execution with cgroup
@@ -359,6 +360,9 @@ run_single_prompt() {
         # Normal execution
         sudo "${CMD[@]}"
     fi
+
+
+
     banner "--- C++ Binary Execution END ---"
 
     if [[ "$LOG_ENABLED" == "true" ]]; then
