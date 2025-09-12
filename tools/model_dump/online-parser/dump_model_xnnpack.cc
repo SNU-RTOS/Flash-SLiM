@@ -6,6 +6,7 @@
 #include <iomanip> // for setw, setfill
 #include <fstream> // for ofstream
 #include <functional>
+#include <sstream> // for stringstream
 
 #include "tflite/interpreter_builder.h"
 #include "tflite/kernels/register.h"
@@ -33,13 +34,35 @@ namespace
         auto execution_plan = subgraph->execution_plan();
 
         int cnt_stablehlo_composite = 0;
+        int cnt_atomic_ops = 0;  // 일반 atomic operator 개수
+        int cnt_delegate_nodes = 0;  // DELEGATE 노드 개수
+        int cnt_xnn_ops = 0;  // XNNPACK operator 개수
+
+        // Helper function to count XNNPACK operators from delegate output
+        auto count_xnnpack_ops = [&](void* delegate_data) -> int {
+            std::ostringstream temp_stream;
+            TfLiteXNNPackDelegateInspect(delegate_data, &temp_stream, "");
+            std::string delegate_output = temp_stream.str();
+            
+            int xnn_op_count = 0;
+            std::istringstream iss(delegate_output);
+            std::string line;
+            
+            while (std::getline(iss, line)) {
+                // XNNPACK operator lines typically start with "[XXXX]" format
+                if (line.find("[") != std::string::npos && line.find("]") != std::string::npos) {
+                    xnn_op_count++;
+                }
+            }
+            return xnn_op_count;
+        };
 
         // Recursive function to count nodes including nested STABLEHLO_COMPOSITE subgraphs
         std::function<int(int, int)> count_all_nodes = [&](int sg_idx, int depth) -> int
         {
             tflite::Subgraph *sg = interpreter->subgraph(sg_idx);
             auto plan = sg->execution_plan();
-            int total = static_cast<int>(plan.size());
+            int total = 0;  // 0으로 시작하여 명시적으로 카운트
 
             for (int id : plan)
             {
@@ -52,14 +75,28 @@ namespace
                     // count this composite node
                     cnt_stablehlo_composite++;
 
-                    // try to get the child subgraph index from node user_data
+                    // STABLEHLO_COMPOSITE 노드 자체는 카운트하지 않고, 내부 서브그래프만 카운트
                     if (n->user_data)
                     {
                         auto *op_state = reinterpret_cast<State *>(n->user_data);
                         int child_subgraph_idx = op_state->subgraph_index;
-                        // recurse into child subgraph and add its node count
                         total += count_all_nodes(child_subgraph_idx, depth + 1);
                     }
+                }
+                else if (r->builtin_code == tflite::BuiltinOperator_DELEGATE)
+                {
+                    // DELEGATE 노드는 XNNPACK operators로 치환되므로 
+                    // delegate 내부의 operator 개수를 세고, delegate 노드 자체는 제외
+                    cnt_delegate_nodes++;  // DELEGATE 노드 개수 카운트
+                    int xnn_ops = count_xnnpack_ops(n->user_data);
+                    cnt_xnn_ops += xnn_ops;  // XNNPACK 연산자 개수 누적
+                    total += xnn_ops;  // delegate 내부 operators만 카운트
+                }
+                else
+                {
+                    // 일반 노드들만 카운트 (STABLEHLO_COMPOSITE, DELEGATE 제외)
+                    total++;
+                    cnt_atomic_ops++;
                 }
             }
 
@@ -69,9 +106,12 @@ namespace
         int total_nodes_including_nested = count_all_nodes(subgraph_idx, 0);
 
         out << indent_str << "Subgraph " << subgraph_idx << ": " << subgraph->GetName() << " "
-            << "(Total Nodes: " << execution_plan.size()
-            << ", Including Nested: " << total_nodes_including_nested
+            << "(Total Nodes: " << total_nodes_including_nested
+            << ", Nodes only in execution_plan: " << execution_plan.size()
             << ", StableHLO Composite Nodes: " << cnt_stablehlo_composite
+            << ", DELEGATE Nodes: " << cnt_delegate_nodes
+            << ", Atomic Nodes (Default ops): " << cnt_atomic_ops
+            << ", XNNPACK Nodes: " << cnt_xnn_ops
             << ")" << std::endl;
 
         for (int idx : execution_plan)
@@ -86,12 +126,10 @@ namespace
             // print with zero-padded index, prefixed by indent
             out << indent_str << "  [" << std::setw(4) << std::setfill('0') << idx << "] " << op_name;
 
-            std::string indent_str(indent + 4, ' ');
+            std::string delegate_indent_str(indent + 4, ' ');
             if (reg->builtin_code == tflite::BuiltinOperator_DELEGATE)
             {
-                // Optionally add a newline/indent before delegate output
-                // out << std::endl;
-                TfLiteXNNPackDelegateInspect(node->user_data, output, indent_str.c_str());
+                TfLiteXNNPackDelegateInspect(node->user_data, output, delegate_indent_str.c_str());
             }
             else if (reg->builtin_code == tflite::BuiltinOperator_STABLEHLO_COMPOSITE)
             {
@@ -100,10 +138,10 @@ namespace
                 auto decomposition_subgraph = interpreter->subgraph(subgraph_idx);
                 auto tmp_name = decomposition_subgraph->GetName();
                 out << " (→ Subgraph " << subgraph_idx << " :" << tmp_name << ")" << std::endl;
-                out << indent_str << "-------------------" << std::endl;
+                out << delegate_indent_str << "-------------------" << std::endl;
                 // increase indent by 2 spaces for nested subgraph
                 InspectExecutionPlan(interpreter, subgraph_idx, output, indent + 4);
-                out << indent_str << "-------------------" << std::endl;
+                out << delegate_indent_str << "-------------------" << std::endl;
             }
             else
             {
