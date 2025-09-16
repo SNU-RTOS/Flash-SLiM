@@ -1,0 +1,24 @@
+[INFO] Running in PARSER mode
+[Warn] Long interval detected, interval error is over than 5%
+       Expected 50.000 ms, but got 56.585 ms
+       Gap: 6.585 ms
+[Warn] Long interval detected, interval error is over than 5%
+       Expected 50.000 ms, but got 55.430 ms
+       Gap: 5.430 ms
+
+===== Power Summary (from CSV) =====
+ Samples (valid)   : 1753
+ Duration          : 87.600 (sec) 
+ Total Energy      : 313708.321 (mJ)
+ Avg Power         : 3581.145 (mW)
+ Peak Power        : 6689.751 (mW)
+ CSV               : ./log/0831_power_128_4threads_32_memory_3G_3.log
+
+===== Log Timing Analysis =====
+ Valid samples     :     1753 (total)
+ Target interval   :   50.000 (ms) (-> 20.00 Hz)
+
+-- Timing Intervals --
+ intervals         :     1752 (inter-sample)
+ mean ± std        :   50.000 (ms) ±    0.324 (ms)
+ mean error        :  -0.0000 %

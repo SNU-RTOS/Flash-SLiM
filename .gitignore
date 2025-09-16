@@ -88,5 +88,9 @@ evaluation/*
 !prompt/README.md
 
 
-
 tmp
+utils
+*.zip
+memo.txt
+CLAUDE.md
+dump_llm_nodes

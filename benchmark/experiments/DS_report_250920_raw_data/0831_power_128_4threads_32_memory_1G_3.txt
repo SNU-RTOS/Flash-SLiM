@@ -1,0 +1,36 @@
+[INFO] Running in PARSER mode
+[Warn] Long interval detected, interval error is over than 5%
+       Expected 50.000 ms, but got 55.724 ms
+       Gap: 5.724 ms
+[Warn] Long interval detected, interval error is over than 5%
+       Expected 50.000 ms, but got 53.686 ms
+       Gap: 3.686 ms
+[Warn] Long interval detected, interval error is over than 5%
+       Expected 50.000 ms, but got 52.566 ms
+       Gap: 2.566 ms
+[Warn] Long interval detected, interval error is over than 5%
+       Expected 50.000 ms, but got 53.680 ms
+       Gap: 3.680 ms
+[Warn] Long interval detected, interval error is over than 5%
+       Expected 50.000 ms, but got 54.704 ms
+       Gap: 4.704 ms
+[Warn] Long interval detected, interval error is over than 5%
+       Expected 50.000 ms, but got 53.740 ms
+       Gap: 3.740 ms
+
+===== Power Summary (from CSV) =====
+ Samples (valid)   : 2460
+ Duration          : 122.950 (sec) 
+ Total Energy      : 448733.368 (mJ)
+ Avg Power         : 3649.723 (mW)
+ Peak Power        : 6965.815 (mW)
+ CSV               : ./log/0831_power_128_4threads_32_memory_1G_3.log
+
+===== Log Timing Analysis =====
+ Valid samples     :     2460 (total)
+ Target interval   :   50.000 (ms) (-> 20.00 Hz)
+
+-- Timing Intervals --
+ intervals         :     2459 (inter-sample)
+ mean ± std        :   50.000 (ms) ±    0.301 (ms)
+ mean error        :  -0.0000 %

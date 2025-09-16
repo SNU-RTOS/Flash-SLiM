@@ -60,11 +60,11 @@
 #ifdef EBPF_TRACE_ENABLED
 #include <sys/sdt.h>
 
-#define TRACE_LOGIC_START DTRACE_PROBE(tflite_gen, logic_start)
-#define TRACE_LOGIC_END(phase_name) DTRACE_PROBE1(tflite_gen, logic_end, phase_name)
+#define TRACE_LOGIC_START(phase_name) DTRACE_PROBE1(text_gen, phase_start, phase_name)
+#define TRACE_LOGIC_END(phase_name)   DTRACE_PROBE1(text_gen, phase_end, phase_name)
 
 #else
-#define TRACE_LOGIC_START
+#define TRACE_LOGIC_START(phase_name)
 #define TRACE_LOGIC_END(phase_name)
 #endif
 
@@ -142,20 +142,9 @@ namespace custom::profiler
         std::chrono::high_resolution_clock::time_point start_;
 
     public:
-        explicit TimerUtility(const std::string &name)
-            : name_(name) {}
-
-        void Start()
-        {
-            start_ = std::chrono::high_resolution_clock::now();
-        }
-
-        double Stop() const
-        {
-            auto end_ = std::chrono::high_resolution_clock::now();
-            auto duration_us = std::chrono::duration_cast<std::chrono::nanoseconds>(end_ - start_).count();
-            return static_cast<double>(duration_us) / 1000000.0;
-        }
+        explicit TimerUtility(const std::string &name);
+        void Start();
+        double Stop() const;
     };
 
     // --------------------------------------------------------------------------
@@ -164,167 +153,56 @@ namespace custom::profiler
     class ScopeTimer
     {
     public:
-        explicit ScopeTimer(double &out_ref, const std::string &name = "")
-            : out_ref_(out_ref), timer_(name)
-        {
-            timer_.Start();
-        }
-
-        ~ScopeTimer()
-        {
-            out_ref_ = static_cast<double>(timer_.Stop());
-        }
+        explicit ScopeTimer(double &out_ref, const std::string &name = "");
+        ~ScopeTimer();
 
     private:
         double &out_ref_;
         TimerUtility timer_;
     };
 
-    // --------------------------------------------------------------------------
-    // ScopeLogger: composed version with TimerUtility and profiling
-    // --------------------------------------------------------------------------
-    class ScopeLogger
+    class ScopeEventHandler
     {
     public:
-        ScopeLogger(const std::string &name,
-                    struct rusage &usage_start,
-                    struct rusage &usage_end,
-                    bool log_stdout = true,
-                    std::vector<custom::profiler::RUsageRecord> *usage_records = nullptr,
-                    double *out_duration_ms = nullptr)
-            : timer_(name), name_(name),
-              usage_start_(usage_start), usage_end_(usage_end), log_stdout_(log_stdout),
-              usage_records_(usage_records), out_duration_ms_(out_duration_ms)
-        {
-            timer_.Start();
-            getrusage(RUSAGE_SELF, &usage_start_);
-        }
-
-        ~ScopeLogger()
-        {
-            duration_ms_ = timer_.Stop();
-            getrusage(RUSAGE_SELF, &usage_end_);
-
-            if (log_stdout_)
-            {
-                custom::profiler::print_rusage(usage_start_, usage_end_, duration_ms_, name_);
-            }
-            if (usage_records_)
-                usage_records_->emplace_back(usage_start_, usage_end_, duration_ms_);
-            if (out_duration_ms_)
-                *out_duration_ms_ = duration_ms_;
-        }
-
-    private:
-        TimerUtility timer_;
-        std::string name_;
-        double duration_ms_;
-        struct rusage &usage_start_;
-        struct rusage &usage_end_;
-        bool log_stdout_;
-        std::vector<RUsageRecord> *usage_records_;
-        double *out_duration_ms_;
+        explicit ScopeEventHandler(const std::string &name);
+        ~ScopeEventHandler();
+        std::string current_phase_name_="Idle";
     };
 
     // --------------------------------------------------------------------------
     // ScopeEventPrefetcher: signals phase start/end events but doesn't log time
     // --------------------------------------------------------------------------
-
     struct PhaseContext
     {
         std::mutex mutex;
         std::condition_variable signal_cv;
         std::atomic<bool> log_requested{false};
         std::atomic<bool> generation_done{false};
-
         std::string current_phase_name = "Idle";
         int phase_status = 0; // 0=start, 1=end
     };
+
     class ScopeEventPrefetcher
     {
     public:
-        ScopeEventPrefetcher(PhaseContext &ctx, const std::string &name)
-            : ctx_(ctx), lock_(ctx_.mutex)
-        {
-            ctx_.current_phase_name = name;
-            ctx_.log_requested.store(true);
-            ctx_.phase_status = 0; // Start phase
-            ctx_.signal_cv.notify_all();
-            ctx_.signal_cv.wait(lock_, [&]()
-                                { return !ctx_.log_requested.load(); });
-
-            TRACE_LOGIC_START;
-        }
-
-        ~ScopeEventPrefetcher()
-        {
-            TRACE_LOGIC_END(ctx_.current_phase_name);
-            
-            ctx_.log_requested.store(true);
-            ctx_.phase_status = 1; // End phase
-            ctx_.signal_cv.notify_all();
-            ctx_.signal_cv.wait(lock_, [&]()
-            { return !ctx_.log_requested.load(); });
-        }
+        explicit ScopeEventPrefetcher(PhaseContext &ctx, const std::string &name);
+        ~ScopeEventPrefetcher();
 
     private:
         PhaseContext &ctx_;
         std::unique_lock<std::mutex> lock_;
     };
+
+    
     class ScopeEventListener
     {
     public:
         ScopeEventListener(PhaseContext &ctx,
                            bool log_stdout = true,
-                           std::vector<RUsageRecord> *usage_records = nullptr)
-            : ctx_(ctx),
-              log_stdout_(log_stdout),
-              usage_records_(usage_records),
-              timer_("ScopeEventListener") {}
+                           std::vector<RUsageRecord> *usage_records = nullptr);
 
-        void Run()
-        {
-            std::unique_lock<std::mutex> lock(ctx_.mutex);
-
-            while (!ctx_.generation_done.load())
-            {
-                ctx_.signal_cv.wait(lock, [&]()
-                                    { return ctx_.log_requested.load() || ctx_.generation_done.load(); });
-
-                if (ctx_.generation_done.load())
-                {
-                    std::cout << "[INFO] Monitoring thread exiting...\n";
-                    break;
-                }
-
-                if (ctx_.phase_status == 1)
-                { // End phase
-                    getrusage(RUSAGE_SELF, &usage_end_);
-                    double duration_ms = timer_.Stop();
-
-                    if (log_stdout_)
-                    {
-                        custom::profiler::print_rusage(
-                            usage_start_, usage_end_, duration_ms, ctx_.current_phase_name);
-                    }
-                    if (usage_records_)
-                    {
-                        usage_records_->emplace_back(usage_start_, usage_end_, duration_ms, ctx_.current_phase_name);
-                    }
-                }
-
-                ctx_.log_requested.store(false);
-                ctx_.signal_cv.notify_all();
-
-                if (ctx_.phase_status == 0)
-                { // Start phase
-                    timer_.Start();
-                    getrusage(RUSAGE_SELF, &usage_start_);
-                }
-            }
-            std::cout << "[INFO] Monitoring finished\n";
-        }
-
+        void Run();
+        
     private:
         PhaseContext &ctx_;
         TimerUtility timer_;

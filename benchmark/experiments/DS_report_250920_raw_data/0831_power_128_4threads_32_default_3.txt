@@ -1,0 +1,18 @@
+[INFO] Running in PARSER mode
+
+===== Power Summary (from CSV) =====
+ Samples (valid)   : 453
+ Duration          : 22.600 (sec) 
+ Total Energy      : 93508.797 (mJ)
+ Avg Power         : 4137.548 (mW)
+ Peak Power        : 6864.165 (mW)
+ CSV               : ./log/0831_power_128_4threads_32_default_3.log
+
+===== Log Timing Analysis =====
+ Valid samples     :      453 (total)
+ Target interval   :   50.000 (ms) (-> 20.00 Hz)
+
+-- Timing Intervals --
+ intervals         :      452 (inter-sample)
+ mean ± std        :   50.000 (ms) ±    0.184 (ms)
+ mean error        :   0.0002 %

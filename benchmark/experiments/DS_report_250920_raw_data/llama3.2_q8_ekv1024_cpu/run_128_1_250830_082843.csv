@@ -1,0 +1,490 @@
+Profiling Info for Benchmark Initialization:
+============================== Run Order ==============================
+node type,first,avg_ms,%,cdf%,mem KB,times called,name
+
+============================== Top by Computation Time ==============================
+node type,first,avg_ms,%,cdf%,mem KB,times called,name
+
+Number of nodes executed: 0
+============================== Summary by node type ==============================
+node type,count,avg_ms,avg %,cdf %,mem KB,times called
+
+Timings (microseconds): count=0
+Memory (bytes): count=0
+0 nodes observed
+
+
+Operator-wise Profiling Info for Regular Benchmark Runs:
+Primary graph (name: decode) profile:
+============================== Run Order ==============================
+node type,first,avg_ms,%,cdf%,mem KB,times called,name
+RESHAPE,0.006,0.002375,0.000596039%,0.000596039%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/torch.nn.modules.sparse.Embedding_tok_embedding;]:0
+EMBEDDING_LOOKUP,0.006,0.504375,0.12658%,0.127176%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/torch.nn.modules.sparse.Embedding_tok_embedding;1]:1
+CAST,0.002,0.001375,0.000345075%,0.127521%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;]:3
+LESS,0.003,0.0021875,0.000548983%,0.12807%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;5]:8
+ADD,0.002,0.00265625,0.000666622%,0.128737%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;6]:9
+SELECT,0.001,0.00128125,0.000321547%,0.129058%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;7]:10
+RESHAPE,0,0.00021875,5.48983e-05%,0.129113%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;8]:11
+CAST,0.002,0.0005625,0.000141167%,0.129254%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;9]:12
+GREATER_EQUAL,0.001,0.0010625,0.000266649%,0.129521%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;10]:13
+LESS_EQUAL,0.001,0.0013125,0.00032939%,0.12985%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;11]:14
+LOGICAL_AND,0.001,0.0011875,0.000298019%,0.130148%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;12]:15
+REDUCE_ALL,0.003,0.003875,0.000972484%,0.131121%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;13]:16
+GATHER_ND,0.003,0.0594688,0.0149245%,0.146045%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;14]:17
+RESHAPE,0,0.0003125,7.84262e-05%,0.146124%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;15]:18
+SELECT_V2,0.004,0.0025,0.000627409%,0.146751%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;16]:19
+RESHAPE,0.001,0.00021875,5.48983e-05%,0.146806%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_0/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;19]:54
+PACK,0.003,0.0020625,0.000517613%,0.147324%,0,1,[tfl.pack]:55
+Static Reshape (NC),0.027,0.238469,0.059847%,0.207171%,0,1,Delegate/Static Reshape (NC):0
+Static Reshape (NC),0,0.00025,6.27409e-05%,0.207233%,0,1,Delegate/Static Reshape (NC):1
+Multiply (ND),0.013,0.154781,0.0388445%,0.246078%,0,1,Delegate/Multiply (ND):2
+Cosine (NC),0,0.00075,0.000188223%,0.246266%,0,1,Delegate/Cosine (NC):3
+Sine (NC),0,0.0003125,7.84262e-05%,0.246344%,0,1,Delegate/Sine (NC):4
+Multiply (ND),0.012,0.175969,0.0441618%,0.290506%,0,1,Delegate/Multiply (ND):5
+Sum (ND) Reduce,0.001,0.001375,0.000345075%,0.290851%,0,1,Delegate/Sum (ND) Reduce:6
+Multiply (ND),0,0.00021875,5.48983e-05%,0.290906%,0,1,Delegate/Multiply (ND):7
+Add (ND),0,0,0%,0.290906%,0,1,Delegate/Add (ND):8
+Reciprocal Square Root (NC),0,0.00021875,5.48983e-05%,0.290961%,0,1,Delegate/Reciprocal Square Root (NC):9
+Multiply (ND),0.013,0.153688,0.03857%,0.329531%,0,1,Delegate/Multiply (ND):10
+Multiply (ND),0.007,0.111531,0.0279903%,0.357521%,0,1,Delegate/Multiply (ND):11
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.179,1.11563,0.279981%,0.637503%,0,1,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:12
+Static Reshape (NC),0.021,0.00390841,0.0284452%,0.665948%,0,29,Delegate/Static Reshape (NC):13
+"Slice (ND, X32)",0.015,0.1115,0.0279825%,0.69393%,0,1,Delegate/Slice (ND	 X32):14
+"Slice (ND, X32)",0.014,0.111625,0.0280138%,0.721944%,0,1,Delegate/Slice (ND	 X32):15
+"Slice (ND, X32)",0.032,0.0950625,0.0238572%,0.745801%,0,1,Delegate/Slice (ND	 X32):16
+Static Reshape (NC),0.014,0.0855,0.0214574%,0.767259%,0,1,Delegate/Static Reshape (NC):17
+"Slice (ND, X32)",0.013,0.0915938,0.0229867%,0.790245%,0,1,Delegate/Slice (ND	 X32):18
+"Slice (ND, X32)",0.013,0.0825625,0.0207202%,0.810966%,0,1,Delegate/Slice (ND	 X32):19
+Multiply (ND),0.011,0.00272522,0.019834%,0.8308%,0,29,Delegate/Multiply (ND):20
+Multiply (ND),0.011,0.0879375,0.0220691%,0.852869%,0,1,Delegate/Multiply (ND):21
+Subtract (ND),0.011,0.0727813,0.0182655%,0.871134%,0,1,Delegate/Subtract (ND):22
+Multiply (ND),0.011,0.0161078,0.117231%,0.988366%,0,29,Delegate/Multiply (ND):23
+Multiply (ND),0.011,0.0113093,0.0823082%,1.07067%,0,29,Delegate/Multiply (ND):24
+Add (ND),0.011,0.0528125,0.013254%,1.08393%,0,1,Delegate/Add (ND):25
+"Copy (NC, X32)",0.022,0.120375,0.0302098%,1.11414%,0,1,Delegate/Copy (NC	 X32):26
+Static Reshape (NC),0.01,0.049,0.0122972%,1.12643%,0,1,Delegate/Static Reshape (NC):27
+Static Reshape (NC),0,0.0001875,4.70557e-05%,1.12648%,0,1,Delegate/Static Reshape (NC):28
+"Slice (ND, X32)",0.013,0.03625,0.00909743%,1.13558%,0,1,Delegate/Slice (ND	 X32):29
+"Slice (ND, X32)",0.011,0.0495625,0.0124384%,1.14802%,0,1,Delegate/Slice (ND	 X32):30
+Multiply (ND),0.012,0.0435,0.0109169%,1.15893%,0,1,Delegate/Multiply (ND):31
+Multiply (ND),0.011,0.0154267,0.112275%,1.27121%,0,29,Delegate/Multiply (ND):32
+Subtract (ND),0.01,0.0440938,0.0110659%,1.28228%,0,1,Delegate/Subtract (ND):33
+Multiply (ND),0.011,0.0016153,0.0117561%,1.29403%,0,29,Delegate/Multiply (ND):34
+Multiply (ND),0.011,0.05025,0.0126109%,1.30664%,0,1,Delegate/Multiply (ND):35
+Add (ND),0.01,0.0525938,0.0131991%,1.31984%,0,1,Delegate/Add (ND):36
+"Copy (NC, X32)",0.02,0.118063,0.0296294%,1.34947%,0,1,Delegate/Copy (NC	 X32):37
+Static Reshape (NC),0,0.0001875,4.70557e-05%,1.34952%,0,1,Delegate/Static Reshape (NC):38
+DYNAMIC_UPDATE_SLICE,0.004,0.00428125,0.00107444%,1.35059%,0,1,[StatefulPartitionedCall:0]:56
+DYNAMIC_UPDATE_SLICE,0.002,0.00175,0.000439186%,1.35103%,0,1,[StatefulPartitionedCall:28]:57
+Multiply (ND),0.016,0.01651,0.116016%,1.46705%,0,28,Delegate/Multiply (ND):0
+"Transpose (ND, X32) Transpose",0.001,0.000985491,0.00692503%,1.47397%,0,28,Delegate/Transpose (ND	 X32) Transpose:1
+"Transpose (ND, X32) Transpose",0.948,0.90481,6.35809%,7.83206%,0,28,Delegate/Transpose (ND	 X32) Transpose:2
+Static Reshape (NC),0,0.000220982,0.00155284%,7.83361%,0,28,Delegate/Static Reshape (NC):3
+Static Reshape (NC),0,1.89732e-05,0.000133324%,7.83374%,0,28,Delegate/Static Reshape (NC):4
+"Batch Matrix Multiply (NC, F32) GEMM",1.517,1.48699,10.449%,18.2828%,0,28,Delegate/Batch Matrix Multiply (NC	 F32) GEMM:5
+Static Reshape (NC),0.001,0.000110491,0.000776419%,18.2836%,0,28,Delegate/Static Reshape (NC):6
+Add (ND),0.028,0.0256272,0.180082%,18.4636%,0,28,Delegate/Add (ND):7
+"Softmax (NC, F32)",0.025,0.0233404,0.164013%,18.6277%,0,28,Delegate/Softmax (NC	 F32):8
+"Transpose (ND, X32) Transpose",1.483,1.5863,11.1469%,29.7746%,0,28,Delegate/Transpose (ND	 X32) Transpose:9
+Static Reshape (NC),0,0.000273438,0.00192144%,29.7765%,0,28,Delegate/Static Reshape (NC):10
+Static Reshape (NC),0,4.46429e-06,3.13705e-05%,29.7766%,0,28,Delegate/Static Reshape (NC):11
+"Batch Matrix Multiply (NC, F32) GEMM",1.453,1.50511,10.5764%,40.3529%,0,28,Delegate/Batch Matrix Multiply (NC	 F32) GEMM:12
+"Transpose (ND, X32) Transpose",0.002,0.00169196,0.0118894%,40.3648%,0,28,Delegate/Transpose (ND	 X32) Transpose:14
+Static Reshape (NC),0,2.23214e-05,0.000156852%,40.365%,0,28,Delegate/Static Reshape (NC):15
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",0.692,0.668873,4.70016%,45.0651%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:16
+Add (ND),0.01,0.0157154,0.110432%,45.1756%,0,28,Delegate/Add (ND):17
+Multiply (ND),0.013,0.0123025,0.0864491%,45.262%,0,28,Delegate/Multiply (ND):18
+Sum (ND) Reduce,0.002,0.00157478,0.0110659%,45.2731%,0,28,Delegate/Sum (ND) Reduce:19
+Add (ND),0,2.67857e-05,0.000188223%,45.2733%,0,28,Delegate/Add (ND):21
+Reciprocal Square Root (NC),0,1.78571e-05,0.000125482%,45.2734%,0,28,Delegate/Reciprocal Square Root (NC):22
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.735,1.69737,11.9274%,57.2008%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:25
+Sigmoid (NC),0.024,0.0199888,0.140461%,57.3413%,0,28,Delegate/Sigmoid (NC):26
+Multiply (ND),0.015,0.012202,0.0857433%,57.427%,0,28,Delegate/Multiply (ND):27
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.744,1.69374,11.9019%,69.3289%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:28
+Multiply (ND),0.013,0.0165435,0.116251%,69.4451%,0,28,Delegate/Multiply (ND):29
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.692,1.68894,11.8682%,81.3133%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:30
+Add (ND),0.021,0.0200949,0.141206%,81.4545%,0,28,Delegate/Add (ND):31
+Sum (ND) Reduce,0.002,0.0010971,0.00770929%,81.4622%,0,28,Delegate/Sum (ND) Reduce:33
+Add (ND),0,1.00446e-05,7.05835e-05%,81.4623%,0,28,Delegate/Add (ND):35
+Reciprocal Square Root (NC),0,8.92857e-06,6.27409e-05%,81.4623%,0,28,Delegate/Reciprocal Square Root (NC):36
+Multiply (ND),0.015,0.0143203,0.100629%,81.5629%,0,28,Delegate/Multiply (ND):37
+Multiply (ND),0.007,0.0100647,0.0707247%,81.6337%,0,28,Delegate/Multiply (ND):38
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.073,2.30003,16.1623%,97.796%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:39
+Static Reshape (NC),0.016,0.0159792,0.108275%,97.9042%,0,27,Delegate/Static Reshape (NC):40
+"Slice (ND, X32)",0.013,0.0125475,0.0850218%,97.9893%,0,27,Delegate/Slice (ND	 X32):41
+"Slice (ND, X32)",0.012,0.0121042,0.0820181%,98.0713%,0,27,Delegate/Slice (ND	 X32):42
+"Slice (ND, X32)",0.021,0.0126157,0.0854845%,98.1568%,0,27,Delegate/Slice (ND	 X32):43
+Static Reshape (NC),0.012,0.0123796,0.0838846%,98.2406%,0,27,Delegate/Static Reshape (NC):44
+"Slice (ND, X32)",0.012,0.0119757,0.0811475%,98.3218%,0,27,Delegate/Slice (ND	 X32):45
+"Slice (ND, X32)",0.011,0.0120602,0.08172%,98.4035%,0,27,Delegate/Slice (ND	 X32):46
+Multiply (ND),0.011,0.0123194,0.0834768%,98.487%,0,27,Delegate/Multiply (ND):47
+Multiply (ND),0.011,0.0120671,0.0817671%,98.5688%,0,27,Delegate/Multiply (ND):48
+Subtract (ND),0.011,0.0126285,0.0855708%,98.6543%,0,27,Delegate/Subtract (ND):49
+Multiply (ND),0.011,0.0119375,0.0808887%,98.7352%,0,27,Delegate/Multiply (ND):50
+Multiply (ND),0.011,0.0121944,0.0826298%,98.8178%,0,27,Delegate/Multiply (ND):51
+Add (ND),0.011,0.0125787,0.0852335%,98.9031%,0,27,Delegate/Add (ND):52
+"Copy (NC, X32)",0.022,0.0261794,0.177392%,99.0805%,0,27,Delegate/Copy (NC	 X32):53
+Static Reshape (NC),0.011,0.0132176,0.0895627%,99.17%,0,27,Delegate/Static Reshape (NC):54
+Static Reshape (NC),0,4.05093e-05,0.000274492%,99.1703%,0,27,Delegate/Static Reshape (NC):55
+"Slice (ND, X32)",0.011,0.0124988,0.0846924%,99.255%,0,27,Delegate/Slice (ND	 X32):56
+"Slice (ND, X32)",0.011,0.0123866,0.0839317%,99.3389%,0,27,Delegate/Slice (ND	 X32):57
+Multiply (ND),0.011,0.011206,0.0759322%,99.4149%,0,27,Delegate/Multiply (ND):58
+Multiply (ND),0.01,0.0108148,0.0732814%,99.4881%,0,27,Delegate/Multiply (ND):59
+Subtract (ND),0.01,0.0111991,0.0758851%,99.564%,0,27,Delegate/Subtract (ND):60
+Multiply (ND),0.011,0.0113912,0.077187%,99.6412%,0,27,Delegate/Multiply (ND):61
+Multiply (ND),0.011,0.0122512,0.0830141%,99.7242%,0,27,Delegate/Multiply (ND):62
+Add (ND),0.01,0.0115683,0.0783869%,99.8026%,0,27,Delegate/Add (ND):63
+"Copy (NC, X32)",0.021,0.0233565,0.158264%,99.9609%,0,27,Delegate/Copy (NC	 X32):64
+Static Reshape (NC),0,4.05093e-05,0.000274492%,99.9612%,0,27,Delegate/Static Reshape (NC):65
+DYNAMIC_UPDATE_SLICE,0.005,0.005,0.00125482%,99.9624%,0,1,[StatefulPartitionedCall:1]:110
+DYNAMIC_UPDATE_SLICE,0.002,0.0015,0.000376446%,99.9628%,0,1,[StatefulPartitionedCall:29]:111
+DYNAMIC_UPDATE_SLICE,0.004,0.00478125,0.00119992%,99.964%,0,1,[StatefulPartitionedCall:12]:164
+DYNAMIC_UPDATE_SLICE,0.001,0.00128125,0.000321547%,99.9643%,0,1,[StatefulPartitionedCall:40]:165
+DYNAMIC_UPDATE_SLICE,0.004,0.00465625,0.00116855%,99.9655%,0,1,[StatefulPartitionedCall:21]:218
+DYNAMIC_UPDATE_SLICE,0.002,0.0014375,0.00036076%,99.9658%,0,1,[StatefulPartitionedCall:49]:219
+DYNAMIC_UPDATE_SLICE,0.004,0.004375,0.00109797%,99.9669%,0,1,[StatefulPartitionedCall:22]:272
+DYNAMIC_UPDATE_SLICE,0.001,0.0013125,0.00032939%,99.9673%,0,1,[StatefulPartitionedCall:50]:273
+DYNAMIC_UPDATE_SLICE,0.004,0.00446875,0.00112149%,99.9684%,0,1,[StatefulPartitionedCall:23]:326
+DYNAMIC_UPDATE_SLICE,0.001,0.00115625,0.000290177%,99.9687%,0,1,[StatefulPartitionedCall:51]:327
+DYNAMIC_UPDATE_SLICE,0.005,0.004625,0.00116071%,99.9698%,0,1,[StatefulPartitionedCall:24]:380
+DYNAMIC_UPDATE_SLICE,0.001,0.0011875,0.000298019%,99.9701%,0,1,[StatefulPartitionedCall:52]:381
+DYNAMIC_UPDATE_SLICE,0.005,0.00453125,0.00113718%,99.9713%,0,1,[StatefulPartitionedCall:25]:434
+DYNAMIC_UPDATE_SLICE,0.001,0.00125,0.000313705%,99.9716%,0,1,[StatefulPartitionedCall:53]:435
+DYNAMIC_UPDATE_SLICE,0.004,0.00428125,0.00107444%,99.9727%,0,1,[StatefulPartitionedCall:26]:488
+DYNAMIC_UPDATE_SLICE,0.002,0.00125,0.000313705%,99.973%,0,1,[StatefulPartitionedCall:54]:489
+DYNAMIC_UPDATE_SLICE,0.005,0.00440625,0.00110581%,99.9741%,0,1,[StatefulPartitionedCall:27]:542
+DYNAMIC_UPDATE_SLICE,0.001,0.001375,0.000345075%,99.9744%,0,1,[StatefulPartitionedCall:55]:543
+DYNAMIC_UPDATE_SLICE,0.004,0.0043125,0.00108228%,99.9755%,0,1,[StatefulPartitionedCall:2]:596
+DYNAMIC_UPDATE_SLICE,0.001,0.00134375,0.000337232%,99.9759%,0,1,[StatefulPartitionedCall:30]:597
+DYNAMIC_UPDATE_SLICE,0.004,0.0045,0.00112934%,99.977%,0,1,[StatefulPartitionedCall:3]:650
+DYNAMIC_UPDATE_SLICE,0.002,0.001125,0.000282334%,99.9773%,0,1,[StatefulPartitionedCall:31]:651
+DYNAMIC_UPDATE_SLICE,0.005,0.00446875,0.00112149%,99.9784%,0,1,[StatefulPartitionedCall:4]:704
+DYNAMIC_UPDATE_SLICE,0.001,0.00109375,0.000274492%,99.9787%,0,1,[StatefulPartitionedCall:32]:705
+DYNAMIC_UPDATE_SLICE,0.005,0.0045,0.00112934%,99.9798%,0,1,[StatefulPartitionedCall:5]:758
+DYNAMIC_UPDATE_SLICE,0.001,0.00115625,0.000290177%,99.9801%,0,1,[StatefulPartitionedCall:33]:759
+DYNAMIC_UPDATE_SLICE,0.004,0.00434375,0.00109012%,99.9812%,0,1,[StatefulPartitionedCall:6]:812
+DYNAMIC_UPDATE_SLICE,0.001,0.0010625,0.000266649%,99.9814%,0,1,[StatefulPartitionedCall:34]:813
+DYNAMIC_UPDATE_SLICE,0.005,0.00459375,0.00115286%,99.9826%,0,1,[StatefulPartitionedCall:7]:866
+DYNAMIC_UPDATE_SLICE,0.001,0.00115625,0.000290177%,99.9829%,0,1,[StatefulPartitionedCall:35]:867
+DYNAMIC_UPDATE_SLICE,0.005,0.0043125,0.00108228%,99.9839%,0,1,[StatefulPartitionedCall:8]:920
+DYNAMIC_UPDATE_SLICE,0.001,0.00121875,0.000305862%,99.9843%,0,1,[StatefulPartitionedCall:36]:921
+DYNAMIC_UPDATE_SLICE,0.005,0.00459375,0.00115286%,99.9854%,0,1,[StatefulPartitionedCall:9]:974
+DYNAMIC_UPDATE_SLICE,0.001,0.0013125,0.00032939%,99.9857%,0,1,[StatefulPartitionedCall:37]:975
+DYNAMIC_UPDATE_SLICE,0.005,0.004375,0.00109797%,99.9868%,0,1,[StatefulPartitionedCall:10]:1028
+DYNAMIC_UPDATE_SLICE,0.001,0.00121875,0.000305862%,99.9871%,0,1,[StatefulPartitionedCall:38]:1029
+DYNAMIC_UPDATE_SLICE,0.004,0.0045,0.00112934%,99.9883%,0,1,[StatefulPartitionedCall:11]:1082
+DYNAMIC_UPDATE_SLICE,0.002,0.00115625,0.000290177%,99.9886%,0,1,[StatefulPartitionedCall:39]:1083
+DYNAMIC_UPDATE_SLICE,0.004,0.0045,0.00112934%,99.9897%,0,1,[StatefulPartitionedCall:13]:1136
+DYNAMIC_UPDATE_SLICE,0,0.00121875,0.000305862%,99.99%,0,1,[StatefulPartitionedCall:41]:1137
+DYNAMIC_UPDATE_SLICE,0.005,0.00459375,0.00115286%,99.9912%,0,1,[StatefulPartitionedCall:14]:1190
+DYNAMIC_UPDATE_SLICE,0.001,0.00121875,0.000305862%,99.9915%,0,1,[StatefulPartitionedCall:42]:1191
+DYNAMIC_UPDATE_SLICE,0.005,0.004375,0.00109797%,99.9926%,0,1,[StatefulPartitionedCall:15]:1244
+DYNAMIC_UPDATE_SLICE,0.002,0.001375,0.000345075%,99.9929%,0,1,[StatefulPartitionedCall:43]:1245
+DYNAMIC_UPDATE_SLICE,0.005,0.00465625,0.00116855%,99.9941%,0,1,[StatefulPartitionedCall:16]:1298
+DYNAMIC_UPDATE_SLICE,0.001,0.0011875,0.000298019%,99.9944%,0,1,[StatefulPartitionedCall:44]:1299
+DYNAMIC_UPDATE_SLICE,0.006,0.00428125,0.00107444%,99.9954%,0,1,[StatefulPartitionedCall:17]:1352
+DYNAMIC_UPDATE_SLICE,0.001,0.00115625,0.000290177%,99.9957%,0,1,[StatefulPartitionedCall:45]:1353
+DYNAMIC_UPDATE_SLICE,0.005,0.004375,0.00109797%,99.9968%,0,1,[StatefulPartitionedCall:18]:1406
+DYNAMIC_UPDATE_SLICE,0.001,0.00121875,0.000305862%,99.9971%,0,1,[StatefulPartitionedCall:46]:1407
+DYNAMIC_UPDATE_SLICE,0.004,0.0044375,0.00111365%,99.9983%,0,1,[StatefulPartitionedCall:19]:1460
+DYNAMIC_UPDATE_SLICE,0.002,0.0014375,0.00036076%,99.9986%,0,1,[StatefulPartitionedCall:47]:1461
+DYNAMIC_UPDATE_SLICE,0.004,0.00434375,0.00109012%,99.9997%,0,1,[StatefulPartitionedCall:20]:1514
+DYNAMIC_UPDATE_SLICE,0.001,0.0011875,0.000298019%,100%,0,1,[StatefulPartitionedCall:48]:1515
+
+============================== Top by Computation Time ==============================
+node type,first,avg_ms,%,cdf%,mem KB,times called,name
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.073,2.30003,16.1623%,16.1623%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:39
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.735,1.69737,11.9274%,28.0897%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:25
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.744,1.69374,11.9019%,39.9916%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:28
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.692,1.68894,11.8682%,51.8597%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:30
+"Transpose (ND, X32) Transpose",1.483,1.5863,11.1469%,63.0067%,0,28,Delegate/Transpose (ND	 X32) Transpose:9
+"Batch Matrix Multiply (NC, F32) GEMM",1.453,1.50511,10.5764%,73.583%,0,28,Delegate/Batch Matrix Multiply (NC	 F32) GEMM:12
+"Batch Matrix Multiply (NC, F32) GEMM",1.517,1.48699,10.449%,84.0321%,0,28,Delegate/Batch Matrix Multiply (NC	 F32) GEMM:5
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",1.179,1.11563,0.279981%,84.312%,0,1,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:12
+"Transpose (ND, X32) Transpose",0.948,0.90481,6.35809%,90.6701%,0,28,Delegate/Transpose (ND	 X32) Transpose:2
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",0.692,0.668873,4.70016%,95.3703%,0,28,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:16
+
+Number of nodes executed: 172
+============================== Summary by node type ==============================
+node type,count,avg_ms,avg %,cdf %,mem KB,times called
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",6,226.483,56.8494%,56.8494%,0,141
+"Batch Matrix Multiply (NC, F32) GEMM",2,83.778,21.0291%,77.8785%,0,56
+"Transpose (ND, X32) Transpose",4,69.824,17.5265%,95.405%,0,112
+Multiply (ND),27,6.969,1.74929%,97.1543%,0,537
+"Slice (ND, X32)",14,2.898,0.727426%,97.8817%,0,196
+Add (ND),10,2.474,0.620998%,98.5027%,0,197
+Static Reshape (NC),18,1.624,0.40764%,98.9104%,0,338
+"Copy (NC, X32)",4,1.574,0.395089%,99.3054%,0,56
+Subtract (ND),4,0.758,0.190265%,99.4957%,0,56
+"Softmax (NC, F32)",1,0.653,0.163909%,99.6596%,0,28
+Sigmoid (NC),1,0.559,0.140314%,99.7999%,0,28
+EMBEDDING_LOOKUP,1,0.504,0.126509%,99.9264%,0,1
+DYNAMIC_UPDATE_SLICE,56,0.141,0.0353924%,99.9618%,0,56
+Sum (ND) Reduce,3,0.075,0.0188257%,99.9807%,0,57
+GATHER_ND,1,0.059,0.0148096%,99.9955%,0,1
+REDUCE_ALL,1,0.003,0.000753029%,99.9962%,0,1
+SELECT_V2,1,0.002,0.000502019%,99.9967%,0,1
+RESHAPE,4,0.002,0.000502019%,99.9972%,0,4
+PACK,1,0.002,0.000502019%,99.9977%,0,1
+LESS,1,0.002,0.000502019%,99.9982%,0,1
+ADD,1,0.002,0.000502019%,99.9987%,0,1
+SELECT,1,0.001,0.00025101%,99.999%,0,1
+LOGICAL_AND,1,0.001,0.00025101%,99.9992%,0,1
+LESS_EQUAL,1,0.001,0.00025101%,99.9995%,0,1
+GREATER_EQUAL,1,0.001,0.00025101%,99.9997%,0,1
+CAST,2,0.001,0.00025101%,100%,0,2
+Sine (NC),1,0,0%,100%,0,1
+Reciprocal Square Root (NC),3,0,0%,100%,0,57
+Cosine (NC),1,0,0%,100%,0,1
+
+Timings (microseconds): count=32 first=786125 curr=382918 min=378751 max=786125 avg=398464 std=70143
+Memory (bytes): count=0
+172 nodes observed
+
+Subgraph (index: 1, name: prefill_128) profile:
+============================== Run Order ==============================
+node type,first,avg_ms,%,cdf%,mem KB,times called,name
+RESHAPE,0.002,0.002,4.11563e-05%,4.11563e-05%,0,1,[arith.constant222]:0
+EMBEDDING_LOOKUP,108.024,108.024,2.22294%,2.22298%,0,1,[arith.constant223]:1
+CAST,0.231,0.231,0.00475355%,2.22773%,0,1,[arith.constant225]:3
+LESS,0.034,0.034,0.000699657%,2.22843%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;1]:8
+ADD,0.007,0.007,0.000144047%,2.22857%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;2]:9
+SELECT,0.003,0.003,6.17345e-05%,2.22864%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;3]:10
+RESHAPE,0.001,0.001,2.05782e-05%,2.22866%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;4]:11
+CAST,0.001,0.001,2.05782e-05%,2.22868%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;5]:12
+GREATER_EQUAL,0.005,0.005,0.000102891%,2.22878%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;6]:13
+LESS_EQUAL,0.005,0.005,0.000102891%,2.22888%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;7]:14
+LOGICAL_AND,0.002,0.002,4.11563e-05%,2.22892%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;8]:15
+REDUCE_ALL,0.028,0.028,0.000576188%,2.2295%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;9]:16
+GATHER_ND,2.191,2.191,0.0450867%,2.27459%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;10]:17
+RESHAPE,0.002,0.002,4.11563e-05%,2.27463%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;12]:19
+SLICE,0.004,0.004,8.23126e-05%,2.27471%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_0/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;18]:57
+RESHAPE,0.001,0.001,2.05782e-05%,2.27473%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_0/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;19]:58
+PACK,0.004,0.004,8.23126e-05%,2.27481%,0,1,[tfl.pack]:59
+Static Reshape (NC),0.27,0.27,0.0055561%,2.28037%,0,1,Delegate/Static Reshape (NC):0
+Static Reshape (NC),0.001,0.001,2.05782e-05%,2.28039%,0,1,Delegate/Static Reshape (NC):1
+Multiply (ND),0.028,0.028,0.000576188%,2.28097%,0,1,Delegate/Multiply (ND):2
+Cosine (NC),0.045,0.045,0.000926017%,2.28189%,0,1,Delegate/Cosine (NC):3
+Sine (NC),0.022,0.022,0.00045272%,2.28234%,0,1,Delegate/Sine (NC):4
+Static Reshape (NC),0.047,0.047,0.000967174%,2.28331%,0,1,Delegate/Static Reshape (NC):5
+Multiply (ND),0.321,0.321,0.00660559%,2.28992%,0,1,Delegate/Multiply (ND):6
+Sum (ND) Reduce,0.085,0.085,0.00174914%,2.29167%,0,1,Delegate/Sum (ND) Reduce:7
+Multiply (ND),0.02,0.02,0.000411563%,2.29208%,0,1,Delegate/Multiply (ND):8
+Add (ND),0.018,0.018,0.000370407%,2.29245%,0,1,Delegate/Add (ND):9
+Static Reshape (NC),0,0.000392857,0.00022636%,2.29267%,0,28,Delegate/Static Reshape (NC):10
+Reciprocal Square Root (NC),0.001,0.001,2.05782e-05%,2.2927%,0,1,Delegate/Reciprocal Square Root (NC):11
+Multiply (ND),0.184,0.184,0.00378638%,2.29648%,0,1,Delegate/Multiply (ND):12
+Multiply (ND),0.237,0.237,0.00487702%,2.30136%,0,1,Delegate/Multiply (ND):13
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",23.865,23.865,0.491098%,2.79246%,0,1,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:14
+Static Reshape (NC),0.355,0.0127857,0.00736698%,2.79982%,0,28,Delegate/Static Reshape (NC):15
+"Slice (ND, X32)",0.289,0.289,0.00594709%,2.80577%,0,1,Delegate/Slice (ND	 X32):16
+"Slice (ND, X32)",0.158,0.158,0.00325135%,2.80902%,0,1,Delegate/Slice (ND	 X32):17
+"Slice (ND, X32)",0.125,0.125,0.00257227%,2.81159%,0,1,Delegate/Slice (ND	 X32):18
+Static Reshape (NC),0,0,0%,2.81159%,0,1,Delegate/Static Reshape (NC):19
+"Transpose (ND, X32) Transpose",0.479,0.479,0.00985694%,2.82145%,0,1,Delegate/Transpose (ND	 X32) Transpose:20
+"Slice (ND, X32)",0.177,0.177,0.00364233%,2.82509%,0,1,Delegate/Slice (ND	 X32):21
+"Slice (ND, X32)",0.144,0.144,0.00296326%,2.82806%,0,1,Delegate/Slice (ND	 X32):22
+Multiply (ND),0.152,0.152,0.00312788%,2.83118%,0,1,Delegate/Multiply (ND):23
+Multiply (ND),0.133,0.118179,0.0680931%,2.89928%,0,28,Delegate/Multiply (ND):24
+Subtract (ND),0.087,0.087,0.0017903%,2.90107%,0,1,Delegate/Subtract (ND):25
+Multiply (ND),0.057,0.057,0.00117296%,2.90224%,0,1,Delegate/Multiply (ND):26
+Multiply (ND),0.119,0.119,0.0024488%,2.90469%,0,1,Delegate/Multiply (ND):27
+Add (ND),0.067,0.067,0.00137874%,2.90607%,0,1,Delegate/Add (ND):28
+"Copy (NC, X32)",0.419,0.419,0.00862225%,2.91469%,0,1,Delegate/Copy (NC	 X32):29
+"Transpose (ND, X32) Transpose",0.297,0.297,0.00611171%,2.9208%,0,1,Delegate/Transpose (ND	 X32) Transpose:30
+"Transpose (ND, X32) Transpose",0.153,0.153,0.00314846%,2.92395%,0,1,Delegate/Transpose (ND	 X32) Transpose:31
+"Slice (ND, X32)",0.051,0.051,0.00104949%,2.925%,0,1,Delegate/Slice (ND	 X32):32
+"Slice (ND, X32)",0.029,0.029,0.000596767%,2.9256%,0,1,Delegate/Slice (ND	 X32):33
+Multiply (ND),0.04,0.04,0.000823126%,2.92642%,0,1,Delegate/Multiply (ND):34
+Multiply (ND),0.041,0.0224286,0.0129231%,2.93934%,0,28,Delegate/Multiply (ND):35
+Subtract (ND),0.024,0.024,0.000493876%,2.93984%,0,1,Delegate/Subtract (ND):36
+Multiply (ND),0.028,0.028,0.000576188%,2.94041%,0,1,Delegate/Multiply (ND):37
+Multiply (ND),0.033,0.033,0.000679079%,2.94109%,0,1,Delegate/Multiply (ND):38
+Add (ND),0.022,0.022,0.00045272%,2.94155%,0,1,Delegate/Add (ND):39
+"Copy (NC, X32)",0.055,0.055,0.0011318%,2.94268%,0,1,Delegate/Copy (NC	 X32):40
+"Transpose (ND, X32) Transpose",0.05,0.05,0.00102891%,2.94371%,0,1,Delegate/Transpose (ND	 X32) Transpose:41
+SELECT_V2,0.259,0.259,0.00532974%,2.94904%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;13]:20
+DYNAMIC_UPDATE_SLICE,0.101,0.101,0.00207839%,2.95111%,0,1,[StatefulPartitionedCall:0]:60
+DYNAMIC_UPDATE_SLICE,0.225,0.225,0.00463009%,2.95574%,0,1,[StatefulPartitionedCall:28]:61
+Multiply (ND),0.227,0.212556,0.118098%,3.07384%,0,27,Delegate/Multiply (ND):0
+"Transpose (ND, X32) Transpose",0.27,0.260926,0.144973%,3.21882%,0,27,Delegate/Transpose (ND	 X32) Transpose:1
+"Transpose (ND, X32) Transpose",1.158,1.12981,0.627737%,3.84655%,0,27,Delegate/Transpose (ND	 X32) Transpose:2
+Static Reshape (NC),0,0.000222222,0.000123469%,3.84668%,0,27,Delegate/Static Reshape (NC):3
+Static Reshape (NC),0,0.000111111,6.17345e-05%,3.84674%,0,27,Delegate/Static Reshape (NC):4
+"Batch Matrix Multiply (NC, F32) GEMM",11.126,10.2871,5.7156%,9.56234%,0,27,Delegate/Batch Matrix Multiply (NC	 F32) GEMM:5
+Static Reshape (NC),0,0.000222222,0.000123469%,9.56246%,0,27,Delegate/Static Reshape (NC):6
+Add (ND),2.132,2.08644,1.15925%,10.7217%,0,27,Delegate/Add (ND):7
+"Softmax (NC, F32)",2.036,2.03237,1.12921%,11.8509%,0,27,Delegate/Softmax (NC	 F32):8
+"Transpose (ND, X32) Transpose",1.788,1.80285,1.00168%,12.8526%,0,27,Delegate/Transpose (ND	 X32) Transpose:9
+Static Reshape (NC),0,0,0%,12.8526%,0,27,Delegate/Static Reshape (NC):11
+"Batch Matrix Multiply (NC, F32) GEMM",10.196,10.2244,5.68077%,18.5334%,0,27,Delegate/Batch Matrix Multiply (NC	 F32) GEMM:12
+Static Reshape (NC),0,0.000444444,0.000246938%,18.5336%,0,27,Delegate/Static Reshape (NC):13
+"Transpose (ND, X32) Transpose",0.234,0.242667,0.134828%,18.6684%,0,27,Delegate/Transpose (ND	 X32) Transpose:14
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",10.483,10.5971,5.88788%,24.5563%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:16
+Add (ND),0.309,0.283296,0.157402%,24.7137%,0,27,Delegate/Add (ND):17
+Multiply (ND),0.102,0.132222,0.073464%,24.7872%,0,27,Delegate/Multiply (ND):18
+Sum (ND) Reduce,0.111,0.0932593,0.0518158%,24.839%,0,27,Delegate/Sum (ND) Reduce:19
+Multiply (ND),0.043,0.0249259,0.0138491%,24.8529%,0,27,Delegate/Multiply (ND):20
+Add (ND),0.016,0.0148889,0.00827242%,24.8611%,0,27,Delegate/Add (ND):21
+Static Reshape (NC),0,0.000333333,0.000185203%,24.8613%,0,27,Delegate/Static Reshape (NC):22
+Reciprocal Square Root (NC),0,0.000518519,0.000288094%,24.8616%,0,27,Delegate/Reciprocal Square Root (NC):23
+Multiply (ND),0.128,0.152222,0.0845762%,24.9462%,0,27,Delegate/Multiply (ND):25
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",25.417,25.5038,14.1702%,39.1164%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:26
+Sigmoid (NC),0.582,0.612222,0.340157%,39.4565%,0,27,Delegate/Sigmoid (NC):27
+Multiply (ND),0.93,0.929,0.516162%,39.9727%,0,27,Delegate/Multiply (ND):28
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",25.815,25.7027,14.2807%,54.2534%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:29
+Multiply (ND),0.906,0.957704,0.53211%,54.7855%,0,27,Delegate/Multiply (ND):30
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",66.335,60.2684,33.4857%,88.2712%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:31
+Add (ND),0.258,0.263519,0.146414%,88.4176%,0,27,Delegate/Add (ND):32
+Multiply (ND),0.129,0.124519,0.0691838%,88.4868%,0,27,Delegate/Multiply (ND):33
+Sum (ND) Reduce,0.061,0.0882222,0.0490172%,88.5358%,0,27,Delegate/Sum (ND) Reduce:34
+Add (ND),0.021,0.0175926,0.00977463%,88.5456%,0,27,Delegate/Add (ND):36
+Static Reshape (NC),0,0,0%,88.5456%,0,27,Delegate/Static Reshape (NC):37
+Reciprocal Square Root (NC),0,0.00062963,0.000349829%,88.546%,0,27,Delegate/Reciprocal Square Root (NC):38
+Multiply (ND),0.247,0.202185,0.112336%,88.6583%,0,27,Delegate/Multiply (ND):39
+Multiply (ND),0.061,0.0868148,0.0482352%,88.7065%,0,27,Delegate/Multiply (ND):40
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",16.563,16.6781,9.26653%,97.9731%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:41
+Static Reshape (NC),0.281,0.288741,0.160427%,98.1335%,0,27,Delegate/Static Reshape (NC):42
+"Slice (ND, X32)",0.358,0.288667,0.160386%,98.2939%,0,27,Delegate/Slice (ND	 X32):43
+"Slice (ND, X32)",0.126,0.15563,0.0864694%,98.3803%,0,27,Delegate/Slice (ND	 X32):44
+"Slice (ND, X32)",0.125,0.133115,0.071221%,98.4516%,0,26,Delegate/Slice (ND	 X32):45
+Static Reshape (NC),0,0.000153846,8.23126e-05%,98.4516%,0,26,Delegate/Static Reshape (NC):46
+"Transpose (ND, X32) Transpose",0.448,0.448846,0.240147%,98.6918%,0,26,Delegate/Transpose (ND	 X32) Transpose:47
+"Slice (ND, X32)",0.204,0.212231,0.11355%,98.8053%,0,26,Delegate/Slice (ND	 X32):48
+"Slice (ND, X32)",0.184,0.174346,0.0932808%,98.8986%,0,26,Delegate/Slice (ND	 X32):49
+Multiply (ND),0.173,0.173269,0.0927046%,98.9913%,0,26,Delegate/Multiply (ND):50
+Multiply (ND),0.173,0.122889,0.0682783%,99.0596%,0,27,Delegate/Multiply (ND):51
+Subtract (ND),0.072,0.0578462,0.0309496%,99.0906%,0,26,Delegate/Subtract (ND):52
+Multiply (ND),0.073,0.0638846,0.0341803%,99.1247%,0,26,Delegate/Multiply (ND):53
+Multiply (ND),0.121,0.133192,0.0712622%,99.196%,0,26,Delegate/Multiply (ND):54
+Add (ND),0.055,0.0656154,0.0351063%,99.2311%,0,26,Delegate/Add (ND):55
+"Copy (NC, X32)",0.428,0.436038,0.233295%,99.4644%,0,26,Delegate/Copy (NC	 X32):56
+"Transpose (ND, X32) Transpose",0.263,0.255769,0.136845%,99.6012%,0,26,Delegate/Transpose (ND	 X32) Transpose:57
+"Transpose (ND, X32) Transpose",0.144,0.144962,0.0775591%,99.6788%,0,26,Delegate/Transpose (ND	 X32) Transpose:58
+"Slice (ND, X32)",0.061,0.0582692,0.0311759%,99.71%,0,26,Delegate/Slice (ND	 X32):59
+"Slice (ND, X32)",0.028,0.0311923,0.0166889%,99.7267%,0,26,Delegate/Slice (ND	 X32):60
+Multiply (ND),0.026,0.0454231,0.0243028%,99.751%,0,26,Delegate/Multiply (ND):61
+Multiply (ND),0.045,0.0398077,0.0212984%,99.7723%,0,26,Delegate/Multiply (ND):62
+Subtract (ND),0.022,0.0243462,0.013026%,99.7853%,0,26,Delegate/Subtract (ND):63
+Multiply (ND),0.026,0.0251923,0.0134787%,99.7988%,0,26,Delegate/Multiply (ND):64
+Multiply (ND),0.033,0.0313846,0.0167918%,99.8156%,0,26,Delegate/Multiply (ND):65
+Add (ND),0.017,0.0230385,0.0123263%,99.8279%,0,26,Delegate/Add (ND):66
+"Copy (NC, X32)",0.089,0.0814615,0.0435845%,99.8715%,0,26,Delegate/Copy (NC	 X32):67
+"Transpose (ND, X32) Transpose",0.128,0.0558077,0.0298589%,99.9013%,0,26,Delegate/Transpose (ND	 X32) Transpose:68
+DYNAMIC_UPDATE_SLICE,0.067,0.067,0.00137874%,99.9027%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_1/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func/torch.nn.modules.linear.Linear_output_projection;]:117
+DYNAMIC_UPDATE_SLICE,0.081,0.081,0.00166683%,99.9044%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_1/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func/torch.nn.modules.linear.Linear_output_projection;1]:118
+DYNAMIC_UPDATE_SLICE,0.07,0.07,0.00144047%,99.9058%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_2/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;]:174
+DYNAMIC_UPDATE_SLICE,0.084,0.084,0.00172857%,99.9075%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_2/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;1]:175
+DYNAMIC_UPDATE_SLICE,0.07,0.07,0.00144047%,99.909%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_3/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;3]:231
+DYNAMIC_UPDATE_SLICE,0.081,0.081,0.00166683%,99.9106%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_3/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;4]:232
+DYNAMIC_UPDATE_SLICE,0.069,0.069,0.00141989%,99.9121%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_4/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;6]:288
+DYNAMIC_UPDATE_SLICE,0.109,0.109,0.00224302%,99.9143%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_4/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff/torch.nn.modules.linear.Linear_w1;]:289
+DYNAMIC_UPDATE_SLICE,0.066,0.066,0.00135816%,99.9157%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_5/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff;1]:345
+DYNAMIC_UPDATE_SLICE,0.081,0.081,0.00166683%,99.9173%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_5/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff/torch.nn.modules.linear.Linear_w3;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_5/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff/torch.nn.modules.linear.Linear_w1;]:346
+DYNAMIC_UPDATE_SLICE,0.068,0.068,0.00139931%,99.9187%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_6/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff/torch.nn.modules.linear.Linear_w2;]:402
+DYNAMIC_UPDATE_SLICE,0.08,0.08,0.00164625%,99.9204%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_6;1]:403
+DYNAMIC_UPDATE_SLICE,0.07,0.07,0.00144047%,99.9218%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_8/ai_edge_torch.generative.layers.normalization.RMSNorm_pre_atten_norm;1]:459
+DYNAMIC_UPDATE_SLICE,0.085,0.085,0.00174914%,99.9236%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_8/ai_edge_torch.generative.layers.normalization.RMSNorm_pre_atten_norm;2]:460
+DYNAMIC_UPDATE_SLICE,0.068,0.068,0.00139931%,99.925%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_9/ai_edge_torch.generative.layers.normalization.RMSNorm_pre_atten_norm;4]:516
+DYNAMIC_UPDATE_SLICE,0.08,0.08,0.00164625%,99.9266%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_9/ai_edge_torch.generative.layers.normalization.RMSNorm_pre_atten_norm;5]:517
+DYNAMIC_UPDATE_SLICE,0.071,0.071,0.00146105%,99.9281%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_10/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_10/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func/torch.nn.modules.linear.Linear_qkv_projection;]:573
+DYNAMIC_UPDATE_SLICE,0.083,0.083,0.00170799%,99.9298%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_10/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_10/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func/torch.nn.modules.linear.Linear_qkv_projection;1]:574
+DYNAMIC_UPDATE_SLICE,0.065,0.065,0.00133758%,99.9311%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_11/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;1]:630
+DYNAMIC_UPDATE_SLICE,0.083,0.083,0.00170799%,99.9328%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_11/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;2]:631
+DYNAMIC_UPDATE_SLICE,0.071,0.071,0.00146105%,99.9343%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_12/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;4]:687
+DYNAMIC_UPDATE_SLICE,0.082,0.082,0.00168741%,99.936%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_12/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;5]:688
+DYNAMIC_UPDATE_SLICE,0.068,0.068,0.00139931%,99.9374%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_13/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_0/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;1]:744
+DYNAMIC_UPDATE_SLICE,0.083,0.083,0.00170799%,99.9391%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_13/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;6]:745
+DYNAMIC_UPDATE_SLICE,0.07,0.07,0.00144047%,99.9405%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_14/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_0/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;3]:801
+DYNAMIC_UPDATE_SLICE,0.081,0.081,0.00166683%,99.9422%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_14/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;7]:802
+DYNAMIC_UPDATE_SLICE,0.065,0.065,0.00133758%,99.9435%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_15/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;9]:858
+DYNAMIC_UPDATE_SLICE,0.081,0.081,0.00166683%,99.9452%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_15/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;10]:859
+DYNAMIC_UPDATE_SLICE,0.064,0.064,0.001317%,99.9465%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_16/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;12]:915
+DYNAMIC_UPDATE_SLICE,0.08,0.08,0.00164625%,99.9482%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_16/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_0/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_0/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;]:916
+DYNAMIC_UPDATE_SLICE,0.07,0.07,0.00144047%,99.9496%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_17/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;13]:972
+DYNAMIC_UPDATE_SLICE,0.08,0.08,0.00164625%,99.9512%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_17/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_0/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_0/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;2]:973
+DYNAMIC_UPDATE_SLICE,0.069,0.069,0.00141989%,99.9527%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_18/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;14]:1029
+DYNAMIC_UPDATE_SLICE,0.087,0.087,0.0017903%,99.9545%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_18/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func;15]:1030
+DYNAMIC_UPDATE_SLICE,0.067,0.067,0.00137874%,99.9558%,0,1,[StatefulPartitionedCall:11]:1086
+DYNAMIC_UPDATE_SLICE,0.076,0.076,0.00156394%,99.9574%,0,1,[StatefulPartitionedCall:39]:1087
+DYNAMIC_UPDATE_SLICE,0.068,0.068,0.00139931%,99.9588%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_20/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func/torch.nn.modules.linear.Linear_output_projection;]:1143
+DYNAMIC_UPDATE_SLICE,0.083,0.083,0.00170799%,99.9605%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_20/ai_edge_torch.generative.layers.attention.CausalSelfAttention_atten_func/torch.nn.modules.linear.Linear_output_projection;1]:1144
+DYNAMIC_UPDATE_SLICE,0.063,0.063,0.00129642%,99.9618%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_21/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;]:1200
+DYNAMIC_UPDATE_SLICE,0.082,0.082,0.00168741%,99.9635%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_21/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;1]:1201
+DYNAMIC_UPDATE_SLICE,0.07,0.07,0.00144047%,99.9649%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_22/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;3]:1257
+DYNAMIC_UPDATE_SLICE,0.085,0.085,0.00174914%,99.9667%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_22/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;4]:1258
+DYNAMIC_UPDATE_SLICE,0.068,0.068,0.00139931%,99.9681%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_23/ai_edge_torch.generative.layers.normalization.RMSNorm_post_atten_norm;6]:1314
+DYNAMIC_UPDATE_SLICE,0.083,0.083,0.00170799%,99.9698%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_23/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff/torch.nn.modules.linear.Linear_w1;]:1315
+DYNAMIC_UPDATE_SLICE,0.069,0.069,0.00141989%,99.9712%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_24/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff;1]:1371
+DYNAMIC_UPDATE_SLICE,0.085,0.085,0.00174914%,99.973%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_24/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff/torch.nn.modules.linear.Linear_w3;;ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_24/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff/torch.nn.modules.linear.Linear_w1;]:1372
+DYNAMIC_UPDATE_SLICE,0.069,0.069,0.00141989%,99.9744%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_25/ai_edge_torch.generative.layers.feed_forward.GatedFeedForward_ff/torch.nn.modules.linear.Linear_w2;]:1428
+DYNAMIC_UPDATE_SLICE,0.083,0.083,0.00170799%,99.9761%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_25;1]:1429
+DYNAMIC_UPDATE_SLICE,0.102,0.102,0.00209897%,99.9782%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_27/ai_edge_torch.generative.layers.normalization.RMSNorm_pre_atten_norm;1]:1485
+DYNAMIC_UPDATE_SLICE,0.089,0.089,0.00183146%,99.98%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.attention.TransformerBlock_27/ai_edge_torch.generative.layers.normalization.RMSNorm_pre_atten_norm;2]:1486
+DYNAMIC_UPDATE_SLICE,0.068,0.068,0.00139931%,99.9814%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.normalization.RMSNorm_final_norm;4]:1542
+DYNAMIC_UPDATE_SLICE,0.08,0.08,0.00164625%,99.9831%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module/ai_edge_torch.generative.layers.normalization.RMSNorm_final_norm;5]:1543
+"Transpose (ND, X32) Transpose",0.193,0.193,0.00397158%,99.987%,0,1,Delegate/Transpose (ND	 X32) Transpose:45
+"Slice (ND, X32)",0.085,0.085,0.00174914%,99.9888%,0,1,Delegate/Slice (ND	 X32):46
+"Slice (ND, X32)",0.037,0.037,0.000761392%,99.9895%,0,1,Delegate/Slice (ND	 X32):47
+Multiply (ND),0.082,0.082,0.00168741%,99.9912%,0,1,Delegate/Multiply (ND):48
+Multiply (ND),0.048,0.048,0.000987752%,99.9922%,0,1,Delegate/Multiply (ND):49
+Subtract (ND),0.02,0.02,0.000411563%,99.9926%,0,1,Delegate/Subtract (ND):50
+Multiply (ND),0.028,0.028,0.000576188%,99.9932%,0,1,Delegate/Multiply (ND):52
+Add (ND),0.016,0.016,0.000329251%,99.9935%,0,1,Delegate/Add (ND):53
+"Copy (NC, X32)",0.105,0.105,0.00216071%,99.9957%,0,1,Delegate/Copy (NC	 X32):54
+"Transpose (ND, X32) Transpose",0.052,0.052,0.00107006%,99.9968%,0,1,Delegate/Transpose (ND	 X32) Transpose:55
+DYNAMIC_UPDATE_SLICE,0.072,0.072,0.00148163%,99.9983%,0,1,[Unknown]:1586
+DYNAMIC_UPDATE_SLICE,0.085,0.085,0.00174914%,100%,0,1,[Unknown]:1587
+
+============================== Top by Computation Time ==============================
+node type,first,avg_ms,%,cdf%,mem KB,times called,name
+EMBEDDING_LOOKUP,108.024,108.024,2.22294%,2.22294%,0,1,[arith.constant223]:1
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",66.335,60.2684,33.4857%,35.7087%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:31
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",25.815,25.7027,14.2807%,49.9894%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:29
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",25.417,25.5038,14.1702%,64.1595%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:26
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",23.865,23.865,0.491098%,64.6506%,0,1,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:14
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",16.563,16.6781,9.26653%,73.9172%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:41
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",10.483,10.5971,5.88788%,79.805%,0,27,Delegate/Fully Connected (NC	 QD8	 F32	 QC8W) GEMM:16
+"Batch Matrix Multiply (NC, F32) GEMM",11.126,10.2871,5.7156%,85.5207%,0,27,Delegate/Batch Matrix Multiply (NC	 F32) GEMM:5
+"Batch Matrix Multiply (NC, F32) GEMM",10.196,10.2244,5.68077%,91.2014%,0,27,Delegate/Batch Matrix Multiply (NC	 F32) GEMM:12
+GATHER_ND,2.191,2.191,0.0450867%,91.2465%,0,1,[ai_edge_torch.generative.utilities.converter.ExportableModule/ai_edge_torch.generative.examples.llama.llama.Llama_module;10]:17
+
+Number of nodes executed: 191
+============================== Summary by node type ==============================
+node type,count,avg_ms,avg %,cdf %,mem KB,times called
+"Fully Connected (NC, QD8, F32, QC8W) GEMM",6,3770.12,77.5821%,77.5821%,0,136
+"Batch Matrix Multiply (NC, F32) GEMM",2,553.809,11.3964%,88.9785%,0,54
+"Transpose (ND, X32) Transpose",14,117.543,2.41882%,91.3973%,0,218
+EMBEDDING_LOOKUP,1,108.024,2.22294%,93.6202%,0,1
+Multiply (ND),33,98.146,2.01966%,95.6399%,0,522
+Add (ND),11,74.403,1.53108%,97.171%,0,191
+"Softmax (NC, F32)",1,54.874,1.12921%,98.3002%,0,27
+"Slice (ND, X32)",16,28.929,0.595306%,98.8955%,0,193
+Sigmoid (NC),1,16.53,0.340157%,99.2356%,0,27
+"Copy (NC, X32)",5,14.034,0.288794%,99.5244%,0,55
+Static Reshape (NC),15,8.523,0.175388%,99.6998%,0,302
+Sum (ND) Reduce,3,4.985,0.102582%,99.8024%,0,55
+DYNAMIC_UPDATE_SLICE,56,4.455,0.0916757%,99.8941%,0,56
+Subtract (ND),5,2.268,0.0466713%,99.9407%,0,55
+GATHER_ND,1,2.191,0.0450867%,99.9858%,0,1
+SELECT_V2,1,0.259,0.00532974%,99.9912%,0,1
+CAST,2,0.232,0.00477413%,99.9959%,0,2
+Cosine (NC),1,0.045,0.000926017%,99.9969%,0,1
+LESS,1,0.034,0.000699657%,99.9976%,0,1
+Reciprocal Square Root (NC),3,0.032,0.000658501%,99.9982%,0,55
+REDUCE_ALL,1,0.028,0.000576188%,99.9988%,0,1
+Sine (NC),1,0.022,0.000452719%,99.9993%,0,1
+ADD,1,0.007,0.000144047%,99.9994%,0,1
+RESHAPE,4,0.006,0.000123469%,99.9995%,0,4
+LESS_EQUAL,1,0.005,0.000102891%,99.9996%,0,1
+GREATER_EQUAL,1,0.005,0.000102891%,99.9997%,0,1
+SLICE,1,0.004,8.23126e-05%,99.9998%,0,1
+PACK,1,0.004,8.23126e-05%,99.9999%,0,1
+SELECT,1,0.003,6.17345e-05%,99.9999%,0,1
+LOGICAL_AND,1,0.002,4.11563e-05%,100%,0,1
+
+Subgraph (index: 1, name: prefill_128) Timings (microseconds): count=1 curr=4859521
+Memory (bytes): count=0
+191 nodes observed
+
+

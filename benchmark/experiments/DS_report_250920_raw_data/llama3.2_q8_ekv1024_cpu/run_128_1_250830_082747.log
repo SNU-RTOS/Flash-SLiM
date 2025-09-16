@@ -1,0 +1,109 @@
+
+════════════════════════════════════════════════════════════════════════════════
+ ≫ LLM inference start (CPU)
+════════════════════════════════════════════════════════════════════════════════
+✔ Model                           : llama3.2_q8_ekv1024
+✔ Tokens requested                : 128
+✔ Cores                           : 2,4-7
+✔ Threads                         : 4
+✔ Max tokens                      : 32
+✔ Temperature                     : 0.7
+✔ Top-k                           : 40
+✔ Top-p                           : 0.9
+✔ Repetition penalty              : 1.0
+✔ Enable rep. penalty             : False
+✔ Target Processor                : CPU
+✔ Log file                        : benchmark/llm_infer_results/llama3.2_q8_ekv1024_cpu/run_128_1_250830_082747.log
+✔ Op-level profiling csv results  : benchmark/llm_infer_results/llama3.2_q8_ekv1024_cpu/run_128_1_250830_082747.csv
+
+════════════════════════════════════════════════════════════════════════════════
+ ≫ Clearing System Caches
+════════════════════════════════════════════════════════════════════════════════
+✔ Dropping OS Page Caches...
+✔ Waiting for caches to clear...
+✔ Dropping swapped memory...
+✔ Clearing CPU Caches...
+▶ /var/rootdirs/home/rtos-rubik-5/workspace/Flash-SLiM/tools/bin/clear_cache_arm
+Flushing CPU cache on ARM...
+Cache flushed!
+✔ Finished clearing caches.
+
+════════════════════════════════════════════════════════════════════════════════
+ ≫ --- C++ Binary Execution START ---
+════════════════════════════════════════════════════════════════════════════════
+
+[INFO] Text Generation App on LiteRT Interpreter
+
+[INFO] eBPF tracing is enabled. USDT probes will be used.
+
+[INFO] Preparing Required Components
+[INFO] Process is running on cores: 2 4 5 6 7 
+[INFO] Core used for logging and monitoring: 2
+[INFO] Cores used for text generation: 4 5 6 7 
+[INFO] Start Generating Text
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+normalizer.cc(52) LOG(INFO) precompiled_charsmap is empty. use identity normalization.
+[INFO] Stop token ID: 128009 for token: <end_of_turn>
+[INFO] KV Cache tensor dims: [1, 1024, 8, 128]
+[INFO] Detected pattern [batch, seq_len, num_heads, head_dim]
+[INFO] KV Cache Max Size: 1024 (from dimension index 1)
+[INFO] Prefill Phase started
+[INFO] Prefill Phase completed
+[INFO] Tokens in Prompt: 114
+[INFO] Tokens to Generate: 32
+[INFO] Limits of Tokens to Generate: 1024
+
+Prompt:
+Tranquil village nestled in green valley, clear river meandering through wildflower meadows.
+Ancient stone bridge, weathered by time, stands as sentinel, arches reflecting in calm water below.
+Generations have passed, lovers whispers heard, childrens songs sung, travelers footsteps echoed.
+River gurgles beneath, water cool and clear, revealing mossy stones on riverbed.
+Dragonflies dance in sunlit air, iridescent wings like jewels flashing.
+Sweet scent of honeysuckle, gentle buzz of bees collecting nectar from clover fields.
+
+Output Text:
+
+ Tranquil village, peaceful haven, serene beauty all around. (Note: This is a poetic and descriptive passage, not a factual or scientific description of a specific
+
+
+[INFO] Decoded 32 tokens.
+
+[INFO] Decoding Phase completed
+[INFO] Monitoring thread exiting...
+[INFO] Monitoring finished
+---------------------------------------------------
+Generation Metrics
+
+[METRICS] Total Number of Generated Tokens : 32 tokens
+
+[METRICS] Prefill Time                     : 4857.15106 ms
+[METRICS] First Decoding Time              : 799.82625 ms
+[METRICS] Time to First Token              : 5656.97731 ms
+
+[METRICS] [NOTE] First Decoding Time is excluded from Total Decoding Time 
+
+[METRICS] Total Inference Time             : 11981.15608 ms
+[METRICS] Total Sampling Time              : 314.39503 ms
+[METRICS] Total Detokenization Time        : 0.40816 ms
+[METRICS] Total Decoding Time              : 12295.95927 ms
+
+[METRICS] Average Inference Time per Token        : 386.48891 ms (2.58740 tokens/s)
+[METRICS] Average Sampling Time per Token         : 10.14178 ms (98.60207 tokens/s)
+[METRICS] Average Detokenization Time per Token   : 0.01317 ms (75950.23545 tokens/s)
+[METRICS] Average Decoding Time per Token         : 396.64385 ms (2.52115 tokens/s)
+
+[INFO] Generating Ops-level profiling (log)
+
+[INFO] Text Generation App completed successfully.
+---------------------------------------------------
+
+
+════════════════════════════════════════════════════════════════════════════════
+ ≫ --- C++ Binary Execution END ---
+════════════════════════════════════════════════════════════════════════════════
+[INFO] Post-processing CSV file...
+Processed benchmark/llm_infer_results/llama3.2_q8_ekv1024_cpu/run_128_1_250830_082747.csv and saved to benchmark/llm_infer_results/llama3.2_q8_ekv1024_cpu/run_128_1_250830_082747.csv.fixed.csv
+[INFO] CSV file overwritten with fixed version: benchmark/llm_infer_results/llama3.2_q8_ekv1024_cpu/run_128_1_250830_082747.csv
+
+✔ Log saved to benchmark/llm_infer_results/llama3.2_q8_ekv1024_cpu/run_128_1_250830_082747.log
+✔ Op-level profiling csv results saved to benchmark/llm_infer_results/llama3.2_q8_ekv1024_cpu/run_128_1_250830_082747.csv

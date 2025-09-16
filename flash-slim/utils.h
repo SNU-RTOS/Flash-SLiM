@@ -60,6 +60,7 @@ namespace custom::util
     void logJsonEvent(const std::string &event_type, const std::string &component,
                       const std::map<std::string, std::string> &attributes,
                       int stage_idx = -1, std::ostream &out = std::cout);
+                      
     const char *TfLiteTypeToString(TfLiteType type);
     void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name);
     void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter);

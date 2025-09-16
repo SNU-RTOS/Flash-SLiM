@@ -1,0 +1,2418 @@
+Tracing USDT probes... Ctrl-C to stop.
+
+===== Phase Report (start–stop) =====
+
+-- Summary by Phase --
+Phase                       Count     Avg(ms)     Min(ms)     Max(ms)     Total(ms)
+<unknown>                      23    3786.743    3368.408    3888.432     87095.098
+Apply_Delegate                  1      80.723      80.723      80.723        80.723
+Build_Interpreter               1     349.083     349.083     349.083       349.083
+Build_KV_Cache                  1      56.857      56.857      56.857        56.857
+Decode_0                        1    1146.207    1146.207    1146.207      1146.207
+Decode_1                        1    3695.770    3695.770    3695.770      3695.770
+Decode_2                        1    3646.130    3646.130    3646.130      3646.130
+Decode_3                        1    3663.649    3663.649    3663.649      3663.649
+Decode_4                        1    3574.763    3574.763    3574.763      3574.763
+Decode_5                        1    3570.258    3570.258    3570.258      3570.258
+Decode_6                        1    3557.718    3557.718    3557.718      3557.718
+Decode_7                        1    3657.134    3657.134    3657.134      3657.134
+Decode_8                        1    3656.880    3656.880    3656.880      3656.880
+Load_Model                      1      17.059      17.059      17.059        17.059
+Load_Tokenizer                  1      83.644      83.644      83.644        83.644
+Prefill                         1    2895.946    2895.946    2895.946      2895.946
+Prepare_Input_Tensor            1       0.016       0.016       0.016         0.016
+Prepare_Prompt                  1       0.121       0.121       0.121         0.121
+Prepare_Signature_Runners       1       4.786       4.786       4.786         4.786
+
+-- Top-7 Phases by Avg(ms) --
+Phase                               Avg(ms)     Ratio(%)       Cum(%)
+<unknown>                          3786.743         10.1         10.1
+Decode_1                           3695.770          9.9         20.0
+Decode_3                           3663.649          9.8         29.8
+Decode_7                           3657.134          9.8         39.5
+Decode_8                           3656.880          9.8         49.3
+Decode_2                           3646.130          9.7         59.0
+Decode_4                           3574.763          9.5         68.6
+=====================================
+
+
+
+===== Phase Breakdown (per occurrence) =====
+10773471 326445 11093
+
+-------------------------------------------
+[INFO] Phase Load_Model Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 17 (ms)
+    - Non I/O Handling Time (Estimated)     : 7 (ms)
+    - I/O Handling Time                     : 10 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 10 (ms)
+            - Major PageFault               : 10 (ms)
+            - Minor PageFault (NOPAGE)      : 0 (ms)
+            - Minor PageFault (RETRY)       : 0 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 2
+ Minor Fault Count (NOPAGE)                 : 66
+ Minor Fault Count (RETRY)                  : 3
+ ReadAhead Count                            : 0
+
+ Total Major PageFault Time                 : 10 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 0 (ms)
+ Total Minor PageFault Time (RETRY)         : 0 (ms)
+ Avg Major Fault Handling Time              : 5386 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 4 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 3 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 0
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 0 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 2304 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 20123 (us)
+ Total Block I/O Count                      : 19
+ Total Block I/O Read Bytes                 : 2158592 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 1059 (us)
+ Avg Block I/O Read Bytes                   : 113610 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 0.14
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+235954148 29706870 979874
+
+-------------------------------------------
+[INFO] Phase Build_Interpreter Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 349 (ms)
+    - Non I/O Handling Time (Estimated)     : 85 (ms)
+    - I/O Handling Time                     : 264 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 264 (ms)
+            - Major PageFault               : 235 (ms)
+            - Minor PageFault (NOPAGE)      : 29 (ms)
+            - Minor PageFault (RETRY)       : 0 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 115
+ Minor Fault Count (NOPAGE)                 : 8540
+ Minor Fault Count (RETRY)                  : 145
+ ReadAhead Count                            : 15
+
+ Total Major PageFault Time                 : 235 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 29 (ms)
+ Total Minor PageFault Time (RETRY)         : 0 (ms)
+ Avg Major Fault Handling Time              : 2051 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 3 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 6 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 77
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 143928 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 358129 (us)
+ Total Block I/O Count                      : 229
+ Total Block I/O Read Bytes                 : 67911680 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 1563 (us)
+ Avg Block I/O Read Bytes                   : 296557 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 0.41
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+7415708 6232783 25416
+
+-------------------------------------------
+[INFO] Phase Apply_Delegate Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 80 (ms)
+    - Non I/O Handling Time (Estimated)     : 67 (ms)
+    - I/O Handling Time                     : 13 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 13 (ms)
+            - Major PageFault               : 7 (ms)
+            - Minor PageFault (NOPAGE)      : 6 (ms)
+            - Minor PageFault (RETRY)       : 0 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 5
+ Minor Fault Count (NOPAGE)                 : 6494
+ Minor Fault Count (RETRY)                  : 5
+ ReadAhead Count                            : 0
+
+ Total Major PageFault Time                 : 7 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 6 (ms)
+ Total Minor PageFault Time (RETRY)         : 0 (ms)
+ Avg Major Fault Handling Time              : 1483 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 0 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 5 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 0
+ Write Syscall Count                        : 3
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 0 (us)
+ Avg Write Syscall Handling Time            : 9 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 71783 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 12780 (us)
+ Total Block I/O Count                      : 14
+ Total Block I/O Read Bytes                 : 4227072 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 912 (us)
+ Avg Block I/O Read Bytes                   : 301933 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 0.90
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+0 5547265 0
+
+-------------------------------------------
+[INFO] Phase Load_Tokenizer Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 83 (ms)
+    - Non I/O Handling Time (Estimated)     : 78 (ms)
+    - I/O Handling Time                     : 5 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 5 (ms)
+            - Major PageFault               : 0 (ms)
+            - Minor PageFault (NOPAGE)      : 5 (ms)
+            - Minor PageFault (RETRY)       : 0 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 0
+ Minor Fault Count (NOPAGE)                 : 7059
+ Minor Fault Count (RETRY)                  : 0
+ ReadAhead Count                            : 5
+
+ Total Major PageFault Time                 : 0 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 5 (ms)
+ Total Minor PageFault Time (RETRY)         : 0 (ms)
+ Avg Major Fault Handling Time              : 0 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 0 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 0 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 277
+ Write Syscall Count                        : 9
+
+ Total Read Syscall Time                    : 1 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 2 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 81006 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 4594 (us)
+ Total Block I/O Count                      : 7
+ Total Block I/O Read Bytes                 : 2265088 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 656 (us)
+ Avg Block I/O Read Bytes                   : 323584 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 0.98
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+0 28339579 0
+
+-------------------------------------------
+[INFO] Phase Build_KV_Cache Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 56 (ms)
+    - Non I/O Handling Time (Estimated)     : 28 (ms)
+    - I/O Handling Time                     : 28 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 28 (ms)
+            - Major PageFault               : 0 (ms)
+            - Minor PageFault (NOPAGE)      : 28 (ms)
+            - Minor PageFault (RETRY)       : 0 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 0
+ Minor Fault Count (NOPAGE)                 : 28791
+ Minor Fault Count (RETRY)                  : 0
+ ReadAhead Count                            : 0
+
+ Total Major PageFault Time                 : 0 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 28 (ms)
+ Total Minor PageFault Time (RETRY)         : 0 (ms)
+ Avg Major Fault Handling Time              : 0 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 0 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 0 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 0
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 0 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 53500 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 0 (us)
+ Total Block I/O Count                      : 0
+ Total Block I/O Read Bytes                 : 0 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 0 (us)
+ Avg Block I/O Read Bytes                   : 0 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 0.96
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+0 0 0
+
+-------------------------------------------
+[INFO] Phase Prepare_Prompt Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 0 (ms)
+    - Non I/O Handling Time (Estimated)     : 0 (ms)
+    - I/O Handling Time                     : 0 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 0 (ms)
+            - Major PageFault               : 0 (ms)
+            - Minor PageFault (NOPAGE)      : 0 (ms)
+            - Minor PageFault (RETRY)       : 0 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 0
+ Minor Fault Count (NOPAGE)                 : 0
+ Minor Fault Count (RETRY)                  : 0
+ ReadAhead Count                            : 0
+
+ Total Major PageFault Time                 : 0 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 0 (ms)
+ Total Minor PageFault Time (RETRY)         : 0 (ms)
+ Avg Major Fault Handling Time              : 0 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 0 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 0 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 0
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 0 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 18 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 0 (us)
+ Total Block I/O Count                      : 0
+ Total Block I/O Read Bytes                 : 0 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 0 (us)
+ Avg Block I/O Read Bytes                   : 0 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 0.00
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+0 947641 0
+
+-------------------------------------------
+[INFO] Phase Prepare_Signature_Runners Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 4 (ms)
+    - Non I/O Handling Time (Estimated)     : 4 (ms)
+    - I/O Handling Time                     : 0 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 0 (ms)
+            - Major PageFault               : 0 (ms)
+            - Minor PageFault (NOPAGE)      : 0 (ms)
+            - Minor PageFault (RETRY)       : 0 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 0
+ Minor Fault Count (NOPAGE)                 : 741
+ Minor Fault Count (RETRY)                  : 0
+ ReadAhead Count                            : 0
+
+ Total Major PageFault Time                 : 0 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 0 (ms)
+ Total Minor PageFault Time (RETRY)         : 0 (ms)
+ Avg Major Fault Handling Time              : 0 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 1 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 0 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 0
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 0 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 4470 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 0 (us)
+ Total Block I/O Count                      : 0
+ Total Block I/O Read Bytes                 : 0 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 0 (us)
+ Avg Block I/O Read Bytes                   : 0 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.12
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+0 0 13489
+
+-------------------------------------------
+[INFO] Phase Prepare_Input_Tensor Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 0 (ms)
+    - Non I/O Handling Time (Estimated)     : 0 (ms)
+    - I/O Handling Time                     : 0 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 0 (ms)
+            - Major PageFault               : 0 (ms)
+            - Minor PageFault (NOPAGE)      : 0 (ms)
+            - Minor PageFault (RETRY)       : 0 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 0
+ Minor Fault Count (NOPAGE)                 : 0
+ Minor Fault Count (RETRY)                  : 1
+ ReadAhead Count                            : 0
+
+ Total Major PageFault Time                 : 0 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 0 (ms)
+ Total Minor PageFault Time (RETRY)         : 0 (ms)
+ Avg Major Fault Handling Time              : 0 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 0 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 13 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 0
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 0 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 8 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 0 (us)
+ Total Block I/O Count                      : 0
+ Total Block I/O Read Bytes                 : 0 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 0 (us)
+ Avg Block I/O Read Bytes                   : 0 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 0.00
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+337897297 87437542 1727416126
+
+-------------------------------------------
+[INFO] Phase Prefill Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 2895 (ms)
+    - Non I/O Handling Time (Estimated)     : 744 (ms)
+    - I/O Handling Time                     : 2151 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 2151 (ms)
+            - Major PageFault               : 337 (ms)
+            - Minor PageFault (NOPAGE)      : 87 (ms)
+            - Minor PageFault (RETRY)       : 1727 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 492
+ Minor Fault Count (NOPAGE)                 : 45312
+ Minor Fault Count (RETRY)                  : 7704
+ ReadAhead Count                            : 2887
+
+ Total Major PageFault Time                 : 1626 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 311 (ms)
+ Total Minor PageFault Time (RETRY)         : 6738 (ms)
+ Avg Major Fault Handling Time              : 3305 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 6 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 874 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 0
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 0 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 2993372 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 23859607 (us)
+ Total Block I/O Count                      : 5678
+ Total Block I/O Read Bytes                 : 2750439424 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 4202 (us)
+ Avg Block I/O Read Bytes                   : 484402 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.03
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+13026996 179634408 563984608
+
+-------------------------------------------
+[INFO] Phase Decode_0 Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 1146 (ms)
+    - Non I/O Handling Time (Estimated)     : 391 (ms)
+    - I/O Handling Time                     : 755 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 755 (ms)
+            - Major PageFault               : 13 (ms)
+            - Minor PageFault (NOPAGE)      : 179 (ms)
+            - Minor PageFault (RETRY)       : 563 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 23
+ Minor Fault Count (NOPAGE)                 : 7835
+ Minor Fault Count (RETRY)                  : 1004
+ ReadAhead Count                            : 466
+
+ Total Major PageFault Time                 : 104 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 246 (ms)
+ Total Minor PageFault Time (RETRY)         : 2494 (ms)
+ Avg Major Fault Handling Time              : 4529 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 31 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 2484 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 2771573 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 5808745 (us)
+ Total Block I/O Count                      : 952
+ Total Block I/O Read Bytes                 : 481431552 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 6101 (us)
+ Avg Block I/O Read Bytes                   : 505705 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 2.42
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+696557926 112837691 2447842894
+
+-------------------------------------------
+[INFO] Phase Decode_1 Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3695 (ms)
+    - Non I/O Handling Time (Estimated)     : 440 (ms)
+    - I/O Handling Time                     : 3255 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3255 (ms)
+            - Major PageFault               : 696 (ms)
+            - Minor PageFault (NOPAGE)      : 112 (ms)
+            - Minor PageFault (RETRY)       : 2447 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 610
+ Minor Fault Count (NOPAGE)                 : 52771
+ Minor Fault Count (RETRY)                  : 8334
+ ReadAhead Count                            : 3312
+
+ Total Major PageFault Time                 : 3137 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 388 (ms)
+ Total Minor PageFault Time (RETRY)         : 9356 (ms)
+ Avg Major Fault Handling Time              : 5143 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 7 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1122 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6595061 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 25946568 (us)
+ Total Block I/O Count                      : 6848
+ Total Block I/O Read Bytes                 : 3225182208 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3788 (us)
+ Avg Block I/O Read Bytes                   : 470967 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.78
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+723767771 99924150 2401967724
+
+-------------------------------------------
+[INFO] Phase Decode_2 Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3646 (ms)
+    - Non I/O Handling Time (Estimated)     : 423 (ms)
+    - I/O Handling Time                     : 3223 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3223 (ms)
+            - Major PageFault               : 723 (ms)
+            - Minor PageFault (NOPAGE)      : 99 (ms)
+            - Minor PageFault (RETRY)       : 2401 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 595
+ Minor Fault Count (NOPAGE)                 : 52606
+ Minor Fault Count (RETRY)                  : 8312
+ ReadAhead Count                            : 3298
+
+ Total Major PageFault Time                 : 2596 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 336 (ms)
+ Total Minor PageFault Time (RETRY)         : 9440 (ms)
+ Avg Major Fault Handling Time              : 4363 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 6 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1135 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 5537422 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 27028690 (us)
+ Total Block I/O Count                      : 6768
+ Total Block I/O Read Bytes                 : 3221291008 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3993 (us)
+ Avg Block I/O Read Bytes                   : 475959 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.52
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+870770899 109752133 2237078817
+
+-------------------------------------------
+[INFO] Phase Decode_3 Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3663 (ms)
+    - Non I/O Handling Time (Estimated)     : 447 (ms)
+    - I/O Handling Time                     : 3216 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3216 (ms)
+            - Major PageFault               : 870 (ms)
+            - Minor PageFault (NOPAGE)      : 109 (ms)
+            - Minor PageFault (RETRY)       : 2237 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 608
+ Minor Fault Count (NOPAGE)                 : 52665
+ Minor Fault Count (RETRY)                  : 8386
+ ReadAhead Count                            : 3301
+
+ Total Major PageFault Time                 : 2880 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 369 (ms)
+ Total Minor PageFault Time (RETRY)         : 9372 (ms)
+ Avg Major Fault Handling Time              : 4738 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 7 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1117 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6177921 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 26762991 (us)
+ Total Block I/O Count                      : 6899
+ Total Block I/O Read Bytes                 : 3222503424 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3879 (us)
+ Avg Block I/O Read Bytes                   : 467097 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.69
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+666395472 108102720 2366501651
+
+-------------------------------------------
+[INFO] Phase Decode_4 Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3574 (ms)
+    - Non I/O Handling Time (Estimated)     : 434 (ms)
+    - I/O Handling Time                     : 3140 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3140 (ms)
+            - Major PageFault               : 666 (ms)
+            - Minor PageFault (NOPAGE)      : 108 (ms)
+            - Minor PageFault (RETRY)       : 2366 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 598
+ Minor Fault Count (NOPAGE)                 : 52548
+ Minor Fault Count (RETRY)                  : 8375
+ ReadAhead Count                            : 3297
+
+ Total Major PageFault Time                 : 2689 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 371 (ms)
+ Total Minor PageFault Time (RETRY)         : 9351 (ms)
+ Avg Major Fault Handling Time              : 4497 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 7 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1116 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6446976 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 25759582 (us)
+ Total Block I/O Count                      : 6862
+ Total Block I/O Read Bytes                 : 3220725760 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3753 (us)
+ Avg Block I/O Read Bytes                   : 469356 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.80
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+656445259 117440065 2367413990
+
+-------------------------------------------
+[INFO] Phase Decode_5 Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3570 (ms)
+    - Non I/O Handling Time (Estimated)     : 430 (ms)
+    - I/O Handling Time                     : 3140 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3140 (ms)
+            - Major PageFault               : 656 (ms)
+            - Minor PageFault (NOPAGE)      : 117 (ms)
+            - Minor PageFault (RETRY)       : 2367 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 604
+ Minor Fault Count (NOPAGE)                 : 52655
+ Minor Fault Count (RETRY)                  : 8412
+ ReadAhead Count                            : 3301
+
+ Total Major PageFault Time                 : 2781 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 396 (ms)
+ Total Minor PageFault Time (RETRY)         : 9228 (ms)
+ Avg Major Fault Handling Time              : 4605 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 7 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1097 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6787885 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 25645748 (us)
+ Total Block I/O Count                      : 6910
+ Total Block I/O Read Bytes                 : 3219054592 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3711 (us)
+ Avg Block I/O Read Bytes                   : 465854 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.90
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+634740769 111337063 2394027294
+
+-------------------------------------------
+[INFO] Phase Decode_6 Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3557 (ms)
+    - Non I/O Handling Time (Estimated)     : 418 (ms)
+    - I/O Handling Time                     : 3139 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3139 (ms)
+            - Major PageFault               : 634 (ms)
+            - Minor PageFault (NOPAGE)      : 111 (ms)
+            - Minor PageFault (RETRY)       : 2394 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 597
+ Minor Fault Count (NOPAGE)                 : 52597
+ Minor Fault Count (RETRY)                  : 8387
+ ReadAhead Count                            : 3289
+
+ Total Major PageFault Time                 : 2553 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 378 (ms)
+ Total Minor PageFault Time (RETRY)         : 9420 (ms)
+ Avg Major Fault Handling Time              : 4276 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 7 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1123 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6533718 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 25690131 (us)
+ Total Block I/O Count                      : 6882
+ Total Block I/O Read Bytes                 : 3217051648 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3732 (us)
+ Avg Block I/O Read Bytes                   : 467458 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.84
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+613802663 114894961 2446423865
+
+-------------------------------------------
+[INFO] Phase Decode_7 Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3657 (ms)
+    - Non I/O Handling Time (Estimated)     : 484 (ms)
+    - I/O Handling Time                     : 3173 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3173 (ms)
+            - Major PageFault               : 613 (ms)
+            - Minor PageFault (NOPAGE)      : 114 (ms)
+            - Minor PageFault (RETRY)       : 2446 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 576
+ Minor Fault Count (NOPAGE)                 : 52520
+ Minor Fault Count (RETRY)                  : 8319
+ ReadAhead Count                            : 3304
+
+ Total Major PageFault Time                 : 2573 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 383 (ms)
+ Total Minor PageFault Time (RETRY)         : 9778 (ms)
+ Avg Major Fault Handling Time              : 4467 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 7 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1175 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7150774 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 25380225 (us)
+ Total Block I/O Count                      : 6849
+ Total Block I/O Read Bytes                 : 3214594048 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3705 (us)
+ Avg Block I/O Read Bytes                   : 469352 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.96
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+694321534 101028266 2430811631
+
+-------------------------------------------
+[INFO] Phase Decode_8 Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3656 (ms)
+    - Non I/O Handling Time (Estimated)     : 431 (ms)
+    - I/O Handling Time                     : 3225 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3225 (ms)
+            - Major PageFault               : 694 (ms)
+            - Minor PageFault (NOPAGE)      : 101 (ms)
+            - Minor PageFault (RETRY)       : 2430 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 600
+ Minor Fault Count (NOPAGE)                 : 52624
+ Minor Fault Count (RETRY)                  : 8490
+ ReadAhead Count                            : 3299
+
+ Total Major PageFault Time                 : 2466 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 341 (ms)
+ Total Minor PageFault Time (RETRY)         : 9788 (ms)
+ Avg Major Fault Handling Time              : 4111 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 6 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1152 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6567384 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 26043688 (us)
+ Total Block I/O Count                      : 6995
+ Total Block I/O Read Bytes                 : 3214909440 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3723 (us)
+ Avg Block I/O Read Bytes                   : 459601 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.80
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+680193644 103052031 2087484557
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3368 (ms)
+    - Non I/O Handling Time (Estimated)     : 498 (ms)
+    - I/O Handling Time                     : 2870 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 2870 (ms)
+            - Major PageFault               : 680 (ms)
+            - Minor PageFault (NOPAGE)      : 103 (ms)
+            - Minor PageFault (RETRY)       : 2087 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 1666
+ Minor Fault Count (NOPAGE)                 : 50958
+ Minor Fault Count (RETRY)                  : 8159
+ ReadAhead Count                            : 3201
+
+ Total Major PageFault Time                 : 2658 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 505 (ms)
+ Total Minor PageFault Time (RETRY)         : 8230 (ms)
+ Avg Major Fault Handling Time              : 1595 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 9 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1008 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 5593638 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 23102698 (us)
+ Total Block I/O Count                      : 6653
+ Total Block I/O Read Bytes                 : 3106074624 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3472 (us)
+ Avg Block I/O Read Bytes                   : 466868 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.66
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+911185440 262870854 2064683116
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3870 (ms)
+    - Non I/O Handling Time (Estimated)     : 633 (ms)
+    - I/O Handling Time                     : 3237 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3237 (ms)
+            - Major PageFault               : 911 (ms)
+            - Minor PageFault (NOPAGE)      : 262 (ms)
+            - Minor PageFault (RETRY)       : 2064 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 59248
+ Minor Fault Count (NOPAGE)                 : 51349
+ Minor Fault Count (RETRY)                  : 8237
+ ReadAhead Count                            : 3220
+
+ Total Major PageFault Time                 : 3157 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1657 (ms)
+ Total Minor PageFault Time (RETRY)         : 8203 (ms)
+ Avg Major Fault Handling Time              : 53 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 32 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 995 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6350049 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 22338104 (us)
+ Total Block I/O Count                      : 6755
+ Total Block I/O Read Bytes                 : 3108810752 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3306 (us)
+ Avg Block I/O Read Bytes                   : 460223 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.64
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+838806767 307305912 2122819789
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3865 (ms)
+    - Non I/O Handling Time (Estimated)     : 598 (ms)
+    - I/O Handling Time                     : 3267 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3267 (ms)
+            - Major PageFault               : 838 (ms)
+            - Minor PageFault (NOPAGE)      : 307 (ms)
+            - Minor PageFault (RETRY)       : 2122 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 46245
+ Minor Fault Count (NOPAGE)                 : 51325
+ Minor Fault Count (RETRY)                  : 8217
+ ReadAhead Count                            : 3222
+
+ Total Major PageFault Time                 : 3128 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1646 (ms)
+ Total Minor PageFault Time (RETRY)         : 8276 (ms)
+ Avg Major Fault Handling Time              : 67 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 32 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1007 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7023222 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 21343567 (us)
+ Total Block I/O Count                      : 6742
+ Total Block I/O Read Bytes                 : 3112280064 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3165 (us)
+ Avg Block I/O Read Bytes                   : 461625 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.82
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+863467656 253222675 2118233386
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3841 (ms)
+    - Non I/O Handling Time (Estimated)     : 607 (ms)
+    - I/O Handling Time                     : 3234 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3234 (ms)
+            - Major PageFault               : 863 (ms)
+            - Minor PageFault (NOPAGE)      : 253 (ms)
+            - Minor PageFault (RETRY)       : 2118 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 47008
+ Minor Fault Count (NOPAGE)                 : 51399
+ Minor Fault Count (RETRY)                  : 8295
+ ReadAhead Count                            : 3223
+
+ Total Major PageFault Time                 : 3174 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1588 (ms)
+ Total Minor PageFault Time (RETRY)         : 8277 (ms)
+ Avg Major Fault Handling Time              : 67 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 30 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 997 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7028567 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 21582954 (us)
+ Total Block I/O Count                      : 6771
+ Total Block I/O Read Bytes                 : 3117883392 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3187 (us)
+ Avg Block I/O Read Bytes                   : 460476 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.83
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+780976273 292884977 2132548200
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3801 (ms)
+    - Non I/O Handling Time (Estimated)     : 597 (ms)
+    - I/O Handling Time                     : 3204 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3204 (ms)
+            - Major PageFault               : 780 (ms)
+            - Minor PageFault (NOPAGE)      : 292 (ms)
+            - Minor PageFault (RETRY)       : 2132 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 46609
+ Minor Fault Count (NOPAGE)                 : 51336
+ Minor Fault Count (RETRY)                  : 8114
+ ReadAhead Count                            : 3215
+
+ Total Major PageFault Time                 : 3072 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1422 (ms)
+ Total Minor PageFault Time (RETRY)         : 8319 (ms)
+ Avg Major Fault Handling Time              : 65 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 27 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1025 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6832350 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 21795527 (us)
+ Total Block I/O Count                      : 6709
+ Total Block I/O Read Bytes                 : 3121086464 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3248 (us)
+ Avg Block I/O Read Bytes                   : 465208 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.80
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+801037399 263145489 2099362333
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3700 (ms)
+    - Non I/O Handling Time (Estimated)     : 537 (ms)
+    - I/O Handling Time                     : 3163 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3163 (ms)
+            - Major PageFault               : 801 (ms)
+            - Minor PageFault (NOPAGE)      : 263 (ms)
+            - Minor PageFault (RETRY)       : 2099 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 46138
+ Minor Fault Count (NOPAGE)                 : 51336
+ Minor Fault Count (RETRY)                  : 8199
+ ReadAhead Count                            : 3224
+
+ Total Major PageFault Time                 : 3038 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1244 (ms)
+ Total Minor PageFault Time (RETRY)         : 8278 (ms)
+ Avg Major Fault Handling Time              : 65 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 24 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1009 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6608952 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 22056451 (us)
+ Total Block I/O Count                      : 6746
+ Total Block I/O Read Bytes                 : 3124604928 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3269 (us)
+ Avg Block I/O Read Bytes                   : 463178 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.79
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+788619981 318389388 2190840419
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3861 (ms)
+    - Non I/O Handling Time (Estimated)     : 565 (ms)
+    - I/O Handling Time                     : 3296 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3296 (ms)
+            - Major PageFault               : 788 (ms)
+            - Minor PageFault (NOPAGE)      : 318 (ms)
+            - Minor PageFault (RETRY)       : 2190 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45725
+ Minor Fault Count (NOPAGE)                 : 52787
+ Minor Fault Count (RETRY)                  : 8391
+ ReadAhead Count                            : 3298
+
+ Total Major PageFault Time                 : 3020 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1475 (ms)
+ Total Minor PageFault Time (RETRY)         : 8740 (ms)
+ Avg Major Fault Handling Time              : 66 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 27 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1041 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7001462 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 23350568 (us)
+ Total Block I/O Count                      : 6953
+ Total Block I/O Read Bytes                 : 3209138176 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3358 (us)
+ Avg Block I/O Read Bytes                   : 461547 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.81
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+779580683 283165567 2269223307
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3871 (ms)
+    - Non I/O Handling Time (Estimated)     : 540 (ms)
+    - I/O Handling Time                     : 3331 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3331 (ms)
+            - Major PageFault               : 779 (ms)
+            - Minor PageFault (NOPAGE)      : 283 (ms)
+            - Minor PageFault (RETRY)       : 2269 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 46113
+ Minor Fault Count (NOPAGE)                 : 52979
+ Minor Fault Count (RETRY)                  : 8420
+ ReadAhead Count                            : 3330
+
+ Total Major PageFault Time                 : 2914 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1430 (ms)
+ Total Minor PageFault Time (RETRY)         : 8898 (ms)
+ Avg Major Fault Handling Time              : 63 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 27 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1056 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6974356 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 23758057 (us)
+ Total Block I/O Count                      : 6954
+ Total Block I/O Read Bytes                 : 3228082176 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3416 (us)
+ Avg Block I/O Read Bytes                   : 464205 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.80
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+803002249 310903132 2190889068
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3866 (ms)
+    - Non I/O Handling Time (Estimated)     : 563 (ms)
+    - I/O Handling Time                     : 3303 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3303 (ms)
+            - Major PageFault               : 803 (ms)
+            - Minor PageFault (NOPAGE)      : 310 (ms)
+            - Minor PageFault (RETRY)       : 2190 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 46127
+ Minor Fault Count (NOPAGE)                 : 52994
+ Minor Fault Count (RETRY)                  : 8453
+ ReadAhead Count                            : 3318
+
+ Total Major PageFault Time                 : 3017 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1430 (ms)
+ Total Minor PageFault Time (RETRY)         : 8779 (ms)
+ Avg Major Fault Handling Time              : 65 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 26 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1038 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7130432 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 23567382 (us)
+ Total Block I/O Count                      : 6974
+ Total Block I/O Read Bytes                 : 3228852224 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3379 (us)
+ Avg Block I/O Read Bytes                   : 462984 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.84
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+799263294 279747539 2209517403
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3884 (ms)
+    - Non I/O Handling Time (Estimated)     : 597 (ms)
+    - I/O Handling Time                     : 3287 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3287 (ms)
+            - Major PageFault               : 799 (ms)
+            - Minor PageFault (NOPAGE)      : 279 (ms)
+            - Minor PageFault (RETRY)       : 2209 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 46134
+ Minor Fault Count (NOPAGE)                 : 52994
+ Minor Fault Count (RETRY)                  : 8429
+ ReadAhead Count                            : 3315
+
+ Total Major PageFault Time                 : 2973 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1464 (ms)
+ Total Minor PageFault Time (RETRY)         : 8798 (ms)
+ Avg Major Fault Handling Time              : 64 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 27 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1043 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7203563 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 23370141 (us)
+ Total Block I/O Count                      : 6957
+ Total Block I/O Read Bytes                 : 3227582464 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3359 (us)
+ Avg Block I/O Read Bytes                   : 463933 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.85
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+767600946 257422721 2233378334
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3819 (ms)
+    - Non I/O Handling Time (Estimated)     : 562 (ms)
+    - I/O Handling Time                     : 3257 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3257 (ms)
+            - Major PageFault               : 767 (ms)
+            - Minor PageFault (NOPAGE)      : 257 (ms)
+            - Minor PageFault (RETRY)       : 2233 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 46137
+ Minor Fault Count (NOPAGE)                 : 53108
+ Minor Fault Count (RETRY)                  : 8559
+ ReadAhead Count                            : 3318
+
+ Total Major PageFault Time                 : 2914 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1314 (ms)
+ Total Minor PageFault Time (RETRY)         : 8807 (ms)
+ Avg Major Fault Handling Time              : 63 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 24 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 1029 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6998492 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 23662223 (us)
+ Total Block I/O Count                      : 7094
+ Total Block I/O Read Bytes                 : 3226525696 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3335 (us)
+ Avg Block I/O Read Bytes                   : 454824 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.83
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+820201986 326388495 2201390193
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3888 (ms)
+    - Non I/O Handling Time (Estimated)     : 541 (ms)
+    - I/O Handling Time                     : 3347 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3347 (ms)
+            - Major PageFault               : 820 (ms)
+            - Minor PageFault (NOPAGE)      : 326 (ms)
+            - Minor PageFault (RETRY)       : 2201 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 46182
+ Minor Fault Count (NOPAGE)                 : 53287
+ Minor Fault Count (RETRY)                  : 9097
+ ReadAhead Count                            : 3304
+
+ Total Major PageFault Time                 : 2974 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1377 (ms)
+ Total Minor PageFault Time (RETRY)         : 8784 (ms)
+ Avg Major Fault Handling Time              : 64 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 25 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 965 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7317925 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 24123527 (us)
+ Total Block I/O Count                      : 7536
+ Total Block I/O Read Bytes                 : 3226349568 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3201 (us)
+ Avg Block I/O Read Bytes                   : 428124 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.88
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+814278903 227222904 2177159989
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3823 (ms)
+    - Non I/O Handling Time (Estimated)     : 605 (ms)
+    - I/O Handling Time                     : 3218 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3218 (ms)
+            - Major PageFault               : 814 (ms)
+            - Minor PageFault (NOPAGE)      : 227 (ms)
+            - Minor PageFault (RETRY)       : 2177 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 46033
+ Minor Fault Count (NOPAGE)                 : 53515
+ Minor Fault Count (RETRY)                  : 9545
+ ReadAhead Count                            : 3312
+
+ Total Major PageFault Time                 : 2858 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1420 (ms)
+ Total Minor PageFault Time (RETRY)         : 8784 (ms)
+ Avg Major Fault Handling Time              : 62 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 26 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 920 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7157270 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 26004549 (us)
+ Total Block I/O Count                      : 8016
+ Total Block I/O Read Bytes                 : 3223437312 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3244 (us)
+ Avg Block I/O Read Bytes                   : 402125 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.87
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+751520287 266931538 2240927384
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3831 (ms)
+    - Non I/O Handling Time (Estimated)     : 574 (ms)
+    - I/O Handling Time                     : 3257 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3257 (ms)
+            - Major PageFault               : 751 (ms)
+            - Minor PageFault (NOPAGE)      : 266 (ms)
+            - Minor PageFault (RETRY)       : 2240 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45712
+ Minor Fault Count (NOPAGE)                 : 53677
+ Minor Fault Count (RETRY)                  : 10021
+ ReadAhead Count                            : 3305
+
+ Total Major PageFault Time                 : 2884 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1386 (ms)
+ Total Minor PageFault Time (RETRY)         : 8804 (ms)
+ Avg Major Fault Handling Time              : 63 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 25 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 878 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7333185 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 27127540 (us)
+ Total Block I/O Count                      : 8408
+ Total Block I/O Read Bytes                 : 3218632704 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3226 (us)
+ Avg Block I/O Read Bytes                   : 382805 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.91
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+695401996 333736416 2255745147
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3795 (ms)
+    - Non I/O Handling Time (Estimated)     : 512 (ms)
+    - I/O Handling Time                     : 3283 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3283 (ms)
+            - Major PageFault               : 695 (ms)
+            - Minor PageFault (NOPAGE)      : 333 (ms)
+            - Minor PageFault (RETRY)       : 2255 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45698
+ Minor Fault Count (NOPAGE)                 : 53854
+ Minor Fault Count (RETRY)                  : 10341
+ ReadAhead Count                            : 3316
+
+ Total Major PageFault Time                 : 2819 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1385 (ms)
+ Total Minor PageFault Time (RETRY)         : 8799 (ms)
+ Avg Major Fault Handling Time              : 61 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 25 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 850 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7349798 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 28000313 (us)
+ Total Block I/O Count                      : 8794
+ Total Block I/O Read Bytes                 : 3217526784 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3184 (us)
+ Avg Block I/O Read Bytes                   : 365877 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.94
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+759315597 248216812 2200446258
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3751 (ms)
+    - Non I/O Handling Time (Estimated)     : 544 (ms)
+    - I/O Handling Time                     : 3207 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3207 (ms)
+            - Major PageFault               : 759 (ms)
+            - Minor PageFault (NOPAGE)      : 248 (ms)
+            - Minor PageFault (RETRY)       : 2200 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45696
+ Minor Fault Count (NOPAGE)                 : 54008
+ Minor Fault Count (RETRY)                  : 10769
+ ReadAhead Count                            : 3323
+
+ Total Major PageFault Time                 : 2780 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1274 (ms)
+ Total Minor PageFault Time (RETRY)         : 8763 (ms)
+ Avg Major Fault Handling Time              : 60 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 23 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 813 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7381669 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 29041596 (us)
+ Total Block I/O Count                      : 9163
+ Total Block I/O Read Bytes                 : 3218345984 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3169 (us)
+ Avg Block I/O Read Bytes                   : 351232 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.97
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+670853636 282808386 2240375324
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3777 (ms)
+    - Non I/O Handling Time (Estimated)     : 585 (ms)
+    - I/O Handling Time                     : 3192 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3192 (ms)
+            - Major PageFault               : 670 (ms)
+            - Minor PageFault (NOPAGE)      : 282 (ms)
+            - Minor PageFault (RETRY)       : 2240 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45701
+ Minor Fault Count (NOPAGE)                 : 54254
+ Minor Fault Count (RETRY)                  : 11239
+ ReadAhead Count                            : 3309
+
+ Total Major PageFault Time                 : 2669 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1327 (ms)
+ Total Minor PageFault Time (RETRY)         : 8856 (ms)
+ Avg Major Fault Handling Time              : 58 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 24 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 787 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7332838 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 31003241 (us)
+ Total Block I/O Count                      : 9637
+ Total Block I/O Read Bytes                 : 3215364096 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3217 (us)
+ Avg Block I/O Read Bytes                   : 333647 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.94
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+730921791 248765327 2216198914
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3774 (ms)
+    - Non I/O Handling Time (Estimated)     : 580 (ms)
+    - I/O Handling Time                     : 3194 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3194 (ms)
+            - Major PageFault               : 730 (ms)
+            - Minor PageFault (NOPAGE)      : 248 (ms)
+            - Minor PageFault (RETRY)       : 2216 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45779
+ Minor Fault Count (NOPAGE)                 : 54232
+ Minor Fault Count (RETRY)                  : 11251
+ ReadAhead Count                            : 3303
+
+ Total Major PageFault Time                 : 2697 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1336 (ms)
+ Total Minor PageFault Time (RETRY)         : 8792 (ms)
+ Avg Major Fault Handling Time              : 58 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 24 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 781 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 4 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7336489 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 30699734 (us)
+ Total Block I/O Count                      : 9669
+ Total Block I/O Read Bytes                 : 3214053376 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3175 (us)
+ Avg Block I/O Read Bytes                   : 332408 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.94
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+755657186 239344466 2170516658
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3776 (ms)
+    - Non I/O Handling Time (Estimated)     : 612 (ms)
+    - I/O Handling Time                     : 3164 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3164 (ms)
+            - Major PageFault               : 755 (ms)
+            - Minor PageFault (NOPAGE)      : 239 (ms)
+            - Minor PageFault (RETRY)       : 2170 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45612
+ Minor Fault Count (NOPAGE)                 : 54260
+ Minor Fault Count (RETRY)                  : 11298
+ ReadAhead Count                            : 3323
+
+ Total Major PageFault Time                 : 2764 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1395 (ms)
+ Total Minor PageFault Time (RETRY)         : 8666 (ms)
+ Avg Major Fault Handling Time              : 60 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 25 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 767 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7188189 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 30636121 (us)
+ Total Block I/O Count                      : 9709
+ Total Block I/O Read Bytes                 : 3213840384 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3155 (us)
+ Avg Block I/O Read Bytes                   : 331016 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.90
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+784053541 238918264 2133186279
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3737 (ms)
+    - Non I/O Handling Time (Estimated)     : 582 (ms)
+    - I/O Handling Time                     : 3155 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3155 (ms)
+            - Major PageFault               : 784 (ms)
+            - Minor PageFault (NOPAGE)      : 238 (ms)
+            - Minor PageFault (RETRY)       : 2133 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45485
+ Minor Fault Count (NOPAGE)                 : 54366
+ Minor Fault Count (RETRY)                  : 11244
+ ReadAhead Count                            : 3308
+
+ Total Major PageFault Time                 : 2781 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1305 (ms)
+ Total Minor PageFault Time (RETRY)         : 8619 (ms)
+ Avg Major Fault Handling Time              : 61 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 24 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 766 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 5 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7155644 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 30456954 (us)
+ Total Block I/O Count                      : 9700
+ Total Block I/O Read Bytes                 : 3216691200 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3139 (us)
+ Avg Block I/O Read Bytes                   : 331617 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.91
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+752860418 278558873 2155297220
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3712 (ms)
+    - Non I/O Handling Time (Estimated)     : 527 (ms)
+    - I/O Handling Time                     : 3185 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3185 (ms)
+            - Major PageFault               : 752 (ms)
+            - Minor PageFault (NOPAGE)      : 278 (ms)
+            - Minor PageFault (RETRY)       : 2155 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45476
+ Minor Fault Count (NOPAGE)                 : 54308
+ Minor Fault Count (RETRY)                  : 11294
+ ReadAhead Count                            : 3299
+
+ Total Major PageFault Time                 : 2708 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1240 (ms)
+ Total Minor PageFault Time (RETRY)         : 8672 (ms)
+ Avg Major Fault Handling Time              : 59 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 22 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 767 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 2 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7096182 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 30690294 (us)
+ Total Block I/O Count                      : 9652
+ Total Block I/O Read Bytes                 : 3215511552 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3179 (us)
+ Avg Block I/O Read Bytes                   : 333144 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.91
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+737995486 257647346 2181432999
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3712 (ms)
+    - Non I/O Handling Time (Estimated)     : 537 (ms)
+    - I/O Handling Time                     : 3175 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3175 (ms)
+            - Major PageFault               : 737 (ms)
+            - Minor PageFault (NOPAGE)      : 257 (ms)
+            - Minor PageFault (RETRY)       : 2181 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45065
+ Minor Fault Count (NOPAGE)                 : 54357
+ Minor Fault Count (RETRY)                  : 11246
+ ReadAhead Count                            : 3320
+
+ Total Major PageFault Time                 : 2697 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1203 (ms)
+ Total Minor PageFault Time (RETRY)         : 8712 (ms)
+ Avg Major Fault Handling Time              : 59 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 22 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 774 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 3 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 6978218 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 30973139 (us)
+ Total Block I/O Count                      : 9605
+ Total Block I/O Read Bytes                 : 3212898304 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3224 (us)
+ Avg Block I/O Read Bytes                   : 334502 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.88
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+
+684684472 314607579 2221560582
+
+-------------------------------------------
+[INFO] Phase <unknown> Report 
+
+-- Elapsed Time Analysis (main pid only) --
+ Wall Clock Time                            : 3760 (ms)
+    - Non I/O Handling Time (Estimated)     : 541 (ms)
+    - I/O Handling Time                     : 3219 (ms)
+        - Read Syscall                      : 0 (ms)
+        - Write Syscall                     : 0 (ms)
+        - PageFault                         : 3219 (ms)
+            - Major PageFault               : 684 (ms)
+            - Minor PageFault (NOPAGE)      : 314 (ms)
+            - Minor PageFault (RETRY)       : 2221 (ms)
+
+-- I/O Handling Stats --
+ ## PageFault ##
+ Major Fault Count                          : 45019
+ Minor Fault Count (NOPAGE)                 : 54374
+ Minor Fault Count (RETRY)                  : 11329
+ ReadAhead Count                            : 3326
+
+ Total Major PageFault Time                 : 2741 (ms)
+ Total Minor PageFault Time (NOPAGE)        : 1339 (ms)
+ Total Minor PageFault Time (RETRY)         : 8720 (ms)
+ Avg Major Fault Handling Time              : 60 (us)
+ Avg Minor Fault Handling Time (NOPAGE)     : 24 (us)
+ Avg Minor Fault Handling Time (RETRY)      : 769 (us)
+
+ ## Syscall ##
+ Read Syscall Count                         : 1
+ Write Syscall Count                        : 0
+
+ Total Read Syscall Time                    : 0 (ms)
+ Total Write Syscall Time                   : 0 (ms)
+ Avg Read Syscall Handling Time             : 5 (us)
+ Avg Write Syscall Handling Time            : 0 (us)
+
+-- Total Time --
+ Total CPU Runtime                          : 7141286 (us)
+ Total CPU Wait Time                        : 0 (us)
+
+-- I/O Stats --
+ Total Block I/O Time                       : 30730275 (us)
+ Total Block I/O Count                      : 9665
+ Total Block I/O Read Bytes                 : 3214577664 (bytes)
+ Total Block I/O Write Bytes                : 0 (bytes)
+ Avg Block I/O Time                         : 3179 (us)
+ Avg Block I/O Read Bytes                   : 332599 (bytes)
+ Avg Block I/O Write Bytes                  : 0 (bytes)
+ Wall I/O Time (interval merged)            : 0 (us)
+
+-- Derived Metrics --
+ CPU Utilization Ratio                      : 1.90
+ I/O Stall Ratio                            : 0.00
+ I/O Parallelism Ratio                      : 0.00
+

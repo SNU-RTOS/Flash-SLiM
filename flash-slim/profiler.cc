@@ -246,4 +246,123 @@ namespace custom::profiler
                   << " (" << avg_decoding_speed << " tokens/s)\n";
     }
 
+
+
+    /* Timer Utility */
+    TimerUtility::TimerUtility(const std::string &name)
+            : name_(name) {}
+            
+    void TimerUtility::Start()
+    {
+        start_ = std::chrono::high_resolution_clock::now();
+    }
+
+    double TimerUtility::Stop() const
+    {
+        auto end_ = std::chrono::high_resolution_clock::now();
+        auto duration_us = std::chrono::duration_cast<std::chrono::nanoseconds>(end_ - start_).count();
+        return static_cast<double>(duration_us) / 1000000.0;
+    }
+
+    /* Scope Timer */
+    ScopeTimer::ScopeTimer(double &out_ref, const std::string &name)
+            : out_ref_(out_ref), timer_(name)
+    {
+        timer_.Start();
+    }
+
+    ScopeTimer::~ScopeTimer()
+    {
+        out_ref_ = static_cast<double>(timer_.Stop());
+    }
+
+    
+    ScopeEventHandler::ScopeEventHandler(const std::string &name)
+        : current_phase_name_(name)
+    {
+        TRACE_LOGIC_START(current_phase_name_.c_str());
+    }
+
+    ScopeEventHandler::~ScopeEventHandler()
+    {
+        TRACE_LOGIC_END(current_phase_name_.c_str());
+    }
+
+
+    /* ScopeEventPrefetcher */
+    // Constructor implementation
+    // ScopeEventPrefetcher::ScopeEventPrefetcher(PhaseContext &ctx, const std::string &name)
+    //     : ctx_(ctx), lock_(ctx_.mutex)
+    //     {
+    //         ctx_.current_phase_name = name;
+    //         ctx_.log_requested.store(true);
+    //         ctx_.phase_status = 0; // Start phase
+    //         ctx_.signal_cv.notify_all();
+    //         ctx_.signal_cv.wait(lock_, [&]() { return !ctx_.log_requested.load(); });
+
+    //         TRACE_LOGIC_START(ctx_.current_phase_name.c_str());
+    //     }
+
+    // // Destructor implementation
+    // ScopeEventPrefetcher::~ScopeEventPrefetcher()
+    //     {
+    //         TRACE_LOGIC_END(ctx_.current_phase_name.c_str());
+
+    //         ctx_.log_requested.store(true);
+    //         ctx_.phase_status = 1; // End phase
+    //         ctx_.signal_cv.notify_all();
+    //         ctx_.signal_cv.wait(lock_, [&]() { return !ctx_.log_requested.load(); });
+    //     }
+
+
+    /* ScopeEventListener */
+    ScopeEventListener::ScopeEventListener(PhaseContext &ctx, bool log_stdout, std::vector<RUsageRecord> *usage_records)
+            : ctx_(ctx),
+              log_stdout_(log_stdout),
+              usage_records_(usage_records),
+              timer_("ScopeEventListener") {}
+        
+        void ScopeEventListener::Run()
+        {
+            std::unique_lock<std::mutex> lock(ctx_.mutex);
+
+            while (!ctx_.generation_done.load())
+            {
+                ctx_.signal_cv.wait(lock, [&]()
+                                    { return ctx_.log_requested.load() || ctx_.generation_done.load(); });
+
+                if (ctx_.generation_done.load())
+                {
+                    std::cout << "[INFO] Monitoring thread exiting...\n";
+                    break;
+                }
+
+                if (ctx_.phase_status == 1)
+                { // End phase
+                    getrusage(RUSAGE_SELF, &usage_end_);
+                    double duration_ms = timer_.Stop();
+
+                    if (log_stdout_)
+                    {
+                        custom::profiler::print_rusage(
+                            usage_start_, usage_end_, duration_ms, ctx_.current_phase_name);
+                    }
+                    if (usage_records_)
+                    {
+                        usage_records_->emplace_back(usage_start_, usage_end_, duration_ms, ctx_.current_phase_name);
+                    }
+                }
+
+                ctx_.log_requested.store(false);
+                ctx_.signal_cv.notify_all();
+
+                if (ctx_.phase_status == 0)
+                { // Start phase
+                    timer_.Start();
+                    getrusage(RUSAGE_SELF, &usage_start_);
+                }
+            }
+            std::cout << "[INFO] Monitoring finished\n";
+        }
+
 }; // custom::profiler

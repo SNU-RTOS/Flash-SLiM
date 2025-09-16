@@ -213,4 +213,17 @@ namespace custom::util
         out << ss.str() << std::endl;
     }
 
+    void set_affinity_to_cores(const std::vector<int> &cores)
+    {
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        for (int core : cores)
+        {
+            CPU_SET(core, &cpuset);
+        }
+        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0)
+        {
+            perror("Failed to set affinity");
+        }
+    }
 } // namespace custom::util
