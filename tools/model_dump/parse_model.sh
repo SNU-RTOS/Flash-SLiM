@@ -5,10 +5,8 @@
 destination_dir="../../models/Llama3.2-3B"
 bin=dump_llm_nodes
 
-if [[ ! -f $bin ]]; then
-    echo "$bin not found. running build_online_parser.sh ...."
-    ./build_online_parser.sh $bin
-fi
+
+./build_online_parser.sh $bin
 
 # Run parser.py for each .tflite file in the destination directory
 for tflite_file in "$destination_dir"/*.tflite; do
@@ -23,6 +21,8 @@ for tflite_file in "$destination_dir"/*.tflite; do
     ./$bin \
         --dump_file_path "$log" \
         --tflite_model "$tflite_file" \
-        --weight_cache_path "$weight_cache"
+        --weight_cache_path "$weight_cache" \
+        --dump_tensor_details true
+    python3 tensor_visualization.py "$log" "${destination_dir}/${model_name}_analysis_report.txt" "${destination_dir}/${model_name}_analysis_data.json"
 done
 

@@ -26,9 +26,71 @@
 ABSL_FLAG(std::string, weight_cache_path, "", "Path for XNNPACK weight caching, e.g., /tmp/model.xnnpack_cache.");
 ABSL_FLAG(std::string, tflite_model, "", "Two-signature tflite model for text generation using ODML tools.");
 ABSL_FLAG(std::string, dump_file_path, "", "Path to save the log file. If empty, no log file is generated.");
+ABSL_FLAG(bool, dump_tensor_details, false, "Whether to dump detailed tensor information for each node.");
 
 namespace
 {
+    // --------------------------------------------------------------------------
+    // Print detailed tensor information (migrated from text_generator_main.cc)
+    // --------------------------------------------------------------------------
+    void print_tensor_details(int tensor_idx, TfLiteTensor* tensor, std::ostream* output = nullptr) {
+        std::ostream& out = (output != nullptr) ? *output : std::cout;
+        
+        if (!tensor) {
+            out << "Tensor " << tensor_idx << " is NULL\n";
+            return;
+        }
+        
+        void* tensor_data_address = tensor->data.raw;
+        out << "Data Address: " << tensor_data_address << " ";
+
+        // Tensor Type
+        const char* type_name = TfLiteTypeGetName(tensor->type);
+        out << "Type: " << (type_name ? type_name : "Unknown") << " ";
+
+        // Tensor Allocation Type
+        out << "Allocation Type: ";
+        switch (tensor->allocation_type) {
+            case kTfLiteArenaRw:
+                out << "Arena RW " << "Bytes: " << tensor->bytes << " ";
+                break;
+            case kTfLiteArenaRwPersistent:
+                out << "Arena Persistent " << "Bytes: " << tensor->bytes << " ";
+                break;
+            case kTfLiteMmapRo:
+                out << "Mmap " << "Bytes: " << tensor->bytes << " ";
+                break;
+            case kTfLiteDynamic:
+                out << "Dynamic " << "Bytes: " << tensor->bytes << " ";
+                break;
+            case kTfLiteCustom:
+                out << "Custom " << "Bytes: " << tensor->bytes << " ";
+                break;
+            case kTfLitePersistentRo:
+                out << "PersistentRo " << "Bytes: " << tensor->bytes << " ";
+                break;
+            case kTfLiteVariantObject:
+                out << "Variant " << "Bytes: " << tensor->bytes << " ";
+                break;
+            case kTfLiteMemNone:
+                out << "MemNone " << "Bytes: 0 ";
+                break;
+            default:
+                out << "Unknown " << "Bytes: 0 ";
+                break;
+        }
+
+        // Tensor Shape
+        out << "Shape: [";
+        if(tensor->dims && tensor->dims->size > 0){
+            for (int dim_idx = 0; dim_idx < tensor->dims->size; ++dim_idx) {
+                out << tensor->dims->data[dim_idx];
+                if (dim_idx < tensor->dims->size - 1) out << ", ";
+            }
+        }
+        out << "]\n";
+    }
+
     // --------------------------------------------------------------------------
     // Utility for applying XNNPACK weight caching
     // --------------------------------------------------------------------------
@@ -160,7 +222,56 @@ namespace
                 << "[" << std::setw(4) << std::setfill('0') << idx << "] " << op_name;
             absolute_op_counter++;
 
-            std::string delegate_indent_str(indent + 8, ' ');
+            // Dump detailed tensor information if requested
+            if (absl::GetFlag(FLAGS_dump_tensor_details)) {
+                const auto* node_and_reg = subgraph->node_and_registration(idx);
+
+                std::string tensor_indent_str(indent + 2, ' ');
+                if (node_and_reg) {
+                    const TfLiteNode* node = &node_and_reg->first;
+                    
+                    // Print input tensors
+                    if (node->inputs && node->inputs->size > 0) {
+                        out << std::endl << tensor_indent_str << "    Input Tensors:" << std::endl;
+                        for (int i = 0; i < node->inputs->size; ++i) {
+                            int tensor_idx = node->inputs->data[i];
+                            if (tensor_idx >= 0) {
+                                out << tensor_indent_str << "      Input " << i << ": " << tensor_idx << " ";
+                                auto* tensor = interpreter->tensor(tensor_idx);
+                                print_tensor_details(tensor_idx, tensor, output);
+                            }
+                        }
+                    }
+                    
+                    // Print output tensors
+                    if (node->outputs && node->outputs->size > 0) {
+                        out << tensor_indent_str << "    Output Tensors:" << std::endl;
+                        for (int i = 0; i < node->outputs->size; ++i) {
+                            int tensor_idx = node->outputs->data[i];
+                            if (tensor_idx >= 0) {
+                                out << tensor_indent_str << "      Output " << i << ": " << tensor_idx << " ";
+                                auto* tensor = interpreter->tensor(tensor_idx);
+                                print_tensor_details(tensor_idx, tensor, output);
+                            }
+                        }
+                    }
+                    
+                    // Print temporary tensors if any
+                    if (node->temporaries && node->temporaries->size > 0) {
+                        out << tensor_indent_str << "    Temporary Tensors:" << std::endl;
+                        for (int i = 0; i < node->temporaries->size; ++i) {
+                            int tensor_idx = node->temporaries->data[i];
+                            if (tensor_idx >= 0) {
+                                out << tensor_indent_str << "      Temporary " << i << ": " << tensor_idx << " ";
+                                auto* tensor = interpreter->tensor(tensor_idx);
+                                print_tensor_details(tensor_idx, tensor, output);
+                            }
+                        }
+                    }
+                }
+            }
+
+            std::string delegate_indent_str(indent + 6, ' ');
             if (reg->builtin_code == tflite::BuiltinOperator_DELEGATE)
             {
                 TfLiteXNNPackDelegateInspect(node->user_data, output, delegate_indent_str.c_str());
