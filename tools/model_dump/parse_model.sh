@@ -22,7 +22,8 @@ for tflite_file in "$destination_dir"/*.tflite; do
         --dump_file_path "$log" \
         --tflite_model "$tflite_file" \
         --weight_cache_path "$weight_cache" \
-        --dump_tensor_details true
+        --dump_tensor_details \
+        --op_tensor_byte_stats 
     python3 tensor_visualization.py "$log" "${destination_dir}/${model_name}_analysis_report.txt" "${destination_dir}/${model_name}_analysis_data.json"
 done
 

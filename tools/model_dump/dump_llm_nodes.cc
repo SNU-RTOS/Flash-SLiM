@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <memory>
+#include <unordered_set>
 
 // abseil
 #include "absl/flags/flag.h"
@@ -27,9 +28,23 @@ ABSL_FLAG(std::string, weight_cache_path, "", "Path for XNNPACK weight caching, 
 ABSL_FLAG(std::string, tflite_model, "", "Two-signature tflite model for text generation using ODML tools.");
 ABSL_FLAG(std::string, dump_file_path, "", "Path to save the log file. If empty, no log file is generated.");
 ABSL_FLAG(bool, dump_tensor_details, false, "Whether to dump detailed tensor information for each node.");
+ABSL_FLAG(bool, op_tensor_byte_stats, false, "Whether to append per-operator aggregated tensor bytes (Mmap/Arena) on each operator line.");
 
 namespace
 {
+    // Human-readable byte formatting helper
+    std::string FormatBytes(size_t bytes) {
+        const double kb = 1024.0;
+        const double mb = kb * 1024.0;
+        const double gb = mb * 1024.0;
+        std::ostringstream oss;
+        oss.setf(std::ios::fixed); oss<<std::setprecision(2);
+        if (bytes >= (size_t)gb)      { oss << (bytes / gb) << "GB"; }
+        else if (bytes >= (size_t)mb) { oss << (bytes / mb) << "MB"; }
+        else if (bytes >= (size_t)kb) { oss << (bytes / kb) << "KB"; }
+        else                          { oss.unsetf(std::ios::floatfield); oss << bytes << "B"; }
+        return oss.str();
+    }
     // --------------------------------------------------------------------------
     // Print detailed tensor information (migrated from text_generator_main.cc)
     // --------------------------------------------------------------------------
@@ -218,8 +233,35 @@ namespace
                 tflite::EnumNameBuiltinOperator(
                     static_cast<tflite::BuiltinOperator>(reg->builtin_code));
 
+            // Optional per-op tensor byte stats
+            size_t op_bytes_mmap = 0;
+            size_t op_bytes_arena = 0;
+            if (absl::GetFlag(FLAGS_op_tensor_byte_stats)) {
+                auto collect = [&](const TfLiteIntArray* arr){
+                    if (!arr) return;
+                    for (int i = 0; i < arr->size; ++i) {
+                        int tidx = arr->data[i];
+                        if (tidx < 0) continue;
+                        TfLiteTensor* t = interpreter->tensor(tidx);
+                        if (!t) continue;
+                        switch (t->allocation_type) {
+                            case kTfLiteMmapRo: op_bytes_mmap += t->bytes; break;
+                            case kTfLiteArenaRw:
+                            case kTfLiteArenaRwPersistent: op_bytes_arena += t->bytes; break;
+                            default: break;
+                        }
+                    }
+                };
+                collect(node->inputs);
+                collect(node->outputs);
+                collect(node->temporaries);
+            }
+
             out << indent_str << "  " << std::setw(4) << std::setfill(' ') << absolute_op_counter << ": "
                 << "[" << std::setw(4) << std::setfill('0') << idx << "] " << op_name;
+            if (absl::GetFlag(FLAGS_op_tensor_byte_stats)) {
+                out << " (Mmap=" << FormatBytes(op_bytes_mmap) << ", Arena=" << FormatBytes(op_bytes_arena) << ")";
+            }
             absolute_op_counter++;
 
             // Dump detailed tensor information if requested
@@ -308,7 +350,7 @@ namespace
         }
         out << std::endl;
         InspectExecutionPlan(interpreter, subgraph_idx, output, indent);
-        out << std::endl;
+        out << std::endl; // spacing after subgraph dump
     }
 
     void InspectSelectedSignature(tflite::Interpreter *interpreter, int sig_index, std::ostream *output = nullptr, int indent = 2)
