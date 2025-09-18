@@ -5,6 +5,7 @@
 #include <string>
 #include <memory>
 #include <unordered_set>
+#include "tflite/schema/schema_generated.h"
 
 // abseil
 #include "absl/flags/flag.h"
@@ -32,6 +33,36 @@ ABSL_FLAG(bool, op_tensor_byte_stats, false, "Whether to append per-operator agg
 
 namespace
 {
+    // Map: subgraph -> [tensor_idx -> buffer_idx]
+    std::vector<std::vector<int>> g_tensor_buffer_map;
+
+    void SetupBufferIndexMap(const tflite::FlatBufferModel* fb_model_holder) {
+        g_tensor_buffer_map.clear();
+        if (!fb_model_holder) return;
+        const ::tflite::Model* fb_model = fb_model_holder->GetModel();
+        if (!fb_model) return;
+        auto subgraphs = fb_model->subgraphs();
+        if (!subgraphs) return;
+        g_tensor_buffer_map.resize(subgraphs->size());
+        for (size_t sg = 0; sg < subgraphs->size(); ++sg) {
+            const ::tflite::SubGraph* s = subgraphs->Get(sg);
+            auto tensors = s ? s->tensors() : nullptr;
+            size_t n = tensors ? tensors->size() : 0;
+            auto& map_vec = g_tensor_buffer_map[sg];
+            map_vec.resize(n, -1);
+            for (size_t i = 0; i < n; ++i) {
+                const ::tflite::Tensor* t = tensors->Get(i);
+                map_vec[i] = t ? static_cast<int>(t->buffer()) : -1;
+            }
+        }
+    }
+
+    inline int GetBufferIndexFor(int subgraph_idx, int tensor_idx) {
+        if (subgraph_idx < 0 || subgraph_idx >= static_cast<int>(g_tensor_buffer_map.size())) return -1;
+        const auto& v = g_tensor_buffer_map[subgraph_idx];
+        if (tensor_idx < 0 || tensor_idx >= static_cast<int>(v.size())) return -1;
+        return v[tensor_idx];
+    }
     // Human-readable byte formatting helper
     std::string FormatBytes(size_t bytes) {
         const double kb = 1024.0;
@@ -242,7 +273,7 @@ namespace
                     for (int i = 0; i < arr->size; ++i) {
                         int tidx = arr->data[i];
                         if (tidx < 0) continue;
-                        TfLiteTensor* t = interpreter->tensor(tidx);
+                        TfLiteTensor* t = subgraph->tensor(tidx);
                         if (!t) continue;
                         switch (t->allocation_type) {
                             case kTfLiteMmapRo: op_bytes_mmap += t->bytes; break;
@@ -278,8 +309,10 @@ namespace
                         for (int i = 0; i < node->inputs->size; ++i) {
                             int tensor_idx = node->inputs->data[i];
                             if (tensor_idx >= 0) {
-                                out << tensor_indent_str << "      Input " << i << ": " << tensor_idx << " ";
-                                auto* tensor = interpreter->tensor(tensor_idx);
+                                auto* tensor = subgraph->tensor(tensor_idx);
+                                int buffer_idx = GetBufferIndexFor(subgraph_idx, tensor_idx);
+                                out << tensor_indent_str << "      Input " << i << ": " << tensor_idx
+                                    << " (buffer " << buffer_idx << ") ";
                                 print_tensor_details(tensor_idx, tensor, output);
                             }
                         }
@@ -291,8 +324,10 @@ namespace
                         for (int i = 0; i < node->outputs->size; ++i) {
                             int tensor_idx = node->outputs->data[i];
                             if (tensor_idx >= 0) {
-                                out << tensor_indent_str << "      Output " << i << ": " << tensor_idx << " ";
-                                auto* tensor = interpreter->tensor(tensor_idx);
+                                auto* tensor = subgraph->tensor(tensor_idx);
+                                int buffer_idx = GetBufferIndexFor(subgraph_idx, tensor_idx);
+                                out << tensor_indent_str << "      Output " << i << ": " << tensor_idx
+                                    << " (buffer " << buffer_idx << ") ";
                                 print_tensor_details(tensor_idx, tensor, output);
                             }
                         }
@@ -304,8 +339,10 @@ namespace
                         for (int i = 0; i < node->temporaries->size; ++i) {
                             int tensor_idx = node->temporaries->data[i];
                             if (tensor_idx >= 0) {
-                                out << tensor_indent_str << "      Temporary " << i << ": " << tensor_idx << " ";
-                                auto* tensor = interpreter->tensor(tensor_idx);
+                                auto* tensor = subgraph->tensor(tensor_idx);
+                                int buffer_idx = GetBufferIndexFor(subgraph_idx, tensor_idx);
+                                out << tensor_indent_str << "      Temporary " << i << ": " << tensor_idx
+                                    << " (buffer " << buffer_idx << ") ";
                                 print_tensor_details(tensor_idx, tensor, output);
                             }
                         }
@@ -419,6 +456,8 @@ int main(int argc, char *argv[])
     //* ============ Create Model, Interpreter and Profiler ============ */
     std::unique_ptr<tflite::FlatBufferModel> model;
     model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
+    // Initialize tensor->buffer map from FlatBuffer model
+    SetupBufferIndexMap(model.get());
     std::unique_ptr<tflite::Interpreter> interpreter;
     std::unique_ptr<tflite::profiling::Profiler> op_profiler = std::make_unique<tflite::profiling::Profiler>();
     tflite::ops::builtin::BuiltinOpResolver resolver;

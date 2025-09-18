@@ -127,5 +127,7 @@ cc_binary(
         "@litert//tflite/profiling:profile_summarizer",
         "@litert//tflite/profiling:profiler",
         "@litert//tflite/tools/benchmark:benchmark_model_lib",
+        "@litert//tflite/delegates/xnnpack:weight_cache",
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
     ],
 )

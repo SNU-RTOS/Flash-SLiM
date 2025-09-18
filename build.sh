@@ -123,7 +123,7 @@ do_main_build() {
         $GPU_FLAGS \
         $GPU_COPT_FLAGS \
         $arch_optimize_config \
-        --config=ebpf     
+        --config=ebpf --config=weight_streaming
 
     ensure_dir "${OUT_DIR}"
     banner "Copying binary to output directory"

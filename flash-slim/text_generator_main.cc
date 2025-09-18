@@ -54,6 +54,10 @@
 #include "aligned_allocator.h"
 #include "lora_adapter.h"
 
+// Weight cache
+#include "tflite/delegates/xnnpack/weight_cache.h"
+#include "tflite/delegates/xnnpack/streaming_weight_cache.h"
+
 // ----------------------
 // absl::FLAGS definition
 // ----------------------
@@ -90,6 +94,34 @@ namespace
     // --------------------------------------------------------------------------
     // Utility for applying XNNPACK weight caching
     // --------------------------------------------------------------------------
+    // provider는 delegate보다 오래 살아야 함
+
+#ifdef USE_WEIGHT_STREAMING
+    using WeightCacheProviderT = tflite::xnnpack::StreamingWeightCacheProvider;
+#else
+    using WeightCacheProviderT = tflite::xnnpack::MMapWeightCacheProvider;
+#endif
+
+    // static WeightCacheProviderT g_cache_provider;
+
+    // void ApplyXNNPACKWithWeightCaching(tflite::Interpreter* interpreter) {
+    //     auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
+    //     delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
+
+    //     // 파일 기반 캐시 경로
+    //     std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
+    //     delegate_options.weight_cache_file_path = weight_cache_path.c_str();
+
+    //     // Provider 직접 전달
+    //     delegate_options.weight_cache_provider = &g_cache_provider;
+
+    //     // delegate 생성 및 적용
+    //     MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
+    //         tflite::Interpreter::TfLiteDelegatePtr(
+    //             TfLiteXNNPackDelegateCreate(&delegate_options),
+    //             [](TfLiteDelegate* d) { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
+    // }
+
     void ApplyXNNPACKWithWeightCaching(tflite::Interpreter *interpreter)
     {
         auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
@@ -440,13 +472,13 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
             ApplyXNNPACKWithWeightCaching(interpreter.get());
         }
     }
-    
     //* ============ [Phase] 4. Load Tokenizer ============ */
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
         custom::profiler::ScopeEventHandler handler("Load_Tokenizer");
         sp_processor = LoadSentencePieceProcessor();
     }
+
 
     //* ============ [Phase] 5. Allocate KV Cache ============ */
     std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;

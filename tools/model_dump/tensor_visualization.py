@@ -169,18 +169,20 @@ class TensorAllocationVisualizer:
                 
                 f.write("   Detailed tensor list:\n")
                 f.write(f"   {'Tensor ID':<10} {'Address':<18} {'Size':<12} {'Data Type':<10} "
-                       f"{'Usage Count':<12} {'Shared With':<15} {'Used By Nodes'}\n")
+                       f"{'Usage Count':<12} {'Shared With':<30} {'Used By Nodes'}\n")
                 f.write("   " + "-" * 140 + "\n")
                 
                 for tensor in report_data['tensors_by_type'][alloc_type]:
                     shared_str = f"[{', '.join(map(str, tensor['shared_with']))}]" if tensor['shared_with'] else "None"
                     nodes_str = f"Nodes: {', '.join(map(str, tensor['used_by_nodes']))}" if tensor['used_by_nodes'] else "Unused"
+                    buf = tensor.get('buffer_id')
+                    buf_str = str(buf) if buf is not None else '-'
                     f.write(f"   {tensor['tensor_id']:<10} "
                            f"{tensor['address_hex']:<18} "
                            f"{tensor['size_formatted']:<12} "
                            f"{tensor['data_type']:<10} "
                            f"{tensor['usage_count']:<12} "
-                           f"{shared_str:<15} "
+                           f"{shared_str:<30} "
                            f"{nodes_str}\n")
                 f.write("\n")
 
@@ -216,18 +218,20 @@ class TensorAllocationVisualizer:
             
             print("   Detailed tensor list:")
             print(f"   {'Tensor ID':<10} {'Address':<18} {'Size':<12} {'Data Type':<10} "
-                  f"{'Usage Count':<12} {'Shared With':<15} {'Used By Nodes'}")
+                  f"{'Usage Count':<12} {'Shared With':<30} {'Used By Nodes'}")
             print("   " + "-" * 140)
             
             for tensor in report_data['tensors_by_type'][alloc_type]:
                 shared_str = f"[{', '.join(map(str, tensor['shared_with']))}]" if tensor['shared_with'] else "None"
                 nodes_str = f"Nodes: {', '.join(map(str, tensor['used_by_nodes']))}" if tensor['used_by_nodes'] else "Unused"
+                buf = tensor.get('buffer_id')
+                buf_str = str(buf) if buf is not None else '-'
                 print(f"   {tensor['tensor_id']:<10} "
                       f"{tensor['address_hex']:<18} "
                       f"{tensor['size_formatted']:<12} "
                       f"{tensor['data_type']:<10} "
                       f"{tensor['usage_count']:<12} "
-                      f"{shared_str:<15} "
+                      f"{shared_str:<30} "
                       f"{nodes_str}")
             print()
             
@@ -263,20 +267,39 @@ class TensorAllocationVisualizer:
                     continue
 
                 # Extract tensor information from this line
-                # Pattern matches: "      Input 0: 39 Data Address: 0x... Type: INT32 Allocation Type: Arena RW Bytes: 4 Shape: [1, 1]"
-                tensor_match = re.search(
-                    r'(?:Input|Output|Temporary)\s+\d+:\s+(\d+)\s+Data\s+Address:\s+(0x[0-9a-fA-F]+)\s+Type:\s+(\w+)\s+Allocation\s+Type:\s+([\w\s]+?)\s+Bytes:\s+(\d+)\s+Shape:\s*\[(.*?)\]',
-                    line
+                # New pattern (2025-09): "Input 0: 39 (buffer 40) Data Address: 0x... Type: ... Allocation Type: ... Bytes: ... Shape: [...]"
+                pattern_with_buffer = re.compile(
+                    r'(?:Input|Output|Temporary)\s+\d+:\s+(\d+)\s+\(buffer\s+(-?\d+)\)\s+Data\s+Address:\s+(0x[0-9a-fA-F]+)\s+Type:\s+(\w+)\s+Allocation\s+Type:\s+([\w\s]+?)\s+Bytes:\s+(\d+)\s+Shape:\s*\[(.*?)\]'
+                )
+                # Legacy pattern (no buffer id)
+                pattern_legacy = re.compile(
+                    r'(?:Input|Output|Temporary)\s+\d+:\s+(\d+)\s+Data\s+Address:\s+(0x[0-9a-fA-F]+)\s+Type:\s+(\w+)\s+Allocation\s+Type:\s+([\w\s]+?)\s+Bytes:\s+(\d+)\s+Shape:\s*\[(.*?)\]'
                 )
 
-                if tensor_match:
+                m = pattern_with_buffer.search(line)
+                legacy = False
+                if not m:
+                    m = pattern_legacy.search(line)
+                    legacy = m is not None
+
+                if m:
                     try:
-                        tensor_index = int(tensor_match.group(1))
-                        address_hex = tensor_match.group(2)
-                        data_type = tensor_match.group(3)
-                        alloc_type = tensor_match.group(4).strip()
-                        bytes_size = int(tensor_match.group(5))
-                        shape = tensor_match.group(6)
+                        if legacy:
+                            tensor_index = int(m.group(1))
+                            address_hex = m.group(2)
+                            data_type = m.group(3)
+                            alloc_type = m.group(4).strip()
+                            bytes_size = int(m.group(5))
+                            shape = m.group(6)
+                            buffer_id = None
+                        else:
+                            tensor_index = int(m.group(1))
+                            buffer_id = int(m.group(2))
+                            address_hex = m.group(3)
+                            data_type = m.group(4)
+                            alloc_type = m.group(5).strip()
+                            bytes_size = int(m.group(6))
+                            shape = m.group(7)
 
                         # Update tensor usage
                         tensor_usage[tensor_index]['count'] += 1
@@ -320,7 +343,8 @@ class TensorAllocationVisualizer:
                             'size': bytes_size,
                             'data_type': data_type,
                             'type': normalized_type,
-                            'shape': shape
+                            'shape': shape,
+                            'buffer_id': buffer_id
                         }
                         
                         tensors.append(tensor)
@@ -384,17 +408,17 @@ class TensorAllocationVisualizer:
             # If we have a current node, look for tensor information
             if current_node:
                 # Extract input tensors
-                input_matches = re.finditer(r'Input\s+\d+:\s+(\d+)\s+Data\s+Address', line)
+                input_matches = re.finditer(r'Input\s+\d+:\s+(\d+)(?:\s+\(buffer\s+-?\d+\))?\s+Data\s+Address', line)
                 for match in input_matches:
                     current_node['inputs'].append(int(match.group(1)))
                     
                 # Extract output tensors
-                output_matches = re.finditer(r'Output\s+\d+:\s+(\d+)\s+Data\s+Address', line)
+                output_matches = re.finditer(r'Output\s+\d+:\s+(\d+)(?:\s+\(buffer\s+-?\d+\))?\s+Data\s+Address', line)
                 for match in output_matches:
                     current_node['outputs'].append(int(match.group(1)))
                     
                 # Extract temporary tensors
-                temp_matches = re.finditer(r'Temporary\s+\d+:\s+(\d+)\s+Data\s+Address', line)
+                temp_matches = re.finditer(r'Temporary\s+\d+:\s+(\d+)(?:\s+\(buffer\s+-?\d+\))?\s+Data\s+Address', line)
                 for match in temp_matches:
                     current_node['temporaries'].append(int(match.group(1)))
         
@@ -456,7 +480,7 @@ class TensorAllocationVisualizer:
             json_data = {
                 'report_data': report_data,
                 'tensor_usage': {
-                    k: {'count': v['count'], 'nodes': sorted(v['nodes'])}
+                    int(k): {'count': v['count'], 'nodes': sorted(list(v['nodes']))}
                     for k, v in tensor_usage.items()
                 },
                 'execution_plan': execution_plan

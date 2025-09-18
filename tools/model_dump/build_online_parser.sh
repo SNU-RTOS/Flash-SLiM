@@ -19,7 +19,7 @@ ROOT_PATH="$(cd "$SCRIPT_PATH/../../" && pwd)"
 
 cd "$ROOT_PATH"
 
-bazel build tools/model_dump:$BIN_NAME
+bazel build tools/model_dump:$BIN_NAME --copt=-DUSE_WEIGHT_STREAMING
 pwd
 if [[ -f $SCRIPT_PATH/$BIN_NAME ]]; then
     rm -f $SCRIPT_PATH/$BIN_NAME 
