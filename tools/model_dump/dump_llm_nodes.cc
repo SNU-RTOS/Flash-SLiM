@@ -22,6 +22,9 @@
 #include "tflite/model_builder.h"
 #include "tflite/profiling/profiler.h"
 
+#include "tflite/delegates/xnnpack/weight_cache.h"
+#include "tflite/delegates/xnnpack/streaming_weight_cache.h"
+
 // ----------------------
 // absl::FLAGS definition
 // ----------------------
@@ -31,107 +34,145 @@ ABSL_FLAG(std::string, dump_file_path, "", "Path to save the log file. If empty,
 ABSL_FLAG(bool, dump_tensor_details, false, "Whether to dump detailed tensor information for each node.");
 ABSL_FLAG(bool, op_tensor_byte_stats, false, "Whether to append per-operator aggregated tensor bytes (Mmap/Arena) on each operator line.");
 
+#ifdef USE_WEIGHT_STREAMING
+using WeightCacheProviderT = tflite::xnnpack::StreamingWeightCacheProvider;
+#else
+using WeightCacheProviderT = tflite::xnnpack::MMapWeightCacheProvider;
+#endif
+
+static tflite::xnnpack::StreamingWeightCacheProvider g_cache_provider;
+
 namespace
 {
     // Map: subgraph -> [tensor_idx -> buffer_idx]
     std::vector<std::vector<int>> g_tensor_buffer_map;
 
-    void SetupBufferIndexMap(const tflite::FlatBufferModel* fb_model_holder) {
+    void SetupBufferIndexMap(const tflite::FlatBufferModel *fb_model_holder)
+    {
         g_tensor_buffer_map.clear();
-        if (!fb_model_holder) return;
-        const ::tflite::Model* fb_model = fb_model_holder->GetModel();
-        if (!fb_model) return;
+        if (!fb_model_holder)
+            return;
+        const ::tflite::Model *fb_model = fb_model_holder->GetModel();
+        if (!fb_model)
+            return;
         auto subgraphs = fb_model->subgraphs();
-        if (!subgraphs) return;
+        if (!subgraphs)
+            return;
         g_tensor_buffer_map.resize(subgraphs->size());
-        for (size_t sg = 0; sg < subgraphs->size(); ++sg) {
-            const ::tflite::SubGraph* s = subgraphs->Get(sg);
+        for (size_t sg = 0; sg < subgraphs->size(); ++sg)
+        {
+            const ::tflite::SubGraph *s = subgraphs->Get(sg);
             auto tensors = s ? s->tensors() : nullptr;
             size_t n = tensors ? tensors->size() : 0;
-            auto& map_vec = g_tensor_buffer_map[sg];
+            auto &map_vec = g_tensor_buffer_map[sg];
             map_vec.resize(n, -1);
-            for (size_t i = 0; i < n; ++i) {
-                const ::tflite::Tensor* t = tensors->Get(i);
+            for (size_t i = 0; i < n; ++i)
+            {
+                const ::tflite::Tensor *t = tensors->Get(i);
                 map_vec[i] = t ? static_cast<int>(t->buffer()) : -1;
             }
         }
     }
 
-    inline int GetBufferIndexFor(int subgraph_idx, int tensor_idx) {
-        if (subgraph_idx < 0 || subgraph_idx >= static_cast<int>(g_tensor_buffer_map.size())) return -1;
-        const auto& v = g_tensor_buffer_map[subgraph_idx];
-        if (tensor_idx < 0 || tensor_idx >= static_cast<int>(v.size())) return -1;
+    inline int GetBufferIndexFor(int subgraph_idx, int tensor_idx)
+    {
+        if (subgraph_idx < 0 || subgraph_idx >= static_cast<int>(g_tensor_buffer_map.size()))
+            return -1;
+        const auto &v = g_tensor_buffer_map[subgraph_idx];
+        if (tensor_idx < 0 || tensor_idx >= static_cast<int>(v.size()))
+            return -1;
         return v[tensor_idx];
     }
     // Human-readable byte formatting helper
-    std::string FormatBytes(size_t bytes) {
+    std::string FormatBytes(size_t bytes)
+    {
         const double kb = 1024.0;
         const double mb = kb * 1024.0;
         const double gb = mb * 1024.0;
         std::ostringstream oss;
-        oss.setf(std::ios::fixed); oss<<std::setprecision(2);
-        if (bytes >= (size_t)gb)      { oss << (bytes / gb) << "GB"; }
-        else if (bytes >= (size_t)mb) { oss << (bytes / mb) << "MB"; }
-        else if (bytes >= (size_t)kb) { oss << (bytes / kb) << "KB"; }
-        else                          { oss.unsetf(std::ios::floatfield); oss << bytes << "B"; }
+        oss.setf(std::ios::fixed);
+        oss << std::setprecision(2);
+        if (bytes >= (size_t)gb)
+        {
+            oss << (bytes / gb) << "GB";
+        }
+        else if (bytes >= (size_t)mb)
+        {
+            oss << (bytes / mb) << "MB";
+        }
+        else if (bytes >= (size_t)kb)
+        {
+            oss << (bytes / kb) << "KB";
+        }
+        else
+        {
+            oss.unsetf(std::ios::floatfield);
+            oss << bytes << "B";
+        }
         return oss.str();
     }
     // --------------------------------------------------------------------------
     // Print detailed tensor information (migrated from text_generator_main.cc)
     // --------------------------------------------------------------------------
-    void print_tensor_details(int tensor_idx, TfLiteTensor* tensor, std::ostream* output = nullptr) {
-        std::ostream& out = (output != nullptr) ? *output : std::cout;
-        
-        if (!tensor) {
+    void print_tensor_details(int tensor_idx, TfLiteTensor *tensor, std::ostream *output = nullptr)
+    {
+        std::ostream &out = (output != nullptr) ? *output : std::cout;
+
+        if (!tensor)
+        {
             out << "Tensor " << tensor_idx << " is NULL\n";
             return;
         }
-        
-        void* tensor_data_address = tensor->data.raw;
+
+        void *tensor_data_address = tensor->data.raw;
         out << "Data Address: " << tensor_data_address << " ";
 
         // Tensor Type
-        const char* type_name = TfLiteTypeGetName(tensor->type);
+        const char *type_name = TfLiteTypeGetName(tensor->type);
         out << "Type: " << (type_name ? type_name : "Unknown") << " ";
 
         // Tensor Allocation Type
         out << "Allocation Type: ";
-        switch (tensor->allocation_type) {
-            case kTfLiteArenaRw:
-                out << "Arena RW " << "Bytes: " << tensor->bytes << " ";
-                break;
-            case kTfLiteArenaRwPersistent:
-                out << "Arena Persistent " << "Bytes: " << tensor->bytes << " ";
-                break;
-            case kTfLiteMmapRo:
-                out << "Mmap " << "Bytes: " << tensor->bytes << " ";
-                break;
-            case kTfLiteDynamic:
-                out << "Dynamic " << "Bytes: " << tensor->bytes << " ";
-                break;
-            case kTfLiteCustom:
-                out << "Custom " << "Bytes: " << tensor->bytes << " ";
-                break;
-            case kTfLitePersistentRo:
-                out << "PersistentRo " << "Bytes: " << tensor->bytes << " ";
-                break;
-            case kTfLiteVariantObject:
-                out << "Variant " << "Bytes: " << tensor->bytes << " ";
-                break;
-            case kTfLiteMemNone:
-                out << "MemNone " << "Bytes: 0 ";
-                break;
-            default:
-                out << "Unknown " << "Bytes: 0 ";
-                break;
+        switch (tensor->allocation_type)
+        {
+        case kTfLiteArenaRw:
+            out << "Arena RW " << "Bytes: " << tensor->bytes << " ";
+            break;
+        case kTfLiteArenaRwPersistent:
+            out << "Arena Persistent " << "Bytes: " << tensor->bytes << " ";
+            break;
+        case kTfLiteMmapRo:
+            out << "Mmap " << "Bytes: " << tensor->bytes << " ";
+            break;
+        case kTfLiteDynamic:
+            out << "Dynamic " << "Bytes: " << tensor->bytes << " ";
+            break;
+        case kTfLiteCustom:
+            out << "Custom " << "Bytes: " << tensor->bytes << " ";
+            break;
+        case kTfLitePersistentRo:
+            out << "PersistentRo " << "Bytes: " << tensor->bytes << " ";
+            break;
+        case kTfLiteVariantObject:
+            out << "Variant " << "Bytes: " << tensor->bytes << " ";
+            break;
+        case kTfLiteMemNone:
+            out << "MemNone " << "Bytes: 0 ";
+            break;
+        default:
+            out << "Unknown " << "Bytes: 0 ";
+            break;
         }
 
         // Tensor Shape
         out << "Shape: [";
-        if(tensor->dims && tensor->dims->size > 0){
-            for (int dim_idx = 0; dim_idx < tensor->dims->size; ++dim_idx) {
+        if (tensor->dims && tensor->dims->size > 0)
+        {
+            for (int dim_idx = 0; dim_idx < tensor->dims->size; ++dim_idx)
+            {
                 out << tensor->dims->data[dim_idx];
-                if (dim_idx < tensor->dims->size - 1) out << ", ";
+                if (dim_idx < tensor->dims->size - 1)
+                    out << ", ";
             }
         }
         out << "]\n";
@@ -145,7 +186,9 @@ namespace
         auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
         std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
         delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-        delegate_options.num_threads = 4; // Default num_threads for dump tool
+        delegate_options.weight_cache_provider = &g_cache_provider;
+        delegate_options.num_threads = 1; // Default num_threads for dump tool
+
         if (interpreter->ModifyGraphWithDelegate(
                 tflite::Interpreter::TfLiteDelegatePtr(
                     TfLiteXNNPackDelegateCreate(&delegate_options),
@@ -267,19 +310,31 @@ namespace
             // Optional per-op tensor byte stats
             size_t op_bytes_mmap = 0;
             size_t op_bytes_arena = 0;
-            if (absl::GetFlag(FLAGS_op_tensor_byte_stats)) {
-                auto collect = [&](const TfLiteIntArray* arr){
-                    if (!arr) return;
-                    for (int i = 0; i < arr->size; ++i) {
+            if (absl::GetFlag(FLAGS_op_tensor_byte_stats))
+            {
+                auto collect = [&](const TfLiteIntArray *arr)
+                {
+                    if (!arr)
+                        return;
+                    for (int i = 0; i < arr->size; ++i)
+                    {
                         int tidx = arr->data[i];
-                        if (tidx < 0) continue;
-                        TfLiteTensor* t = subgraph->tensor(tidx);
-                        if (!t) continue;
-                        switch (t->allocation_type) {
-                            case kTfLiteMmapRo: op_bytes_mmap += t->bytes; break;
-                            case kTfLiteArenaRw:
-                            case kTfLiteArenaRwPersistent: op_bytes_arena += t->bytes; break;
-                            default: break;
+                        if (tidx < 0)
+                            continue;
+                        TfLiteTensor *t = subgraph->tensor(tidx);
+                        if (!t)
+                            continue;
+                        switch (t->allocation_type)
+                        {
+                        case kTfLiteMmapRo:
+                            op_bytes_mmap += t->bytes;
+                            break;
+                        case kTfLiteArenaRw:
+                        case kTfLiteArenaRwPersistent:
+                            op_bytes_arena += t->bytes;
+                            break;
+                        default:
+                            break;
                         }
                     }
                 };
@@ -290,26 +345,33 @@ namespace
 
             out << indent_str << "  " << std::setw(4) << std::setfill(' ') << absolute_op_counter << ": "
                 << "[" << std::setw(4) << std::setfill('0') << idx << "] " << op_name;
-            if (absl::GetFlag(FLAGS_op_tensor_byte_stats)) {
+            if (absl::GetFlag(FLAGS_op_tensor_byte_stats))
+            {
                 out << " (Mmap=" << FormatBytes(op_bytes_mmap) << ", Arena=" << FormatBytes(op_bytes_arena) << ")";
             }
             absolute_op_counter++;
 
             // Dump detailed tensor information if requested
-            if (absl::GetFlag(FLAGS_dump_tensor_details)) {
-                const auto* node_and_reg = subgraph->node_and_registration(idx);
+            if (absl::GetFlag(FLAGS_dump_tensor_details))
+            {
+                const auto *node_and_reg = subgraph->node_and_registration(idx);
 
                 std::string tensor_indent_str(indent + 2, ' ');
-                if (node_and_reg) {
-                    const TfLiteNode* node = &node_and_reg->first;
-                    
+                if (node_and_reg)
+                {
+                    const TfLiteNode *node = &node_and_reg->first;
+
                     // Print input tensors
-                    if (node->inputs && node->inputs->size > 0) {
-                        out << std::endl << tensor_indent_str << "    Input Tensors:" << std::endl;
-                        for (int i = 0; i < node->inputs->size; ++i) {
+                    if (node->inputs && node->inputs->size > 0)
+                    {
+                        out << std::endl
+                            << tensor_indent_str << "    Input Tensors:" << std::endl;
+                        for (int i = 0; i < node->inputs->size; ++i)
+                        {
                             int tensor_idx = node->inputs->data[i];
-                            if (tensor_idx >= 0) {
-                                auto* tensor = subgraph->tensor(tensor_idx);
+                            if (tensor_idx >= 0)
+                            {
+                                auto *tensor = subgraph->tensor(tensor_idx);
                                 int buffer_idx = GetBufferIndexFor(subgraph_idx, tensor_idx);
                                 out << tensor_indent_str << "      Input " << i << ": " << tensor_idx
                                     << " (buffer " << buffer_idx << ") ";
@@ -317,14 +379,17 @@ namespace
                             }
                         }
                     }
-                    
+
                     // Print output tensors
-                    if (node->outputs && node->outputs->size > 0) {
+                    if (node->outputs && node->outputs->size > 0)
+                    {
                         out << tensor_indent_str << "    Output Tensors:" << std::endl;
-                        for (int i = 0; i < node->outputs->size; ++i) {
+                        for (int i = 0; i < node->outputs->size; ++i)
+                        {
                             int tensor_idx = node->outputs->data[i];
-                            if (tensor_idx >= 0) {
-                                auto* tensor = subgraph->tensor(tensor_idx);
+                            if (tensor_idx >= 0)
+                            {
+                                auto *tensor = subgraph->tensor(tensor_idx);
                                 int buffer_idx = GetBufferIndexFor(subgraph_idx, tensor_idx);
                                 out << tensor_indent_str << "      Output " << i << ": " << tensor_idx
                                     << " (buffer " << buffer_idx << ") ";
@@ -332,14 +397,17 @@ namespace
                             }
                         }
                     }
-                    
+
                     // Print temporary tensors if any
-                    if (node->temporaries && node->temporaries->size > 0) {
+                    if (node->temporaries && node->temporaries->size > 0)
+                    {
                         out << tensor_indent_str << "    Temporary Tensors:" << std::endl;
-                        for (int i = 0; i < node->temporaries->size; ++i) {
+                        for (int i = 0; i < node->temporaries->size; ++i)
+                        {
                             int tensor_idx = node->temporaries->data[i];
-                            if (tensor_idx >= 0) {
-                                auto* tensor = subgraph->tensor(tensor_idx);
+                            if (tensor_idx >= 0)
+                            {
+                                auto *tensor = subgraph->tensor(tensor_idx);
                                 int buffer_idx = GetBufferIndexFor(subgraph_idx, tensor_idx);
                                 out << tensor_indent_str << "      Temporary " << i << ": " << tensor_idx
                                     << " (buffer " << buffer_idx << ") ";
@@ -440,6 +508,33 @@ namespace
         return sig_index;
     }
 
+#include <fstream>
+#include <iostream>
+#include <string>
+
+    size_t GetPageCacheKB()
+    {
+        std::ifstream meminfo("/proc/meminfo");
+        if (!meminfo.is_open())
+        {
+            std::cerr << "Failed to open /proc/meminfo\n";
+            return 0;
+        }
+
+        std::string key;
+        size_t value;
+        std::string unit;
+
+        while (meminfo >> key >> value >> unit)
+        {
+            if (key == "Cached:")
+            {
+                return value; // in KB
+            }
+        }
+        return 0;
+    }
+
 } // end anonymous namespace
 
 // =======================================================================
@@ -492,6 +587,12 @@ int main(int argc, char *argv[])
     // InspectSelectedSignature(interpreter.get(), sig_index, &dump_file);
 
     //* ============ Apply Delegate ============ */
+    // create 4GB buffer for weight caching
+    // 
+    constexpr size_t buf_size = 4ULL * 1024 * 1024 * 1024;
+    g_cache_provider.InitManagedBuffer(buf_size);
+    g_cache_provider.PrefetchFromFile(absl::GetFlag(FLAGS_tflite_model));
+
     if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
         ApplyXNNPACKWithWeightCaching(interpreter.get());
 
@@ -505,7 +606,158 @@ int main(int argc, char *argv[])
     prefill_runner->AllocateTensors();
     decode_runner->AllocateTensors();
 
+
+
+    g_cache_provider.DumpWeightCacheStructureToFile("weight_cache_structure.log");
+    g_cache_provider.DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
+    //! TODO -> Hooking logic for Weight Streaming will go here
+    // --- Begin: Runtime validation of pointer → identifier → cache lookup → address ---
+    {
+      // 1) Build tensor-index → identifier map for the selected signature subgraph
+      int sg_idx = interpreter->GetSubgraphIndexFromSignature(selected_signature_key.c_str());
+      tflite::Subgraph* sg = interpreter->subgraph(sg_idx);
+      const size_t num_tensors = static_cast<size_t>(sg->tensors_size());
+
+      // Copy TfLiteTensor structs (data.data pointer values remain valid)
+      std::vector<TfLiteTensor> tensors_copy;
+      tensors_copy.reserve(num_tensors);
+      for (size_t i = 0; i < num_tensors; ++i) {
+        TfLiteTensor* t = sg->tensor(static_cast<int>(i));
+        tensors_copy.push_back(t ? *t : TfLiteTensor{});
+      }
+
+      // id_map: tensor index -> buffer identifier (we reuse FlatBuffer buffer index as a stable ID)
+      std::unordered_map<size_t, size_t> id_map;
+      if (sg_idx >= 0) {
+        const auto& map_vec = g_tensor_buffer_map[sg_idx];
+        for (size_t i = 0; i < num_tensors && i < map_vec.size(); ++i) {
+          if (map_vec[i] >= 0) id_map.emplace(i, static_cast<size_t>(map_vec[i]));
+        }
+      }
+
+      // Register pointer → identifier mappings to the cache provider
+      g_cache_provider.MapTensorIdentifiers(tensors_copy.data(), tensors_copy.size(), id_map);
+
+      // 2) Parse cache dump to collect candidate (weights_id -> [pack_algo_id...])
+      std::unordered_map<size_t, std::vector<size_t>> weights_to_algos;
+      {
+        std::string dump = g_cache_provider.DumpWeightCacheStructure();
+        std::istringstream iss(dump);
+        std::string line;
+        bool in_table = false;
+        while (std::getline(iss, line)) {
+          if (!in_table) {
+            if (line.find("Buffer Details:") != std::string::npos) {
+              // Skip header/separator lines
+              std::getline(iss, line); // header
+              std::getline(iss, line); // separator
+              in_table = true;
+            }
+            continue;
+          }
+          if (line.empty()) break;
+
+          // Expect lines like:
+          // "idx | pack_algo | weights_id | bias_id | offset | size | absolute | [range]"
+          // Split by " | "
+          std::vector<std::string> cols;
+          size_t start = 0;
+          while (true) {
+            size_t pos = line.find(" | ", start);
+            if (pos == std::string::npos) {
+              cols.push_back(line.substr(start));
+              break;
+            }
+            cols.push_back(line.substr(start, pos - start));
+            start = pos + 3;
+          }
+          if (cols.size() < 6) continue;
+
+          auto trim = [](std::string s) {
+            size_t b = s.find_first_not_of(" \t");
+            size_t e = s.find_last_not_of(" \t");
+            if (b == std::string::npos) return std::string();
+            return s.substr(b, e - b + 1);
+          };
+
+          // cols[1] = pack algo, cols[2] = weights id
+          try {
+            size_t pack_algo = static_cast<size_t>(std::stoull(trim(cols[1])));
+            size_t weights_id = static_cast<size_t>(std::stoull(trim(cols[2])));
+            weights_to_algos[weights_id].push_back(pack_algo);
+          } catch (...) {
+            // ignore parse errors
+          }
+        }
+      }
+
+      // 3) Validate a subset of constant tensors with cache LookUp/OffsetToAddr
+      std::ofstream vout("weight_cache_validation.log");
+      vout << "\n=== Validation (signature=" << selected_signature_key << ") ===\n";
+      size_t validated = 0, attempted = 0, max_checks = 32;
+
+      for (size_t i = 0; i < num_tensors; ++i) {
+        const TfLiteTensor& t = tensors_copy[i];
+        if (t.allocation_type != kTfLiteMmapRo && t.allocation_type != kTfLitePersistentRo) continue;
+        if (!t.data.data) continue;
+
+        auto it_id = id_map.find(i);
+        if (it_id == id_map.end()) continue;
+        size_t weights_id = it_id->second;
+
+        auto it_algos = weights_to_algos.find(weights_id);
+        if (it_algos == weights_to_algos.end() || it_algos->second.empty()) continue;
+
+        // Try candidate algos until a match is found
+        bool ok = false;
+        for (size_t algo : it_algos->second) {
+          xnn_weights_cache_look_up_key key{};
+          key.seed = algo;
+          key.kernel = t.data.data;
+          key.bias = nullptr;
+
+          size_t off = g_cache_provider.LookUp(&key);
+          if (off == SIZE_MAX) continue;
+
+          void* addr = g_cache_provider.OffsetToAddr(off);
+          vout << "Tensor[" << i << "] ptr=" << t.data.data
+               << " Buffer id=" << weights_id
+               << " algo=" << algo
+               << " -> offset=" << off
+               << " addr=" << addr << "\n";
+          ok = true;
+          ++validated;
+          break;
+        }
+        ++attempted;
+        if (!ok) {
+          vout << "Tensor[" << i << "] ptr=" << t.data.data
+               << " Buffer id=" << weights_id
+               << " -> cache MISS (no matching algo)\n";
+        }
+      }
+      vout << "Validation summary: validated=" << validated
+           << " attempted=" << attempted << "\n";
+      vout.close();
+    }
+    // --- End: Runtime validation ---
+
     //* ============ Dump Model (After Delegate) ============ */
+    std::cout << "\n\nInvoking prefill ..." << std::endl;
+    size_t cached_kb = GetPageCacheKB();
+    std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
+    prefill_runner->Invoke();
+    std::cout << "Prefill Invoke done." << std::endl;
+    cached_kb = GetPageCacheKB();
+    std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
+
+    std::cout << "\n\nInvoking decode ..." << std::endl;
+    cached_kb = GetPageCacheKB();
+    std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
+    decode_runner->Invoke();
+    std::cout << "Decode Invoke done." << std::endl;
+    cached_kb = GetPageCacheKB();
+    std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
 
     dump_file << "\n=== After Applying Delegate ===" << std::endl;
     InspectSelectedSignature(interpreter.get(), sig_index, &dump_file);
