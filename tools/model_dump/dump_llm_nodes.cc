@@ -521,130 +521,8 @@ namespace
         }
     }
 
-    // void ValidateWeightCacheMappings(tflite::Interpreter *interpreter, const std::string &selected_signature_key, const TensorToBufferIdMap &tbm)
-    // {
-    //     // --- Begin: Runtime validation of pointer of Tensor → identifier → cache lookup → real address ---
-    //     int sg_idx = interpreter->GetSubgraphIndexFromSignature(selected_signature_key.c_str());
-    //     if (sg_idx < 0)
-    //     {
-    //         std::cerr << "ValidateWeightCacheMappings: invalid signature key: " << selected_signature_key << "\n";
-    //         return;
-    //     }
 
-    //     tflite::Subgraph *sg = interpreter->subgraph(sg_idx);
-    //     if (!sg)
-    //     {
-    //         std::cerr << "ValidateWeightCacheMappings: failed to get subgraph for index: " << sg_idx << "\n";
-    //         return;
-    //     }
-
-    //     size_t num_tensors = sg->tensors_size();
-
-    //     // 1) Get TensorBufferAddress → identifier map (provider snapshot)
-    //     auto buffer_address_to_identifier = g_cache_provider.GetBufferAddressToIdentifier();
-
-    //     // 2) Snapshot provider mappings once and reuse them per tensor.
-    //     auto cache_key_to_offset = g_cache_provider.GetCacheKeyToOffset();
-
-    //     // 3) Validate a subset of constant tensors with cache LookUp/OffsetToAddr
-    //     std::ofstream vout("weight_cache_validation.log");
-
-    //     vout << "\n=== Validation (signature=" << selected_signature_key << ") ===\n";
-
-    //     // Human-friendly aligned header
-    //     vout << std::left << std::setw(8) << "Tensor" << " | "
-    //          << std::setw(18) << "Ptr" << " | -> | "
-    //          << std::setw(15) << "Pack Algo ID" << " | "
-    //          << std::setw(18) << "Weights(Buffer) ID" << " | "
-    //          << std::setw(11) << "Bias ID" << " | -> | "
-    //          << std::setw(18) << "Offset" << " | -> | "
-    //          << std::setw(18) << "Addr(used)" << "  ||  "
-    //          << std::setw(18) << "MmappedAddr" << "\n";
-    //     vout << std::string(160, '-') << "\n";
-
-    //     size_t validated = 0, attempted = 0;
-    //     for (size_t i = 0; i < num_tensors; ++i)
-    //     {
-    //         TfLiteTensor *t_ptr = sg->tensor(static_cast<int>(i));
-    //         if (!t_ptr)
-    //             continue;
-    //         const TfLiteTensor &t = *t_ptr;
-
-    //         if (t.allocation_type != kTfLiteMmapRo && t.allocation_type != kTfLitePersistentRo)
-    //             continue;
-    //         if (!t.data.data)
-    //             continue;
-
-    //         // Resolve weights_id: prefer provider's address->identifier map
-    //         uint64_t weights_id = SIZE_MAX;
-    //         auto pit = buffer_address_to_identifier.find(t.data.data);
-    //         if (pit != buffer_address_to_identifier.end())
-    //         {
-    //             weights_id = static_cast<uint64_t>(pit->second);
-    //         }
-    //         else
-    //         {
-    //             // Fallback: derive from FlatBuffer buffer id map
-    //             int fb_id = tbm.GetBufferId(sg_idx, static_cast<int>(i));
-    //             if (fb_id >= 0)
-    //                 weights_id = static_cast<uint64_t>(fb_id);
-    //             else
-    //                 continue; // cannot resolve id for this tensor
-    //         }
-
-    //         // Try candidate entries from the provider mappings that match this
-    //         // tensor's weights_id. No intermediate map is required; scanning the
-    //         // (typically small) mappings vector is simpler and avoids extra data
-    //         // structures.
-    //         bool ok = false;
-    //         for (const auto &item : cache_key_to_offset)
-    //         {
-    //             const auto &pack_id = item.first;
-    //             if (static_cast<uint64_t>(pack_id.weights_id) != weights_id)
-    //                 continue;
-    //             uint64_t algo = static_cast<uint64_t>(pack_id.pack_algorithm_id);
-    //             uint64_t bias_id = static_cast<uint64_t>(pack_id.bias_id);
-    //             std::string bias_id_str = (bias_id == SIZE_MAX) ? "None" : std::to_string(bias_id);
-    //             uint64_t off = g_cache_provider.LookUpByIds(algo, weights_id, bias_id);
-    //             if (off == SIZE_MAX)
-    //                 continue;
-
-    //             void *addr = g_cache_provider.OffsetToAddr(off);
-    //             void *mmaped_addr = g_cache_provider.GetMmappedAddr(off);
-    //             // Aligned human-readable row
-    //             {
-    //                 std::ostringstream ptrs, useds, mmaps;
-    //                 ptrs << t.data.data;
-    //                 useds << addr;
-    //                 mmaps << mmaped_addr;
-    //                 vout << std::left << std::setw(8) << i << " | "
-    //                      << std::setw(18) << ptrs.str() << " | -> | "
-    //                      << std::setw(15) << algo << " | "
-    //                      << std::setw(18) << weights_id << " | "
-    //                      << std::setw(11) << bias_id_str << " | -> | "
-    //                      << std::setw(18) << off << " | -> | "
-    //                      << std::setw(18) << useds.str() << "  ||  "
-    //                      << std::setw(18) << mmaps.str() << "\n";
-    //             }
-    //             ok = true;
-    //             ++validated;
-    //             break;
-    //         }
-    //         ++attempted;
-    //         if (!ok)
-    //         {
-    //             vout << "Tensor[" << i << "] ptr=" << t.data.data
-    //                  << " Buffer id=" << weights_id
-    //                  << " -> cache MISS (no matching algo)\n";
-    //         }
-    //     }
-    //     vout << "Validation summary: validated=" << validated
-    //          << " attempted=" << attempted << "\n";
-    //     vout.close();
-    //     // --- End: Runtime validation ---
-    // }
-
-    void ValidateWeightCacheMappings2(tflite::Interpreter *interpreter, const std::string &selected_signature_key, const TensorToBufferIdMap &tbm)
+    void ValidateWeightCacheMappings(tflite::Interpreter *interpreter, const std::string &selected_signature_key, const TensorToBufferIdMap &tbm)
     {
         // 0) Get Subgraph and tensors
         int sg_idx = interpreter->GetSubgraphIndexFromSignature(selected_signature_key.c_str());
@@ -705,8 +583,8 @@ namespace
         vout << "\n";
         vout << std::left << std::setw(9) << "Tensor ID" << " | "
              << std::setw(15) << "Buffer Address" << " | -> | "
-             << std::setw(9) << "Buffer ID" << " | "
-             << std::setw(12) << "Pack Algo ID" << " | "
+             << std::setw(9) << "Weight ID" << " | "
+             << std::setw(12) << "Pack Algo ID" << " | -> | "
              << std::setw(13) << "Offset" << " | -> | "
              << std::setw(20) << "Addr [from OffsetToAddr()]" << "  ||  "
              << std::setw(20) << "Mmapped Addr [from WeightCache]" << "\n";
@@ -757,7 +635,7 @@ namespace
                     vout << std::left << std::setw(9) << i << " | "
                          << std::setw(15) << ptrs.str() << " | -> | "
                          << std::setw(9) << weights_id << " | "
-                         << std::setw(12) << algo << " | "
+                         << std::setw(12) << algo << " | -> | "
                          << std::setw(13) << offset << " | -> | "
                          << std::setw(20) << useds.str() << "  ||  "
                          << std::setw(20) << mmaps.str() << "\n";
@@ -879,7 +757,7 @@ int main(int argc, char *argv[])
     g_cache_provider.DumpWeightCacheStructureToFile("weight_cache_structure.log");
     g_cache_provider.DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
 
-    ValidateWeightCacheMappings2(interpreter.get(), selected_signature_key, tensor_buffer_map);
+    ValidateWeightCacheMappings(interpreter.get(), selected_signature_key, tensor_buffer_map);
 
     //* ============ Dump Model (After Delegate) ============ */
     std::cout << "\n\nInvoking prefill ..." << std::endl;
