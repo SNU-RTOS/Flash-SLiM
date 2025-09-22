@@ -1,0 +1,4 @@
+usdt:./dump_llm_nodes:text_gen:op_weights
+{
+  printf("op[%d:%d] %s offset=%lld address=%p\n", arg0, arg1, str(arg2), arg3, arg4);
+}

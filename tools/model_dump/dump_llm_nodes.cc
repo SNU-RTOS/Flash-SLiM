@@ -5,6 +5,9 @@
 #include <string>
 #include <memory>
 #include <unordered_set>
+#include <vector>
+#include <cstdint>
+
 #include "tflite/schema/schema_generated.h"
 
 // abseil
@@ -34,55 +37,65 @@ ABSL_FLAG(std::string, dump_file_path, "", "Path to save the log file. If empty,
 ABSL_FLAG(bool, dump_tensor_details, false, "Whether to dump detailed tensor information for each node.");
 ABSL_FLAG(bool, op_tensor_byte_stats, false, "Whether to append per-operator aggregated tensor bytes (Mmap/Arena) on each operator line.");
 
-#ifdef USE_WEIGHT_STREAMING
-using WeightCacheProviderT = tflite::xnnpack::StreamingWeightCacheProvider;
-#else
-using WeightCacheProviderT = tflite::xnnpack::MMapWeightCacheProvider;
-#endif
-
-static tflite::xnnpack::StreamingWeightCacheProvider g_cache_provider;
-
 namespace
 {
-    // Map: subgraph -> [tensor_idx -> buffer_idx]
-    std::vector<std::vector<int>> g_tensor_buffer_map;
+#ifdef USE_WEIGHT_STREAMING
+    using WeightCacheProviderT = tflite::xnnpack::StreamingWeightCacheProvider;
+#else
+    using WeightCacheProviderT = tflite::xnnpack::MMapWeightCacheProvider;
+#endif
 
-    void SetupBufferIndexMap(const tflite::FlatBufferModel *fb_model_holder)
+    static tflite::xnnpack::StreamingWeightCacheProvider g_cache_provider;
+
+    // Small helper to map: subgraph -> [tensor_idx -> buffer_id]
+    // Maps a subgraph-local tensor index to the FlatBuffer buffer identifier.
+    class TensorToBufferIdMap
     {
-        g_tensor_buffer_map.clear();
-        if (!fb_model_holder)
-            return;
-        const ::tflite::Model *fb_model = fb_model_holder->GetModel();
-        if (!fb_model)
-            return;
-        auto subgraphs = fb_model->subgraphs();
-        if (!subgraphs)
-            return;
-        g_tensor_buffer_map.resize(subgraphs->size());
-        for (size_t sg = 0; sg < subgraphs->size(); ++sg)
+    public:
+        void BuildFromFlatBufferModel(const tflite::FlatBufferModel *fb_model_holder)
         {
-            const ::tflite::SubGraph *s = subgraphs->Get(sg);
-            auto tensors = s ? s->tensors() : nullptr;
-            size_t n = tensors ? tensors->size() : 0;
-            auto &map_vec = g_tensor_buffer_map[sg];
-            map_vec.resize(n, -1);
-            for (size_t i = 0; i < n; ++i)
+            map_.clear();
+            if (!fb_model_holder)
+                return;
+            const ::tflite::Model *fb_model = fb_model_holder->GetModel();
+            if (!fb_model)
+                return;
+            auto subgraphs = fb_model->subgraphs();
+            if (!subgraphs)
+                return;
+            map_.resize(subgraphs->size());
+            for (size_t i = 0; i < subgraphs->size(); ++i)
             {
-                const ::tflite::Tensor *t = tensors->Get(i);
-                map_vec[i] = t ? static_cast<int>(t->buffer()) : -1;
+                const ::tflite::SubGraph *subgraph = subgraphs->Get(i);
+                auto tensors = subgraph ? subgraph->tensors() : nullptr;
+                size_t n = tensors ? tensors->size() : 0;
+                auto &vec = map_[i];
+                vec.resize(n, -1);
+                for (size_t i = 0; i < n; ++i)
+                {
+                    const ::tflite::Tensor *tensor = tensors->Get(i);
+                    vec[i] = tensor ? static_cast<int>(tensor->buffer()) : -1;
+                }
             }
         }
-    }
 
-    inline int GetBufferIndexFor(int subgraph_idx, int tensor_idx)
-    {
-        if (subgraph_idx < 0 || subgraph_idx >= static_cast<int>(g_tensor_buffer_map.size()))
-            return -1;
-        const auto &v = g_tensor_buffer_map[subgraph_idx];
-        if (tensor_idx < 0 || tensor_idx >= static_cast<int>(v.size()))
-            return -1;
-        return v[tensor_idx];
-    }
+        int GetBufferId(int subgraph_idx, int tensor_idx) const
+        {
+            if (subgraph_idx < 0 || subgraph_idx >= static_cast<int>(map_.size()))
+                return -1;
+            const auto &v = map_[subgraph_idx];
+            if (tensor_idx < 0 || tensor_idx >= static_cast<int>(v.size()))
+                return -1;
+            return v[tensor_idx];
+        }
+
+        // Number of subgraphs represented in the map (0 if empty)
+        size_t NumSubgraphs() const { return map_.size(); }
+
+    private:
+        std::vector<std::vector<int>> map_;
+    };
+
     // Human-readable byte formatting helper
     std::string FormatBytes(size_t bytes)
     {
@@ -114,7 +127,7 @@ namespace
     // --------------------------------------------------------------------------
     // Print detailed tensor information (migrated from text_generator_main.cc)
     // --------------------------------------------------------------------------
-    void print_tensor_details(int tensor_idx, TfLiteTensor *tensor, std::ostream *output = nullptr)
+    void PrintTensorDetail(int tensor_idx, TfLiteTensor *tensor, std::ostream *output = nullptr)
     {
         std::ostream &out = (output != nullptr) ? *output : std::cout;
 
@@ -178,29 +191,7 @@ namespace
         out << "]\n";
     }
 
-    // --------------------------------------------------------------------------
-    // Utility for applying XNNPACK weight caching
-    // --------------------------------------------------------------------------
-    void ApplyXNNPACKWithWeightCaching(tflite::Interpreter *interpreter)
-    {
-        auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
-        std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
-        delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-        delegate_options.weight_cache_provider = &g_cache_provider;
-        delegate_options.num_threads = 1; // Default num_threads for dump tool
-
-        if (interpreter->ModifyGraphWithDelegate(
-                tflite::Interpreter::TfLiteDelegatePtr(
-                    TfLiteXNNPackDelegateCreate(&delegate_options),
-                    [](TfLiteDelegate *delegate)
-                    { TfLiteXNNPackDelegateDelete(delegate); })) != kTfLiteOk)
-        {
-            std::cerr << "❌ Failed to apply XNNPACK delegate\n";
-            exit(1);
-        }
-    }
-
-    void InspectExecutionPlan(tflite::Interpreter *interpreter, int subgraph_idx, std::ostream *output = nullptr, int indent = 0)
+    void InspectExecutionPlan(tflite::Interpreter *interpreter, int subgraph_idx, const TensorToBufferIdMap &tbm, std::ostream *output = nullptr, int indent = 0)
     {
         std::ostream &out = (output != nullptr) ? *output : std::cout;
         std::string indent_str(indent, ' ');
@@ -372,10 +363,10 @@ namespace
                             if (tensor_idx >= 0)
                             {
                                 auto *tensor = subgraph->tensor(tensor_idx);
-                                int buffer_idx = GetBufferIndexFor(subgraph_idx, tensor_idx);
+                                int buffer_idx = tbm.GetBufferId(subgraph_idx, tensor_idx);
                                 out << tensor_indent_str << "      Input " << i << ": " << tensor_idx
                                     << " (buffer " << buffer_idx << ") ";
-                                print_tensor_details(tensor_idx, tensor, output);
+                                PrintTensorDetail(tensor_idx, tensor, output);
                             }
                         }
                     }
@@ -390,10 +381,10 @@ namespace
                             if (tensor_idx >= 0)
                             {
                                 auto *tensor = subgraph->tensor(tensor_idx);
-                                int buffer_idx = GetBufferIndexFor(subgraph_idx, tensor_idx);
+                                int buffer_idx = tbm.GetBufferId(subgraph_idx, tensor_idx);
                                 out << tensor_indent_str << "      Output " << i << ": " << tensor_idx
                                     << " (buffer " << buffer_idx << ") ";
-                                print_tensor_details(tensor_idx, tensor, output);
+                                PrintTensorDetail(tensor_idx, tensor, output);
                             }
                         }
                     }
@@ -408,10 +399,10 @@ namespace
                             if (tensor_idx >= 0)
                             {
                                 auto *tensor = subgraph->tensor(tensor_idx);
-                                int buffer_idx = GetBufferIndexFor(subgraph_idx, tensor_idx);
+                                int buffer_idx = tbm.GetBufferId(subgraph_idx, tensor_idx);
                                 out << tensor_indent_str << "      Temporary " << i << ": " << tensor_idx
                                     << " (buffer " << buffer_idx << ") ";
-                                print_tensor_details(tensor_idx, tensor, output);
+                                PrintTensorDetail(tensor_idx, tensor, output);
                             }
                         }
                     }
@@ -426,13 +417,13 @@ namespace
             else if (reg->builtin_code == tflite::BuiltinOperator_STABLEHLO_COMPOSITE)
             {
                 auto *op_state = reinterpret_cast<State *>(node->user_data);
-                int subgraph_idx = op_state->subgraph_index;
-                auto decomposition_subgraph = interpreter->subgraph(subgraph_idx);
+                int subgraph_idx_child = op_state->subgraph_index;
+                auto decomposition_subgraph = interpreter->subgraph(subgraph_idx_child);
                 auto tmp_name = decomposition_subgraph->GetName();
-                out << " (→ Subgraph " << subgraph_idx << " :" << tmp_name << ")" << std::endl;
+                out << " (→ Subgraph " << subgraph_idx_child << " :" << tmp_name << ")" << std::endl;
                 out << delegate_indent_str << "-------------------" << std::endl;
                 // increase indent by 2 spaces for nested subgraph
-                InspectExecutionPlan(interpreter, subgraph_idx, output, indent + 4);
+                InspectExecutionPlan(interpreter, subgraph_idx_child, tbm, output, indent + 4);
                 out << delegate_indent_str << "-------------------" << std::endl;
             }
             else
@@ -442,7 +433,7 @@ namespace
         }
     }
 
-    void InspectSignatureExecutionPlan(tflite::Interpreter *interpreter, const std::string &signature_key, std::ostream *output = nullptr, int indent = 0)
+    void InspectSignatureExecutionPlan(tflite::Interpreter *interpreter, const std::string &signature_key, const TensorToBufferIdMap &tbm, std::ostream *output = nullptr, int indent = 0)
     {
         std::ostream &out = (output != nullptr) ? *output : std::cout;
 
@@ -454,11 +445,11 @@ namespace
             return;
         }
         out << std::endl;
-        InspectExecutionPlan(interpreter, subgraph_idx, output, indent);
+        InspectExecutionPlan(interpreter, subgraph_idx, tbm, output, indent);
         out << std::endl; // spacing after subgraph dump
     }
 
-    void InspectSelectedSignature(tflite::Interpreter *interpreter, int sig_index, std::ostream *output = nullptr, int indent = 2)
+    void InspectSelectedSignature(tflite::Interpreter *interpreter, int sig_index, const TensorToBufferIdMap &tbm, std::ostream *output = nullptr, int indent = 2)
     {
         std::ostream &out = (output != nullptr) ? *output : std::cout;
 
@@ -470,7 +461,7 @@ namespace
         }
 
         const std::string &signature_key = *signature_keys[sig_index];
-        InspectSignatureExecutionPlan(interpreter, signature_key, output, indent);
+        InspectSignatureExecutionPlan(interpreter, signature_key, tbm, output, indent);
     }
 
     int GetSignatureIndexFromUser(tflite::Interpreter *interpreter)
@@ -508,9 +499,286 @@ namespace
         return sig_index;
     }
 
-#include <fstream>
-#include <iostream>
-#include <string>
+    // --------------------------------------------------------------------------
+    // Utility for applying XNNPACK weight caching
+    // --------------------------------------------------------------------------
+    void ApplyXNNPACKWithWeightCaching(tflite::Interpreter *interpreter)
+    {
+        auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
+        std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
+        delegate_options.weight_cache_file_path = weight_cache_path.c_str();
+        delegate_options.weight_cache_provider = &g_cache_provider;
+        delegate_options.num_threads = 1; // Default num_threads for dump tool
+
+        if (interpreter->ModifyGraphWithDelegate(
+                tflite::Interpreter::TfLiteDelegatePtr(
+                    TfLiteXNNPackDelegateCreate(&delegate_options),
+                    [](TfLiteDelegate *delegate)
+                    { TfLiteXNNPackDelegateDelete(delegate); })) != kTfLiteOk)
+        {
+            std::cerr << "❌ Failed to apply XNNPACK delegate\n";
+            exit(1);
+        }
+    }
+
+    // void ValidateWeightCacheMappings(tflite::Interpreter *interpreter, const std::string &selected_signature_key, const TensorToBufferIdMap &tbm)
+    // {
+    //     // --- Begin: Runtime validation of pointer of Tensor → identifier → cache lookup → real address ---
+    //     int sg_idx = interpreter->GetSubgraphIndexFromSignature(selected_signature_key.c_str());
+    //     if (sg_idx < 0)
+    //     {
+    //         std::cerr << "ValidateWeightCacheMappings: invalid signature key: " << selected_signature_key << "\n";
+    //         return;
+    //     }
+
+    //     tflite::Subgraph *sg = interpreter->subgraph(sg_idx);
+    //     if (!sg)
+    //     {
+    //         std::cerr << "ValidateWeightCacheMappings: failed to get subgraph for index: " << sg_idx << "\n";
+    //         return;
+    //     }
+
+    //     size_t num_tensors = sg->tensors_size();
+
+    //     // 1) Get TensorBufferAddress → identifier map (provider snapshot)
+    //     auto buffer_address_to_identifier = g_cache_provider.GetBufferAddressToIdentifier();
+
+    //     // 2) Snapshot provider mappings once and reuse them per tensor.
+    //     auto cache_key_to_offset = g_cache_provider.GetCacheKeyToOffset();
+
+    //     // 3) Validate a subset of constant tensors with cache LookUp/OffsetToAddr
+    //     std::ofstream vout("weight_cache_validation.log");
+
+    //     vout << "\n=== Validation (signature=" << selected_signature_key << ") ===\n";
+
+    //     // Human-friendly aligned header
+    //     vout << std::left << std::setw(8) << "Tensor" << " | "
+    //          << std::setw(18) << "Ptr" << " | -> | "
+    //          << std::setw(15) << "Pack Algo ID" << " | "
+    //          << std::setw(18) << "Weights(Buffer) ID" << " | "
+    //          << std::setw(11) << "Bias ID" << " | -> | "
+    //          << std::setw(18) << "Offset" << " | -> | "
+    //          << std::setw(18) << "Addr(used)" << "  ||  "
+    //          << std::setw(18) << "MmappedAddr" << "\n";
+    //     vout << std::string(160, '-') << "\n";
+
+    //     size_t validated = 0, attempted = 0;
+    //     for (size_t i = 0; i < num_tensors; ++i)
+    //     {
+    //         TfLiteTensor *t_ptr = sg->tensor(static_cast<int>(i));
+    //         if (!t_ptr)
+    //             continue;
+    //         const TfLiteTensor &t = *t_ptr;
+
+    //         if (t.allocation_type != kTfLiteMmapRo && t.allocation_type != kTfLitePersistentRo)
+    //             continue;
+    //         if (!t.data.data)
+    //             continue;
+
+    //         // Resolve weights_id: prefer provider's address->identifier map
+    //         uint64_t weights_id = SIZE_MAX;
+    //         auto pit = buffer_address_to_identifier.find(t.data.data);
+    //         if (pit != buffer_address_to_identifier.end())
+    //         {
+    //             weights_id = static_cast<uint64_t>(pit->second);
+    //         }
+    //         else
+    //         {
+    //             // Fallback: derive from FlatBuffer buffer id map
+    //             int fb_id = tbm.GetBufferId(sg_idx, static_cast<int>(i));
+    //             if (fb_id >= 0)
+    //                 weights_id = static_cast<uint64_t>(fb_id);
+    //             else
+    //                 continue; // cannot resolve id for this tensor
+    //         }
+
+    //         // Try candidate entries from the provider mappings that match this
+    //         // tensor's weights_id. No intermediate map is required; scanning the
+    //         // (typically small) mappings vector is simpler and avoids extra data
+    //         // structures.
+    //         bool ok = false;
+    //         for (const auto &item : cache_key_to_offset)
+    //         {
+    //             const auto &pack_id = item.first;
+    //             if (static_cast<uint64_t>(pack_id.weights_id) != weights_id)
+    //                 continue;
+    //             uint64_t algo = static_cast<uint64_t>(pack_id.pack_algorithm_id);
+    //             uint64_t bias_id = static_cast<uint64_t>(pack_id.bias_id);
+    //             std::string bias_id_str = (bias_id == SIZE_MAX) ? "None" : std::to_string(bias_id);
+    //             uint64_t off = g_cache_provider.LookUpByIds(algo, weights_id, bias_id);
+    //             if (off == SIZE_MAX)
+    //                 continue;
+
+    //             void *addr = g_cache_provider.OffsetToAddr(off);
+    //             void *mmaped_addr = g_cache_provider.GetMmappedAddr(off);
+    //             // Aligned human-readable row
+    //             {
+    //                 std::ostringstream ptrs, useds, mmaps;
+    //                 ptrs << t.data.data;
+    //                 useds << addr;
+    //                 mmaps << mmaped_addr;
+    //                 vout << std::left << std::setw(8) << i << " | "
+    //                      << std::setw(18) << ptrs.str() << " | -> | "
+    //                      << std::setw(15) << algo << " | "
+    //                      << std::setw(18) << weights_id << " | "
+    //                      << std::setw(11) << bias_id_str << " | -> | "
+    //                      << std::setw(18) << off << " | -> | "
+    //                      << std::setw(18) << useds.str() << "  ||  "
+    //                      << std::setw(18) << mmaps.str() << "\n";
+    //             }
+    //             ok = true;
+    //             ++validated;
+    //             break;
+    //         }
+    //         ++attempted;
+    //         if (!ok)
+    //         {
+    //             vout << "Tensor[" << i << "] ptr=" << t.data.data
+    //                  << " Buffer id=" << weights_id
+    //                  << " -> cache MISS (no matching algo)\n";
+    //         }
+    //     }
+    //     vout << "Validation summary: validated=" << validated
+    //          << " attempted=" << attempted << "\n";
+    //     vout.close();
+    //     // --- End: Runtime validation ---
+    // }
+
+    void ValidateWeightCacheMappings2(tflite::Interpreter *interpreter, const std::string &selected_signature_key, const TensorToBufferIdMap &tbm)
+    {
+        // 0) Get Subgraph and tensors
+        int sg_idx = interpreter->GetSubgraphIndexFromSignature(selected_signature_key.c_str());
+        tflite::Subgraph *sg = interpreter->subgraph(sg_idx);
+        const size_t num_tensors = static_cast<size_t>(sg->tensors_size());
+
+        // 1) Get TensorBufferAddress → identifier map (provider snapshot)
+        auto buffer_address_to_identifier = g_cache_provider.GetBufferAddressToIdentifier();
+
+        // 2) Snapshot provider mappings once and reuse them per tensor.
+        auto cache_key_to_offset = g_cache_provider.GetCacheKeyToOffset();
+
+        // Build helper maps used by the validation logic.
+        // id_map: tensor_index -> weights_id
+        std::unordered_map<size_t, size_t> id_map;
+        id_map.reserve(num_tensors);
+
+        for (size_t i = 0; i < num_tensors; ++i)
+        {
+            TfLiteTensor *t_ptr = sg->tensor(static_cast<int>(i));
+            if (!t_ptr)
+                continue;
+            const TfLiteTensor &t = *t_ptr;
+
+            if ((t.allocation_type != kTfLiteMmapRo && t.allocation_type != kTfLitePersistentRo) || !t.data.data)
+                continue;
+
+            // Prefer provider's address -> identifier mapping
+            auto pit = buffer_address_to_identifier.find(t.data.data);
+            if (pit != buffer_address_to_identifier.end())
+            {
+                id_map[i] = static_cast<size_t>(pit->second);
+            }
+            else
+            {
+                // Fallback to FlatBuffer buffer id
+                int fb_id = tbm.GetBufferId(sg_idx, static_cast<int>(i));
+                if (fb_id >= 0)
+                {
+                    id_map[i] = static_cast<size_t>(fb_id);
+                }
+            }
+        }
+
+        // weights_to_algos: weights_id -> set of pack_algorithm_id candidates
+        std::unordered_map<size_t, std::unordered_set<size_t>> weights_to_algos;
+        for (const auto &item : cache_key_to_offset)
+        {
+            const auto &pack_id = item.first; // contains pack_algorithm_id, weights_id, bias_id
+            size_t w_id = static_cast<size_t>(pack_id.weights_id);
+            size_t algo = static_cast<size_t>(pack_id.pack_algorithm_id);
+            weights_to_algos[w_id].insert(algo);
+        }
+
+        // 3) Validate a subset of constant tensors with cache LookUp/OffsetToAddr
+        std::ofstream vout("weight_cache_validation.log");
+        vout << "\n=== Validation (signature=" << selected_signature_key << ") ===\n";
+        vout << "\n";
+        vout << std::left << std::setw(9) << "Tensor ID" << " | "
+             << std::setw(15) << "Buffer Address" << " | -> | "
+             << std::setw(9) << "Buffer ID" << " | "
+             << std::setw(12) << "Pack Algo ID" << " | "
+             << std::setw(13) << "Offset" << " | -> | "
+             << std::setw(20) << "Addr [from OffsetToAddr()]" << "  ||  "
+             << std::setw(20) << "Mmapped Addr [from WeightCache]" << "\n";
+        vout << std::string(120, '-') << "\n";
+        size_t validated = 0, attempted = 0;
+
+        for (size_t i = 0; i < num_tensors; ++i)
+        {
+            TfLiteTensor *t_ptr = sg->tensor(static_cast<int>(i));
+            if (!t_ptr)
+                continue;
+            const TfLiteTensor &t = *t_ptr;
+
+            if (t.allocation_type != kTfLiteMmapRo && t.allocation_type != kTfLitePersistentRo)
+                continue;
+            if (!t.data.data)
+                continue;
+
+            auto it_id = id_map.find(i);
+            if (it_id == id_map.end())
+                continue;
+            size_t weights_id = it_id->second;
+
+            auto it_algos = weights_to_algos.find(weights_id);
+            if (it_algos == weights_to_algos.end() || it_algos->second.empty())
+                continue;
+
+            // Try candidate algos until a match is found
+            bool ok = false;
+            for (size_t algo : it_algos->second)
+            {
+                xnn_weights_cache_look_up_key key{};
+                key.seed = algo;
+                key.kernel = t.data.data;
+                key.bias = nullptr;
+
+                size_t offset = g_cache_provider.LookUp(&key);
+                if (offset == SIZE_MAX)
+                    continue;
+
+                void *addr = g_cache_provider.OffsetToAddr(offset);
+                void *mmaped_addr = g_cache_provider.GetMmappedAddr(offset);
+                {
+                    std::ostringstream ptrs, useds, mmaps;
+                    ptrs << t.data.data;
+                    useds << addr;
+                    mmaps << mmaped_addr;
+                    vout << std::left << std::setw(9) << i << " | "
+                         << std::setw(15) << ptrs.str() << " | -> | "
+                         << std::setw(9) << weights_id << " | "
+                         << std::setw(12) << algo << " | "
+                         << std::setw(13) << offset << " | -> | "
+                         << std::setw(20) << useds.str() << "  ||  "
+                         << std::setw(20) << mmaps.str() << "\n";
+                }
+                ok = true;
+                ++validated;
+                break;
+            }
+            ++attempted;
+            if (!ok)
+            {
+                vout << "Tensor[" << i << "] ptr=" << t.data.data
+                     << " Buffer id=" << weights_id
+                     << " -> cache MISS (no matching algo)\n";
+            }
+        }
+        vout << "\n";
+        vout << "Validation summary: validated=" << validated
+             << " attempted=" << attempted << "\n";
+        vout.close();
+    }
 
     size_t GetPageCacheKB()
     {
@@ -546,18 +814,21 @@ int main(int argc, char *argv[])
     absl::ParseCommandLine(argc, argv);
 
     std::cout << "====== dump_model_cpu ======" << std::endl;
-    std::cout << " TFLite model: " << absl::GetFlag(FLAGS_tflite_model) << std::endl;
+    std::cout << "TFLite model: " << absl::GetFlag(FLAGS_tflite_model) << std::endl;
 
     //* ============ Create Model, Interpreter and Profiler ============ */
-    std::unique_ptr<tflite::FlatBufferModel> model;
-    model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
+    std::unique_ptr<tflite::FlatBufferModel> flatbuffer_model;
+    flatbuffer_model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
+
     // Initialize tensor->buffer map from FlatBuffer model
-    SetupBufferIndexMap(model.get());
+    TensorToBufferIdMap tensor_buffer_map;
+    tensor_buffer_map.BuildFromFlatBufferModel(flatbuffer_model.get());
+
     std::unique_ptr<tflite::Interpreter> interpreter;
     std::unique_ptr<tflite::profiling::Profiler> op_profiler = std::make_unique<tflite::profiling::Profiler>();
     tflite::ops::builtin::BuiltinOpResolver resolver;
     tflite::ops::custom::GenAIOpsRegisterer(&resolver); // Register GenAI custom ops
-    tflite::InterpreterBuilder builder(*model, resolver);
+    tflite::InterpreterBuilder builder(*flatbuffer_model, resolver);
     builder(&interpreter);
     if (!interpreter)
     {
@@ -584,11 +855,10 @@ int main(int argc, char *argv[])
 
     //* ============ Dump Model (Before Delegate) ============ */
     // dump_file << "\n=== Before Applying Delegate ===" << std::endl;
-    // InspectSelectedSignature(interpreter.get(), sig_index, &dump_file);
+    // InspectSelectedSignature(interpreter.get(), sig_index, tensor_buffer_map, &dump_file);
 
     //* ============ Apply Delegate ============ */
     // create 4GB buffer for weight caching
-    // 
     constexpr size_t buf_size = 4ULL * 1024 * 1024 * 1024;
     g_cache_provider.InitManagedBuffer(buf_size);
     g_cache_provider.PrefetchFromFile(absl::GetFlag(FLAGS_tflite_model));
@@ -606,141 +876,10 @@ int main(int argc, char *argv[])
     prefill_runner->AllocateTensors();
     decode_runner->AllocateTensors();
 
-
-
     g_cache_provider.DumpWeightCacheStructureToFile("weight_cache_structure.log");
     g_cache_provider.DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
-    //! TODO -> Hooking logic for Weight Streaming will go here
-    // --- Begin: Runtime validation of pointer → identifier → cache lookup → address ---
-    {
-      // 1) Build tensor-index → identifier map for the selected signature subgraph
-      int sg_idx = interpreter->GetSubgraphIndexFromSignature(selected_signature_key.c_str());
-      tflite::Subgraph* sg = interpreter->subgraph(sg_idx);
-      const size_t num_tensors = static_cast<size_t>(sg->tensors_size());
 
-      // Copy TfLiteTensor structs (data.data pointer values remain valid)
-      std::vector<TfLiteTensor> tensors_copy;
-      tensors_copy.reserve(num_tensors);
-      for (size_t i = 0; i < num_tensors; ++i) {
-        TfLiteTensor* t = sg->tensor(static_cast<int>(i));
-        tensors_copy.push_back(t ? *t : TfLiteTensor{});
-      }
-
-      // id_map: tensor index -> buffer identifier (we reuse FlatBuffer buffer index as a stable ID)
-      std::unordered_map<size_t, size_t> id_map;
-      if (sg_idx >= 0) {
-        const auto& map_vec = g_tensor_buffer_map[sg_idx];
-        for (size_t i = 0; i < num_tensors && i < map_vec.size(); ++i) {
-          if (map_vec[i] >= 0) id_map.emplace(i, static_cast<size_t>(map_vec[i]));
-        }
-      }
-
-      // Register pointer → identifier mappings to the cache provider
-      g_cache_provider.MapTensorIdentifiers(tensors_copy.data(), tensors_copy.size(), id_map);
-
-      // 2) Parse cache dump to collect candidate (weights_id -> [pack_algo_id...])
-      std::unordered_map<size_t, std::vector<size_t>> weights_to_algos;
-      {
-        std::string dump = g_cache_provider.DumpWeightCacheStructure();
-        std::istringstream iss(dump);
-        std::string line;
-        bool in_table = false;
-        while (std::getline(iss, line)) {
-          if (!in_table) {
-            if (line.find("Buffer Details:") != std::string::npos) {
-              // Skip header/separator lines
-              std::getline(iss, line); // header
-              std::getline(iss, line); // separator
-              in_table = true;
-            }
-            continue;
-          }
-          if (line.empty()) break;
-
-          // Expect lines like:
-          // "idx | pack_algo | weights_id | bias_id | offset | size | absolute | [range]"
-          // Split by " | "
-          std::vector<std::string> cols;
-          size_t start = 0;
-          while (true) {
-            size_t pos = line.find(" | ", start);
-            if (pos == std::string::npos) {
-              cols.push_back(line.substr(start));
-              break;
-            }
-            cols.push_back(line.substr(start, pos - start));
-            start = pos + 3;
-          }
-          if (cols.size() < 6) continue;
-
-          auto trim = [](std::string s) {
-            size_t b = s.find_first_not_of(" \t");
-            size_t e = s.find_last_not_of(" \t");
-            if (b == std::string::npos) return std::string();
-            return s.substr(b, e - b + 1);
-          };
-
-          // cols[1] = pack algo, cols[2] = weights id
-          try {
-            size_t pack_algo = static_cast<size_t>(std::stoull(trim(cols[1])));
-            size_t weights_id = static_cast<size_t>(std::stoull(trim(cols[2])));
-            weights_to_algos[weights_id].push_back(pack_algo);
-          } catch (...) {
-            // ignore parse errors
-          }
-        }
-      }
-
-      // 3) Validate a subset of constant tensors with cache LookUp/OffsetToAddr
-      std::ofstream vout("weight_cache_validation.log");
-      vout << "\n=== Validation (signature=" << selected_signature_key << ") ===\n";
-      size_t validated = 0, attempted = 0, max_checks = 32;
-
-      for (size_t i = 0; i < num_tensors; ++i) {
-        const TfLiteTensor& t = tensors_copy[i];
-        if (t.allocation_type != kTfLiteMmapRo && t.allocation_type != kTfLitePersistentRo) continue;
-        if (!t.data.data) continue;
-
-        auto it_id = id_map.find(i);
-        if (it_id == id_map.end()) continue;
-        size_t weights_id = it_id->second;
-
-        auto it_algos = weights_to_algos.find(weights_id);
-        if (it_algos == weights_to_algos.end() || it_algos->second.empty()) continue;
-
-        // Try candidate algos until a match is found
-        bool ok = false;
-        for (size_t algo : it_algos->second) {
-          xnn_weights_cache_look_up_key key{};
-          key.seed = algo;
-          key.kernel = t.data.data;
-          key.bias = nullptr;
-
-          size_t off = g_cache_provider.LookUp(&key);
-          if (off == SIZE_MAX) continue;
-
-          void* addr = g_cache_provider.OffsetToAddr(off);
-          vout << "Tensor[" << i << "] ptr=" << t.data.data
-               << " Buffer id=" << weights_id
-               << " algo=" << algo
-               << " -> offset=" << off
-               << " addr=" << addr << "\n";
-          ok = true;
-          ++validated;
-          break;
-        }
-        ++attempted;
-        if (!ok) {
-          vout << "Tensor[" << i << "] ptr=" << t.data.data
-               << " Buffer id=" << weights_id
-               << " -> cache MISS (no matching algo)\n";
-        }
-      }
-      vout << "Validation summary: validated=" << validated
-           << " attempted=" << attempted << "\n";
-      vout.close();
-    }
-    // --- End: Runtime validation ---
+    ValidateWeightCacheMappings2(interpreter.get(), selected_signature_key, tensor_buffer_map);
 
     //* ============ Dump Model (After Delegate) ============ */
     std::cout << "\n\nInvoking prefill ..." << std::endl;
@@ -760,7 +899,7 @@ int main(int argc, char *argv[])
     std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
 
     dump_file << "\n=== After Applying Delegate ===" << std::endl;
-    InspectSelectedSignature(interpreter.get(), sig_index, &dump_file);
+    InspectSelectedSignature(interpreter.get(), sig_index, tensor_buffer_map, &dump_file);
 
     dump_file.close();
 
