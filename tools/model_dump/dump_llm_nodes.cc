@@ -5,6 +5,7 @@
 #include <string>
 #include <memory>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 #include <cstdint>
 
@@ -45,7 +46,7 @@ namespace
     using WeightCacheProviderT = tflite::xnnpack::MMapWeightCacheProvider;
 #endif
 
-    static tflite::xnnpack::StreamingWeightCacheProvider g_cache_provider;
+    static WeightCacheProviderT g_weight_cache_provider;
 
     // Small helper to map: subgraph -> [tensor_idx -> buffer_id]
     // Maps a subgraph-local tensor index to the FlatBuffer buffer identifier.
@@ -507,7 +508,7 @@ namespace
         auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
         std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
         delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-        delegate_options.weight_cache_provider = &g_cache_provider;
+        delegate_options.weight_cache_provider = &g_weight_cache_provider;
         delegate_options.num_threads = 1; // Default num_threads for dump tool
 
         if (interpreter->ModifyGraphWithDelegate(
@@ -521,7 +522,9 @@ namespace
         }
     }
 
-
+    // ----------------------------------------------------------------------------------
+    // Validate Weight Cache Mappings 
+    // ----------------------------------------------------------------------------------
     void ValidateWeightCacheMappings(tflite::Interpreter *interpreter, const std::string &selected_signature_key, const TensorToBufferIdMap &tbm)
     {
         // 0) Get Subgraph and tensors
@@ -530,10 +533,10 @@ namespace
         const size_t num_tensors = static_cast<size_t>(sg->tensors_size());
 
         // 1) Get TensorBufferAddress → identifier map (provider snapshot)
-        auto buffer_address_to_identifier = g_cache_provider.GetBufferAddressToIdentifier();
+        auto buffer_address_to_identifier = g_weight_cache_provider.GetBufferAddressToIdentifier();
 
         // 2) Snapshot provider mappings once and reuse them per tensor.
-        auto cache_key_to_offset = g_cache_provider.GetCacheKeyToOffset();
+        auto cache_key_to_offset = g_weight_cache_provider.GetCacheKeyToOffset();
 
         // Build helper maps used by the validation logic.
         // id_map: tensor_index -> weights_id
@@ -567,28 +570,31 @@ namespace
             }
         }
 
-        // weights_to_algos: weights_id -> set of pack_algorithm_id candidates
-        std::unordered_map<size_t, std::unordered_set<size_t>> weights_to_algos;
-        for (const auto &item : cache_key_to_offset)
+        // Build reverse index: weights_id -> list of (pack_algorithm_id, bias_id)
+        std::unordered_map<size_t, std::vector<std::pair<size_t, size_t>>> weights_to_candidates;
+        for (const auto &kv : cache_key_to_offset)
         {
-            const auto &pack_id = item.first; // contains pack_algorithm_id, weights_id, bias_id
-            size_t w_id = static_cast<size_t>(pack_id.weights_id);
-            size_t algo = static_cast<size_t>(pack_id.pack_algorithm_id);
-            weights_to_algos[w_id].insert(algo);
+            const auto &pack_id = kv.first; // has pack_algorithm_id, weights_id, bias_id
+            const size_t w_id = static_cast<size_t>(pack_id.weights_id);
+            const size_t algo = static_cast<size_t>(pack_id.pack_algorithm_id);
+            const size_t bias = static_cast<size_t>(pack_id.bias_id);
+            weights_to_candidates[w_id].emplace_back(algo, bias);
         }
 
         // 3) Validate a subset of constant tensors with cache LookUp/OffsetToAddr
         std::ofstream vout("weight_cache_validation.log");
         vout << "\n=== Validation (signature=" << selected_signature_key << ") ===\n";
         vout << "\n";
-        vout << std::left << std::setw(9) << "Tensor ID" << " | "
-             << std::setw(15) << "Buffer Address" << " | -> | "
-             << std::setw(9) << "Weight ID" << " | "
-             << std::setw(12) << "Pack Algo ID" << " | -> | "
-             << std::setw(13) << "Offset" << " | -> | "
-             << std::setw(20) << "Addr [from OffsetToAddr()]" << "  ||  "
-             << std::setw(20) << "Mmapped Addr [from WeightCache]" << "\n";
-        vout << std::string(120, '-') << "\n";
+       // Human-friendly aligned header
+       vout << std::left << std::setw(8) << "Tensor" << " | "
+           << std::setw(18) << "Ptr" << " | -> | "
+           << std::setw(15) << "Pack Algo ID" << " | "
+           << std::setw(18) << "Weights(Buffer) ID" << " | "
+           << std::setw(11) << "Bias ID" << " | -> | "
+           << std::setw(18) << "Offset" << " | -> | "
+           << std::setw(18) << "Addr(used)" << "  ||  "
+           << std::setw(18) << "MmappedAddr" << "\n";
+       vout << std::string(160, '-') << "\n";
         size_t validated = 0, attempted = 0;
 
         for (size_t i = 0; i < num_tensors; ++i)
@@ -608,37 +614,36 @@ namespace
                 continue;
             size_t weights_id = it_id->second;
 
-            auto it_algos = weights_to_algos.find(weights_id);
-            if (it_algos == weights_to_algos.end() || it_algos->second.empty())
+            auto it_cands = weights_to_candidates.find(weights_id);
+            if (it_cands == weights_to_candidates.end() || it_cands->second.empty())
                 continue;
 
             // Try candidate algos until a match is found
             bool ok = false;
-            for (size_t algo : it_algos->second)
+            for (const auto &cand : it_cands->second)
             {
-                xnn_weights_cache_look_up_key key{};
-                key.seed = algo;
-                key.kernel = t.data.data;
-                key.bias = nullptr;
-
-                size_t offset = g_cache_provider.LookUp(&key);
+                const size_t algo = cand.first;
+                const size_t bias_id = cand.second;
+                size_t offset = g_weight_cache_provider.LookUpByIds(algo, weights_id, bias_id);
                 if (offset == SIZE_MAX)
                     continue;
 
-                void *addr = g_cache_provider.OffsetToAddr(offset);
-                void *mmaped_addr = g_cache_provider.GetMmappedAddr(offset);
+                void *addr = g_weight_cache_provider.OffsetToAddr(offset);
+                void *mmaped_addr = g_weight_cache_provider.GetMmappedAddr(offset);
                 {
                     std::ostringstream ptrs, useds, mmaps;
                     ptrs << t.data.data;
                     useds << addr;
                     mmaps << mmaped_addr;
-                    vout << std::left << std::setw(9) << i << " | "
-                         << std::setw(15) << ptrs.str() << " | -> | "
-                         << std::setw(9) << weights_id << " | "
-                         << std::setw(12) << algo << " | -> | "
-                         << std::setw(13) << offset << " | -> | "
-                         << std::setw(20) << useds.str() << "  ||  "
-                         << std::setw(20) << mmaps.str() << "\n";
+                    const std::string bias_id_str = (bias_id == SIZE_MAX) ? std::string("None") : std::to_string(bias_id);
+                    vout << std::left << std::setw(8) << i << " | "
+                         << std::setw(18) << ptrs.str() << " | -> | "
+                         << std::setw(15) << algo << " | "
+                         << std::setw(18) << weights_id << " | "
+                         << std::setw(11) << bias_id_str << " | -> | "
+                         << std::setw(18) << offset << " | -> | "
+                         << std::setw(18) << useds.str() << "  ||  "
+                         << std::setw(18) << mmaps.str() << "\n";
                 }
                 ok = true;
                 ++validated;
@@ -658,6 +663,9 @@ namespace
         vout.close();
     }
 
+    // --------------------------------------------------------------------------
+    // Utility to get current page cache size from /proc/meminfo (Linux only)
+    // --------------------------------------------------------------------------
     size_t GetPageCacheKB()
     {
         std::ifstream meminfo("/proc/meminfo");
@@ -736,10 +744,10 @@ int main(int argc, char *argv[])
     // InspectSelectedSignature(interpreter.get(), sig_index, tensor_buffer_map, &dump_file);
 
     //* ============ Apply Delegate ============ */
-    // create 4GB buffer for weight caching
-    constexpr size_t buf_size = 4ULL * 1024 * 1024 * 1024;
-    g_cache_provider.InitManagedBuffer(buf_size);
-    g_cache_provider.PrefetchFromFile(absl::GetFlag(FLAGS_tflite_model));
+    // create 400MB buffer for weight caching
+    constexpr size_t buf_size = 400 * 1024 * 1024;
+    g_weight_cache_provider.InitManagedBuffer(buf_size);
+    // g_weight_cache_provider.PrefetchFromFile(absl::GetFlag(FLAGS_tflite_model));
 
     if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
         ApplyXNNPACKWithWeightCaching(interpreter.get());
@@ -754,10 +762,13 @@ int main(int argc, char *argv[])
     prefill_runner->AllocateTensors();
     decode_runner->AllocateTensors();
 
-    g_cache_provider.DumpWeightCacheStructureToFile("weight_cache_structure.log");
-    g_cache_provider.DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
-
+    g_weight_cache_provider.DumpWeightCacheStructureToFile("weight_cache_structure.log");
+    g_weight_cache_provider.DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
     ValidateWeightCacheMappings(interpreter.get(), selected_signature_key, tensor_buffer_map);
+    
+    std::cout << "Verifying Buffer in weight cache" << std::endl;
+    // g_weight_cache_provider.VerifyAllBuffers();
+    std::cout << "Verification done" << std::endl;
 
     //* ============ Dump Model (After Delegate) ============ */
     std::cout << "\n\nInvoking prefill ..." << std::endl;
@@ -777,7 +788,7 @@ int main(int argc, char *argv[])
     std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
 
     dump_file << "\n=== After Applying Delegate ===" << std::endl;
-    InspectSelectedSignature(interpreter.get(), sig_index, tensor_buffer_map, &dump_file);
+    // InspectSelectedSignature(interpreter.get(), sig_index, tensor_buffer_map, &dump_file);
 
     dump_file.close();
 

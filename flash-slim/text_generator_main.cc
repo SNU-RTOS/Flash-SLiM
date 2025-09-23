@@ -102,38 +102,46 @@ namespace
     using WeightCacheProviderT = tflite::xnnpack::MMapWeightCacheProvider;
 #endif
 
-    // static WeightCacheProviderT g_cache_provider;
+    static WeightCacheProviderT g_weight_cache_provider;
 
-    // void ApplyXNNPACKWithWeightCaching(tflite::Interpreter* interpreter) {
-    //     auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
-    //     delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
+    void ApplyXNNPACKWithWeightCaching(tflite::Interpreter* interpreter) {
 
-    //     // 파일 기반 캐시 경로
-    //     std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
-    //     delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-
-    //     // Provider 직접 전달
-    //     delegate_options.weight_cache_provider = &g_cache_provider;
-
-    //     // delegate 생성 및 적용
-    //     MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
-    //         tflite::Interpreter::TfLiteDelegatePtr(
-    //             TfLiteXNNPackDelegateCreate(&delegate_options),
-    //             [](TfLiteDelegate* d) { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
-    // }
-
-    void ApplyXNNPACKWithWeightCaching(tflite::Interpreter *interpreter)
-    {
         auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
+        delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
+
+        // 파일 기반 캐시 경로
         std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
         delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-        delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
+        
+        // Provider 직접 전달
+        delegate_options.weight_cache_provider = &g_weight_cache_provider;
+
+        // delegate 생성 및 적용
         MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
-                          tflite::Interpreter::TfLiteDelegatePtr(
-                              TfLiteXNNPackDelegateCreate(&delegate_options),
-                              [](TfLiteDelegate *delegate)
-                              { TfLiteXNNPackDelegateDelete(delegate); })) == kTfLiteOk);
+            tflite::Interpreter::TfLiteDelegatePtr(
+                TfLiteXNNPackDelegateCreate(&delegate_options),
+                [](TfLiteDelegate* d) { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
+        
+        g_weight_cache_provider.StreamingWeightCacheProvider::DumpWeightCacheStructureToFile("weight_cache_structure.log");
+        g_weight_cache_provider.StreamingWeightCacheProvider::DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
+        
+        // g_weight_cache_provider.PrefetchFromFile(absl::GetFlag(FLAGS_tflite_model));
+
+        
     }
+
+    // void ApplyXNNPACKWithWeightCaching(tflite::Interpreter *interpreter)
+    // {
+    //     auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
+    //     std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
+    //     delegate_options.weight_cache_file_path = weight_cache_path.c_str();
+    //     delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
+    //     MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
+    //                       tflite::Interpreter::TfLiteDelegatePtr(
+    //                           TfLiteXNNPackDelegateCreate(&delegate_options),
+    //                           [](TfLiteDelegate *delegate)
+    //                           { TfLiteXNNPackDelegateDelete(delegate); })) == kTfLiteOk);
+    // }
 
     // --------------------------------------------------------------------------
     // Allocates KV cache memory structures for decode, based on the decode signature
@@ -444,7 +452,7 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
     {
         custom::profiler::ScopeEventHandler handler("Build_Interpreter");
         // Register Ops
-        tflite::ops::builtin::BuiltinOpResolver resolver;
+        tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates resolver;
         tflite::ops::custom::GenAIOpsRegisterer(&resolver); // Register GenAI custom ops
 
         // Build the interpreter
@@ -464,6 +472,8 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
     // Set profiler to interpreter
     interpreter->SetProfiler(op_profiler.get());
 
+    constexpr size_t buf_size = 512 * 1024 * 1024;
+    g_weight_cache_provider.InitManagedBuffer(buf_size);
     //* ============ [Phase] 3. Apply Delegate ============ */
     {
         custom::profiler::ScopeEventHandler handler("Apply_Delegate");
@@ -500,6 +510,7 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
         }
     }
     */
+
 
     //* ============ [Phase] 6. Prepare Prompt ============ */
     {
@@ -588,6 +599,8 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
     }
     std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")" << std::endl;
 
+
+    
     //* ============ [Phase] 9. Prefill Phase ============ */
     double prefill_time_ms = 0.0;
     std::cout << "[INFO] Prefill Phase started" << std::endl;
