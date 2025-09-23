@@ -81,6 +81,7 @@ namespace
 {
     using ai_edge_torch::examples::LoRA;
     using ai_edge_torch::mem::AlignedAllocator;
+    using tflite::xnnpack::StreamingWeightCacheProvider;
 
     struct ProfilerOutput
     {
@@ -96,15 +97,9 @@ namespace
     // --------------------------------------------------------------------------
     // provider는 delegate보다 오래 살아야 함
 
-#ifdef USE_WEIGHT_STREAMING
-    using WeightCacheProviderT = tflite::xnnpack::StreamingWeightCacheProvider;
-#else
-    using WeightCacheProviderT = tflite::xnnpack::MMapWeightCacheProvider;
-#endif
 
-    static WeightCacheProviderT g_weight_cache_provider;
 
-    void ApplyXNNPACKWithWeightCaching(tflite::Interpreter* interpreter) {
+    void ApplyXNNPACKWithWeightCaching(tflite::Interpreter* interpreter, StreamingWeightCacheProvider *provider) {
 
         auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
         delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
@@ -114,7 +109,7 @@ namespace
         delegate_options.weight_cache_file_path = weight_cache_path.c_str();
         
         // Provider 직접 전달
-        delegate_options.weight_cache_provider = &g_weight_cache_provider;
+        delegate_options.weight_cache_provider = provider;
 
         // delegate 생성 및 적용
         MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
@@ -122,26 +117,7 @@ namespace
                 TfLiteXNNPackDelegateCreate(&delegate_options),
                 [](TfLiteDelegate* d) { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
         
-        g_weight_cache_provider.StreamingWeightCacheProvider::DumpWeightCacheStructureToFile("weight_cache_structure.log");
-        g_weight_cache_provider.StreamingWeightCacheProvider::DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
-        
-        // g_weight_cache_provider.PrefetchFromFile(absl::GetFlag(FLAGS_tflite_model));
-
-        
     }
-
-    // void ApplyXNNPACKWithWeightCaching(tflite::Interpreter *interpreter)
-    // {
-    //     auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
-    //     std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
-    //     delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-    //     delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
-    //     MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
-    //                       tflite::Interpreter::TfLiteDelegatePtr(
-    //                           TfLiteXNNPackDelegateCreate(&delegate_options),
-    //                           [](TfLiteDelegate *delegate)
-    //                           { TfLiteXNNPackDelegateDelete(delegate); })) == kTfLiteOk);
-    // }
 
     // --------------------------------------------------------------------------
     // Allocates KV cache memory structures for decode, based on the decode signature
@@ -472,16 +448,26 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
     // Set profiler to interpreter
     interpreter->SetProfiler(op_profiler.get());
 
-    constexpr size_t buf_size = 512 * 1024 * 1024;
-    g_weight_cache_provider.InitManagedBuffer(buf_size);
+    std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
+
+    constexpr size_t buf_size = 400 * 1024 * 1024;
+    weight_cache_provider->AllocManagedBuffer(buf_size);
+    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
+
     //* ============ [Phase] 3. Apply Delegate ============ */
     {
         custom::profiler::ScopeEventHandler handler("Apply_Delegate");
+
         if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
         {
-            ApplyXNNPACKWithWeightCaching(interpreter.get());
+            ApplyXNNPACKWithWeightCaching(interpreter.get(), weight_cache_provider.get());
         }
     }
+
+    // weight_cache_provider->PrefetchFromFile(absl::GetFlag(FLAGS_tflite_model));
+    // weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
+    // weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
+
     //* ============ [Phase] 4. Load Tokenizer ============ */
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
     {
@@ -510,7 +496,6 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
         }
     }
     */
-
 
     //* ============ [Phase] 6. Prepare Prompt ============ */
     {
@@ -709,6 +694,10 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
         next_position++;
     }
 
+
+    weight_cache_provider->CloseDirectIOFileDescriptor();
+    weight_cache_provider->FreeManagedBuffer();
+    weight_cache_provider->Release();
     std::cout << "\n\n\n";
     std::cout << "[INFO] Decoded " << decode_steps << " tokens."<< std::endl;
     std::cout << "[INFO] Decoding Phase completed" << std::endl;
