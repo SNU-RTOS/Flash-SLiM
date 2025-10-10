@@ -28,9 +28,9 @@ for tflite_file in "$destination_dir"/*.tflite; do
 
     # start bpftrace
     # echo "Starting bpftrace..."
-    sudo setsid bpftrace weight_cache_check.bt > weight_cache_bpf.log 2>&1 < /dev/null &
-    bpftrace_pid=$!
-    sleep 5 # Give bpftrace some time to start
+    # sudo setsid bpftrace weight_cache_check.bt > weight_cache_bpf.log 2>&1 < /dev/null &
+    # bpftrace_pid=$!
+    # sleep 5 # Give bpftrace some time to start
     echo -e "Running $bin...\n"
     # --------------------------------------
     ./$bin \
@@ -41,9 +41,9 @@ for tflite_file in "$destination_dir"/*.tflite; do
         --op_tensor_byte_stats 
     # --------------------------------------
     # stop bpftrace
-    echo "Stopping bpftrace..."
-    sudo kill -INT $bpftrace_pid
-    wait $bpftrace_pid 2>/dev/null
+    # echo "Stopping bpftrace..."
+    # sudo kill -INT $bpftrace_pid
+    # wait $bpftrace_pid 2>/dev/null
         
     python3 tensor_visualization.py "$log" "${destination_dir}/${model_name}_analysis_report.txt" "${destination_dir}/${model_name}_analysis_data.json"
 

@@ -1,0 +1,906 @@
+Binary name provided: dump_llm_nodes
+/home/ghpark/workspace/research/Flash-SLiM
+Processing ../../models/Llama3.2-3B/llama3.2_q8_ekv1024.tflite with parser
+Running dump_model_cpu_x64 for ../../models/Llama3.2-3B/llama3.2_q8_ekv1024.tflite at ../../models/Llama3.2-3B/llama3.2_q8_ekv1024_dump.log
+weight_cache: ../../models/Llama3.2-3B/llama3.2_q8_ekv1024.xnnpack_cache
+log: ../../models/Llama3.2-3B/llama3.2_q8_ekv1024_dump.log
+Running dump_llm_nodes...
+
+====== dump_model_cpu ======
+TFLite model: ../../models/Llama3.2-3B/llama3.2_q8_ekv1024.tflite
+
+=== Model Signature ===
+The Model contains 6 signature key(s).
+  0: decode
+  1: prefill_128
+  2: prefill_256
+  3: prefill_512
+  4: prefill_64
+  5: prefill_8
+Please select a signature index (0 to 5): 
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=3223403520, size=15790080
+ptr of packed_w: 0x7d6cdf557c80
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=15790080, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=25264128, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=50528256, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=75792384, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=100995072, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=116785152, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=126259200, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=151523328, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=176787456, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=201990144, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=217780224, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=227254272, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=252518400, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=277782528, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=302985216, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=318775296, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=328249344, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=353513472, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=378777600, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=403980288, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=419770368, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=429244416, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=454508544, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=479772672, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=504975360, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=520765440, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=530239488, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=555503616, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=580767744, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=605970432, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=621760512, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=631234560, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=656498688, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=681762816, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=706965504, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=722755584, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=732229632, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=757493760, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=782757888, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=807960576, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=823750656, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=833224704, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=858488832, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=883752960, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=908955648, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=924745728, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=934219776, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=959483904, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=984748032, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1009950720, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1025740800, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1035214848, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1060478976, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1085743104, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1110945792, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1126735872, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1136209920, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1161474048, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1186738176, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1211940864, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1227730944, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1237204992, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1262469120, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1287733248, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1312935936, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1328726016, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1338200064, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1363464192, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1388728320, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1413931008, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1429721088, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1439195136, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1464459264, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1489723392, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1514926080, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1530716160, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1540190208, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1565454336, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1590718464, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1615921152, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1631711232, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1641185280, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1666449408, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1691713536, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1716916224, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1732706304, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1742180352, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1767444480, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1792708608, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1817911296, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1833701376, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1843175424, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1868439552, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1893703680, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1918906368, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1934696448, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1944170496, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1969434624, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=1994698752, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2019901440, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2035691520, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2045165568, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2070429696, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2095693824, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2120896512, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2136686592, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2146160640, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2171424768, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2196688896, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2221891584, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2237681664, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2247155712, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2272419840, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2297683968, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2322886656, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2338676736, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2348150784, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2373414912, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2398679040, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2423881728, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2439671808, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2449145856, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2474409984, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2499674112, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2524876800, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2540666880, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2550140928, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2575405056, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2600669184, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2625871872, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2641661952, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2651136000, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2676400128, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2701664256, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2726866944, size=15790080
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2742657024, size=9474048
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2752131072, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2777395200, size=25264128
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2802659328, size=25202688
+ptr of packed_w: 0x7d6cdf557080
+
+fully_connected reshape
+Using weights cache
+OffsetToAddr: offset=2827862016, size=395541504
+ptr of packed_w: 0x7d6cdf557080
+
+OffsetToAddr: offset=2802659328, size=25202688
+OffsetToAddr: offset=2777395200, size=25264128
+OffsetToAddr: offset=2752131072, size=25264128
+OffsetToAddr: offset=2742657024, size=9474048
+OffsetToAddr: offset=2726866944, size=15790080
+OffsetToAddr: offset=2701664256, size=25202688
+OffsetToAddr: offset=2676400128, size=25264128
+OffsetToAddr: offset=2651136000, size=25264128
+OffsetToAddr: offset=2641661952, size=9474048
+OffsetToAddr: offset=2625871872, size=15790080
+OffsetToAddr: offset=2600669184, size=25202688
+OffsetToAddr: offset=2575405056, size=25264128
+OffsetToAddr: offset=2550140928, size=25264128
+OffsetToAddr: offset=2540666880, size=9474048
+OffsetToAddr: offset=2524876800, size=15790080
+OffsetToAddr: offset=2499674112, size=25202688
+OffsetToAddr: offset=2474409984, size=25264128
+OffsetToAddr: offset=2449145856, size=25264128
+OffsetToAddr: offset=2439671808, size=9474048
+OffsetToAddr: offset=2423881728, size=15790080
+OffsetToAddr: offset=2398679040, size=25202688
+OffsetToAddr: offset=2373414912, size=25264128
+OffsetToAddr: offset=2348150784, size=25264128
+OffsetToAddr: offset=2338676736, size=9474048
+OffsetToAddr: offset=2322886656, size=15790080
+OffsetToAddr: offset=2297683968, size=25202688
+OffsetToAddr: offset=2272419840, size=25264128
+OffsetToAddr: offset=2247155712, size=25264128
+OffsetToAddr: offset=2237681664, size=9474048
+OffsetToAddr: offset=2221891584, size=15790080
+OffsetToAddr: offset=2196688896, size=25202688
+OffsetToAddr: offset=2171424768, size=25264128
+OffsetToAddr: offset=2146160640, size=25264128
+OffsetToAddr: offset=2136686592, size=9474048
+OffsetToAddr: offset=2120896512, size=15790080
+OffsetToAddr: offset=2095693824, size=25202688
+OffsetToAddr: offset=2070429696, size=25264128
+OffsetToAddr: offset=2045165568, size=25264128
+OffsetToAddr: offset=2035691520, size=9474048
+OffsetToAddr: offset=2019901440, size=15790080
+OffsetToAddr: offset=1994698752, size=25202688
+OffsetToAddr: offset=1969434624, size=25264128
+OffsetToAddr: offset=1944170496, size=25264128
+OffsetToAddr: offset=1934696448, size=9474048
+OffsetToAddr: offset=1918906368, size=15790080
+OffsetToAddr: offset=1893703680, size=25202688
+OffsetToAddr: offset=1868439552, size=25264128
+OffsetToAddr: offset=1843175424, size=25264128
+OffsetToAddr: offset=1833701376, size=9474048
+OffsetToAddr: offset=1817911296, size=15790080
+OffsetToAddr: offset=1792708608, size=25202688
+OffsetToAddr: offset=1767444480, size=25264128
+OffsetToAddr: offset=1742180352, size=25264128
+OffsetToAddr: offset=1732706304, size=9474048
+OffsetToAddr: offset=1716916224, size=15790080
+OffsetToAddr: offset=1691713536, size=25202688
+OffsetToAddr: offset=1666449408, size=25264128
+OffsetToAddr: offset=1641185280, size=25264128
+OffsetToAddr: offset=1631711232, size=9474048
+OffsetToAddr: offset=1615921152, size=15790080
+OffsetToAddr: offset=1590718464, size=25202688
+OffsetToAddr: offset=1565454336, size=25264128
+OffsetToAddr: offset=1540190208, size=25264128
+OffsetToAddr: offset=1530716160, size=9474048
+OffsetToAddr: offset=1514926080, size=15790080
+OffsetToAddr: offset=1489723392, size=25202688
+OffsetToAddr: offset=1464459264, size=25264128
+OffsetToAddr: offset=1439195136, size=25264128
+OffsetToAddr: offset=1429721088, size=9474048
+OffsetToAddr: offset=1413931008, size=15790080
+OffsetToAddr: offset=1388728320, size=25202688
+OffsetToAddr: offset=1363464192, size=25264128
+OffsetToAddr: offset=1338200064, size=25264128
+OffsetToAddr: offset=1328726016, size=9474048
+OffsetToAddr: offset=1312935936, size=15790080
+OffsetToAddr: offset=1287733248, size=25202688
+OffsetToAddr: offset=1262469120, size=25264128
+OffsetToAddr: offset=1237204992, size=25264128
+OffsetToAddr: offset=1227730944, size=9474048
+OffsetToAddr: offset=1211940864, size=15790080
+OffsetToAddr: offset=1186738176, size=25202688
+OffsetToAddr: offset=1161474048, size=25264128
+OffsetToAddr: offset=1136209920, size=25264128
+OffsetToAddr: offset=1126735872, size=9474048
+OffsetToAddr: offset=1110945792, size=15790080
+OffsetToAddr: offset=1085743104, size=25202688
+OffsetToAddr: offset=1060478976, size=25264128
+OffsetToAddr: offset=1035214848, size=25264128
+OffsetToAddr: offset=1025740800, size=9474048
+OffsetToAddr: offset=1009950720, size=15790080
+OffsetToAddr: offset=984748032, size=25202688
+OffsetToAddr: offset=959483904, size=25264128
+OffsetToAddr: offset=934219776, size=25264128
+OffsetToAddr: offset=924745728, size=9474048
+OffsetToAddr: offset=908955648, size=15790080
+OffsetToAddr: offset=883752960, size=25202688
+OffsetToAddr: offset=858488832, size=25264128
+OffsetToAddr: offset=833224704, size=25264128
+OffsetToAddr: offset=823750656, size=9474048
+OffsetToAddr: offset=807960576, size=15790080
+OffsetToAddr: offset=782757888, size=25202688
+OffsetToAddr: offset=757493760, size=25264128
+OffsetToAddr: offset=732229632, size=25264128
+OffsetToAddr: offset=722755584, size=9474048
+OffsetToAddr: offset=706965504, size=15790080
+OffsetToAddr: offset=681762816, size=25202688
+OffsetToAddr: offset=656498688, size=25264128
+OffsetToAddr: offset=631234560, size=25264128
+OffsetToAddr: offset=621760512, size=9474048
+OffsetToAddr: offset=605970432, size=15790080
+OffsetToAddr: offset=580767744, size=25202688
+OffsetToAddr: offset=555503616, size=25264128
+OffsetToAddr: offset=530239488, size=25264128
+OffsetToAddr: offset=520765440, size=9474048
+OffsetToAddr: offset=504975360, size=15790080
+OffsetToAddr: offset=479772672, size=25202688
+OffsetToAddr: offset=454508544, size=25264128
+OffsetToAddr: offset=429244416, size=25264128
+OffsetToAddr: offset=419770368, size=9474048
+OffsetToAddr: offset=403980288, size=15790080
+OffsetToAddr: offset=378777600, size=25202688
+OffsetToAddr: offset=353513472, size=25264128
+OffsetToAddr: offset=328249344, size=25264128
+OffsetToAddr: offset=318775296, size=9474048
+OffsetToAddr: offset=302985216, size=15790080
+OffsetToAddr: offset=277782528, size=25202688
+OffsetToAddr: offset=252518400, size=25264128
+OffsetToAddr: offset=227254272, size=25264128
+OffsetToAddr: offset=217780224, size=9474048
+OffsetToAddr: offset=201990144, size=15790080
+OffsetToAddr: offset=176787456, size=25202688
+OffsetToAddr: offset=151523328, size=25264128
+OffsetToAddr: offset=126259200, size=25264128
+OffsetToAddr: offset=116785152, size=9474048
+OffsetToAddr: offset=100995072, size=15790080
+OffsetToAddr: offset=75792384, size=25202688
+OffsetToAddr: offset=50528256, size=25264128
+OffsetToAddr: offset=25264128, size=25264128
+OffsetToAddr: offset=15790080, size=9474048
+OffsetToAddr: offset=3223403520, size=15790080
+OffsetToAddr: offset=2827862016, size=395541504
+Verifying Buffer in weight cache
+Verification done
+
+
+Invoking prefill ...
+Current Page Cache: 719956 kB
+Prefill Invoke done.
+Current Page Cache: 721112 kB
+
+
+Invoking decode ...
+Current Page Cache: 721112 kB
+Decode Invoke done.
+Current Page Cache: 721112 kB
+Model dump result to: ../../models/Llama3.2-3B/llama3.2_q8_ekv1024_dump.log
+Stopping bpftrace...
+Debug: Processing 3 lines
+Debug: Found 0 unique tensors
+Debug: Tensor usage entries: 0
+
+=== TENSOR ALLOCATION REPORT ===
+
+Total tensors: 0
+Total size: 0.0 B
+Shared memory groups: 0
+
+Debug: Parsed 0 nodes from execution plan
+
+Report saved to: ../../models/Llama3.2-3B/llama3.2_q8_ekv1024_analysis_report.txt
+JSON data saved to: ../../models/Llama3.2-3B/llama3.2_q8_ekv1024_analysis_data.json
+
+Execution Plan Summary:
+Total nodes: 0
+No nodes found in execution plan. Check input file format.
+Finished processing ../../models/Llama3.2-3B/llama3.2_q8_ekv1024.tflite
+----------------------------------------
+
+Raw log saved to ../../models/Llama3.2-3B/llama3.2_q8_ekv1024_dump.log
+Report saved to ../../models/Llama3.2-3B/llama3.2_q8_ekv1024_analysis_report.txt 
+and saved to ../../models/Llama3.2-3B/llama3.2_q8_ekv1024_analysis_data.json
