@@ -56,8 +56,9 @@
 
 // Weight cache
 #include "tflite/delegates/xnnpack/weight_cache.h"
-#include "tflite/delegates/xnnpack/streaming_weight_cache.h"
-
+#ifdef USE_WEIGHT_STREAMING
+    #include "tflite/delegates/xnnpack/streaming_weight_cache.h"
+#endif
 // ----------------------
 // absl::FLAGS definition
 // ----------------------
@@ -81,7 +82,11 @@ namespace
 {
     using ai_edge_torch::examples::LoRA;
     using ai_edge_torch::mem::AlignedAllocator;
+#ifdef USE_WEIGHT_STREAMING
     using tflite::xnnpack::StreamingWeightCacheProvider;
+#else
+    using tflite::xnnpack::MMapWeightCacheProvider;
+#endif
 
     struct ProfilerOutput
     {
@@ -98,26 +103,44 @@ namespace
     // provider는 delegate보다 오래 살아야 함
 
 
-
-    void ApplyXNNPACKWithWeightCaching(tflite::Interpreter* interpreter, StreamingWeightCacheProvider *provider) {
+#ifdef USE_WEIGHT_STREAMING
+    void ApplyXNNPACKWithWeightCachingProvider(tflite::Interpreter* interpreter, StreamingWeightCacheProvider *provider) {
 
         auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
         delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
 
-        // 파일 기반 캐시 경로
+        // set file path of weight cache
         std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
         delegate_options.weight_cache_file_path = weight_cache_path.c_str();
         
-        // Provider 직접 전달
+        // set provider
         delegate_options.weight_cache_provider = provider;
 
-        // delegate 생성 및 적용
+        // create and apply delegate
         MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
             tflite::Interpreter::TfLiteDelegatePtr(
                 TfLiteXNNPackDelegateCreate(&delegate_options),
                 [](TfLiteDelegate* d) { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
         
     }
+#else
+    void ApplyXNNPACKWithWeightCachingProvider(tflite::Interpreter* interpreter){
+
+        auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
+        delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
+
+        // set file path of weight cache
+        std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
+        delegate_options.weight_cache_file_path = weight_cache_path.c_str();
+        
+        // create and apply delegate
+        MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
+            tflite::Interpreter::TfLiteDelegatePtr(
+                TfLiteXNNPackDelegateCreate(&delegate_options),
+                [](TfLiteDelegate* d) { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
+        
+    }
+#endif
 
     // --------------------------------------------------------------------------
     // Allocates KV cache memory structures for decode, based on the decode signature
@@ -448,19 +471,25 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
     // Set profiler to interpreter
     interpreter->SetProfiler(op_profiler.get());
 
+    
+    //* ============ [Phase] 3. Apply Delegate ============ */
+#ifdef USE_WEIGHT_STREAMING
     std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
 
-    constexpr size_t buf_size = 400 * 1024 * 1024;
+    constexpr size_t buf_size = 380 * 1024 * 1024;
     weight_cache_provider->AllocManagedBuffer(buf_size);
     weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
-
-    //* ============ [Phase] 3. Apply Delegate ============ */
+#endif
     {
         custom::profiler::ScopeEventHandler handler("Apply_Delegate");
 
         if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
         {
-            ApplyXNNPACKWithWeightCaching(interpreter.get(), weight_cache_provider.get());
+#ifdef USE_WEIGHT_STREAMING
+            ApplyXNNPACKWithWeightCachingProvider(interpreter.get(), weight_cache_provider.get());
+#else
+            ApplyXNNPACKWithWeightCachingProvider(interpreter.get());
+#endif
         }
     }
 
@@ -695,9 +724,11 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
     }
 
 
+#ifdef USE_WEIGHT_STREAMING
     weight_cache_provider->CloseDirectIOFileDescriptor();
     weight_cache_provider->FreeManagedBuffer();
     weight_cache_provider->Release();
+#endif
     std::cout << "\n\n\n";
     std::cout << "[INFO] Decoded " << decode_steps << " tokens."<< std::endl;
     std::cout << "[INFO] Decoding Phase completed" << std::endl;
