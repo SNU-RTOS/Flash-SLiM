@@ -84,6 +84,7 @@ namespace
     using ai_edge_torch::mem::AlignedAllocator;
 #ifdef USE_WEIGHT_STREAMING
     using tflite::xnnpack::StreamingWeightCacheProvider;
+    using tflite::xnnpack::WeightChunkPrefetcher;
 #else
     using tflite::xnnpack::MMapWeightCacheProvider;
 #endif
@@ -478,7 +479,9 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
 
     constexpr size_t buf_size = 380 * 1024 * 1024;
     weight_cache_provider->AllocManagedBuffer(buf_size);
-    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
+    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));    
+    weight_cache_provider->InitWeightChunkPrefetcher();
+    auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();   
 #endif
     {
         custom::profiler::ScopeEventHandler handler("Apply_Delegate");
@@ -618,6 +621,9 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
     //* ============ [Phase] 9. Prefill Phase ============ */
     double prefill_time_ms = 0.0;
     std::cout << "[INFO] Prefill Phase started" << std::endl;
+    #ifdef USE_WEIGHT_STREAMING
+        weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
+    #endif
 
     // Start op-level profiling
     op_profiler->Reset();
@@ -657,6 +663,9 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
 
     MINIMAL_CHECK(decode_steps > 0);
 
+    #ifdef USE_WEIGHT_STREAMING
+        weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
+    #endif
     // Decoding loop
     for (int i = 0; i < decode_steps; ++i)
     {
