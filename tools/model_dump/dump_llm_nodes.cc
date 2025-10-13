@@ -29,24 +29,34 @@
 #include "tflite/delegates/xnnpack/weight_cache.h"
 #include "tflite/delegates/xnnpack/streaming_weight_cache.h"
 
+// A minimal check macro.
+#ifndef MINIMAL_CHECK
+#define MINIMAL_CHECK(x)                                         \
+    if (!(x))                                                    \
+    {                                                            \
+        fprintf(stderr, "Error at %s:%d\n", __FILE__, __LINE__); \
+        exit(1);                                                 \
+    }
+#endif // MINIMAL_CHECK
+
 // ----------------------
 // absl::FLAGS definition
 // ----------------------
 ABSL_FLAG(std::string, weight_cache_path, "", "Path for XNNPACK weight caching, e.g., /tmp/model.xnnpack_cache.");
 ABSL_FLAG(std::string, tflite_model, "", "Two-signature tflite model for text generation using ODML tools.");
 ABSL_FLAG(std::string, dump_file_path, "", "Path to save the log file. If empty, no log file is generated.");
+ABSL_FLAG(int, num_threads, 4, "Number of threads to use. Defaults to 4.");
 ABSL_FLAG(bool, dump_tensor_details, false, "Whether to dump detailed tensor information for each node.");
 ABSL_FLAG(bool, op_tensor_byte_stats, false, "Whether to append per-operator aggregated tensor bytes (Mmap/Arena) on each operator line.");
 
 namespace
 {
 #ifdef USE_WEIGHT_STREAMING
-    using WeightCacheProviderT = tflite::xnnpack::StreamingWeightCacheProvider;
+    using tflite::xnnpack::StreamingWeightCacheProvider;
 #else
-    using WeightCacheProviderT = tflite::xnnpack::MMapWeightCacheProvider;
+    using tflite::xnnpack::MMapWeightCacheProvider;
 #endif
 
-    static WeightCacheProviderT g_weight_cache_provider;
 
     // Small helper to map: subgraph -> [tensor_idx -> buffer_id]
     // Maps a subgraph-local tensor index to the FlatBuffer buffer identifier.
@@ -503,29 +513,55 @@ namespace
     // --------------------------------------------------------------------------
     // Utility for applying XNNPACK weight caching
     // --------------------------------------------------------------------------
-    void ApplyXNNPACKWithWeightCaching(tflite::Interpreter *interpreter)
-    {
+#ifdef USE_WEIGHT_STREAMING
+    void ApplyXNNPACKWithWeightCachingProvider(tflite::Interpreter* interpreter, StreamingWeightCacheProvider *provider) {
+
         auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
+        delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
+
+        // set file path of weight cache
         std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
         delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-        delegate_options.weight_cache_provider = &g_weight_cache_provider;
-        delegate_options.num_threads = 1; // Default num_threads for dump tool
+        
+        // set provider
+        delegate_options.weight_cache_provider = provider;
 
-        if (interpreter->ModifyGraphWithDelegate(
-                tflite::Interpreter::TfLiteDelegatePtr(
-                    TfLiteXNNPackDelegateCreate(&delegate_options),
-                    [](TfLiteDelegate *delegate)
-                    { TfLiteXNNPackDelegateDelete(delegate); })) != kTfLiteOk)
-        {
-            std::cerr << "❌ Failed to apply XNNPACK delegate\n";
-            exit(1);
-        }
+        // create and apply delegate
+        MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
+            tflite::Interpreter::TfLiteDelegatePtr(
+                TfLiteXNNPackDelegateCreate(&delegate_options),
+                [](TfLiteDelegate* d) { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
+        
     }
+#else
+    void ApplyXNNPACKWithWeightCachingProvider(tflite::Interpreter* interpreter){
 
+        auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
+        delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
+
+        // set file path of weight cache
+        std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
+        delegate_options.weight_cache_file_path = weight_cache_path.c_str();
+        
+        // create and apply delegate
+        MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
+            tflite::Interpreter::TfLiteDelegatePtr(
+                TfLiteXNNPackDelegateCreate(&delegate_options),
+                [](TfLiteDelegate* d) { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
+        
+    }
+#endif
+
+#if USE_WEIGHT_STREAMING
     // ----------------------------------------------------------------------------------
     // Validate Weight Cache Mappings 
     // ----------------------------------------------------------------------------------
-    void ValidateWeightCacheMappings(tflite::Interpreter *interpreter, const std::string &selected_signature_key, const TensorToBufferIdMap &tbm)
+    void ValidateWeightCacheMappings(tflite::Interpreter *interpreter, 
+        const std::string &selected_signature_key, 
+        const TensorToBufferIdMap &tbm,
+        StreamingWeightCacheProvider *weight_cache_provider,
+        const std::string &save_path = "weight_cache_validation.log"
+        )
     {
         // 0) Get Subgraph and tensors
         int sg_idx = interpreter->GetSubgraphIndexFromSignature(selected_signature_key.c_str());
@@ -533,10 +569,10 @@ namespace
         const size_t num_tensors = static_cast<size_t>(sg->tensors_size());
 
         // 1) Get TensorBufferAddress → identifier map (provider snapshot)
-        auto buffer_address_to_identifier = g_weight_cache_provider.GetBufferAddressToIdentifier();
+        auto buffer_address_to_identifier = weight_cache_provider->GetBufferAddressToIdentifier();
 
         // 2) Snapshot provider mappings once and reuse them per tensor.
-        auto cache_key_to_offset = g_weight_cache_provider.GetCacheKeyToOffset();
+        auto cache_key_to_offset = weight_cache_provider->GetCacheKeyToOffset();
 
         // Build helper maps used by the validation logic.
         // id_map: tensor_index -> weights_id
@@ -582,7 +618,7 @@ namespace
         }
 
         // 3) Validate a subset of constant tensors with cache LookUp/OffsetToAddr
-        std::ofstream vout("weight_cache_validation.log");
+        std::ofstream vout(save_path);
         vout << "\n=== Validation (signature=" << selected_signature_key << ") ===\n";
         vout << "\n";
        // Human-friendly aligned header
@@ -624,12 +660,12 @@ namespace
             {
                 const size_t algo = cand.first;
                 const size_t bias_id = cand.second;
-                size_t offset = g_weight_cache_provider.LookUpByIds(algo, weights_id, bias_id);
+                size_t offset = weight_cache_provider->LookUpByIds(algo, weights_id, bias_id);
                 if (offset == SIZE_MAX)
                     continue;
 
-                void *addr = g_weight_cache_provider.OffsetToAddr(offset);
-                void *mmaped_addr = g_weight_cache_provider.GetMmappedAddr(offset);
+                void *addr = weight_cache_provider->OffsetToAddr(offset);
+                void *mmaped_addr = weight_cache_provider->GetMmappedAddr(offset);
                 {
                     std::ostringstream ptrs, useds, mmaps;
                     ptrs << t.data.data;
@@ -662,7 +698,7 @@ namespace
              << " attempted=" << attempted << "\n";
         vout.close();
     }
-
+#endif
     // --------------------------------------------------------------------------
     // Utility to get current page cache size from /proc/meminfo (Linux only)
     // --------------------------------------------------------------------------
@@ -745,12 +781,24 @@ int main(int argc, char *argv[])
 
     //* ============ Apply Delegate ============ */
     // create 400MB buffer for weight caching
+#ifdef USE_WEIGHT_STREAMING
+    std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
+
     constexpr size_t buf_size = 400 * 1024 * 1024;
-    g_weight_cache_provider.InitManagedBuffer(buf_size);
-    // g_weight_cache_provider.PrefetchFromFile(absl::GetFlag(FLAGS_tflite_model));
+    weight_cache_provider->AllocManagedBuffer(buf_size);
+    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));    
+    weight_cache_provider->InitWeightChunkPrefetcher();
+    auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();  
+#endif
 
     if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
-        ApplyXNNPACKWithWeightCaching(interpreter.get());
+        {
+#ifdef USE_WEIGHT_STREAMING
+            ApplyXNNPACKWithWeightCachingProvider(interpreter.get(), weight_cache_provider.get());
+#else
+            ApplyXNNPACKWithWeightCachingProvider(interpreter.get());
+#endif
+        }
 
     // Use the selected signature key for prefill runner
     const auto &signature_keys = interpreter->signature_keys();
@@ -762,15 +810,24 @@ int main(int argc, char *argv[])
     prefill_runner->AllocateTensors();
     decode_runner->AllocateTensors();
 
-    g_weight_cache_provider.DumpWeightCacheStructureToFile("weight_cache_structure.log");
-    g_weight_cache_provider.DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
-    ValidateWeightCacheMappings(interpreter.get(), selected_signature_key, tensor_buffer_map);
-    
-    std::cout << "Verifying Buffer in weight cache" << std::endl;
-    // g_weight_cache_provider.VerifyAllBuffers();
-    std::cout << "Verification done" << std::endl;
 
-    //* ============ Dump Model (After Delegate) ============ */
+
+    //* ============ Dump Weight Cache ============ */
+#ifdef USE_WEIGHT_STREAMING
+    weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
+    weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
+    ValidateWeightCacheMappings(interpreter.get(), 
+        selected_signature_key, 
+        tensor_buffer_map, 
+        weight_cache_provider.get(),
+        "weight_cache_validation.log");    
+#endif
+    //* ============ Buffer Test ============ */
+    // std::cout << "Verifying Buffer in weight cache" << std::endl;
+    // weight_cache_provider->VerifyAllBuffers();
+    // std::cout << "Verification done" << std::endl;
+
+    //* ============ Invoke Test ============ */
     std::cout << "\n\nInvoking prefill ..." << std::endl;
     size_t cached_kb = GetPageCacheKB();
     std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
@@ -786,9 +843,11 @@ int main(int argc, char *argv[])
     std::cout << "Decode Invoke done." << std::endl;
     cached_kb = GetPageCacheKB();
     std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
-
+    
+//* ============ Dump Model (After Delegate) ============ */
     dump_file << "\n=== After Applying Delegate ===" << std::endl;
-    // InspectSelectedSignature(interpreter.get(), sig_index, tensor_buffer_map, &dump_file);
+    InspectSelectedSignature(interpreter.get(), sig_index, tensor_buffer_map, &dump_file);
+    
 
     dump_file.close();
 

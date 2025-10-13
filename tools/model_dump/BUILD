@@ -7,28 +7,6 @@ package(
 )
 
 cc_binary(
-    name = "dump_model_xnnpack",
-    srcs = [
-        "dump_model_xnnpack.cc",
-    ],
-    linkopts = tflite_linkopts() + select({
-        "//conditions:default": [
-            "-lm",  # math library
-        ],
-    }),
-    deps = [
-        "@litert//tflite:framework",
-        "@litert//tflite/core:cc_api_stable",
-        "@litert//tflite/kernels:builtin_ops",
-        "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
-        "@litert//tflite/profiling:profiler",
-
-    ],
-)
-
-
-
-cc_binary(
     name = "dump_llm_nodes",
     srcs = [
         "dump_llm_nodes.cc",

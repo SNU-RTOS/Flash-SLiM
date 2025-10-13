@@ -11,7 +11,7 @@ destination_dir="../../models/Llama3.2-3B"
 bin=dump_llm_nodes
 
 
-./build_online_parser.sh $bin
+./build_model_parser.sh $bin
 
 # Run parser.py for each .tflite file in the destination directory
 for tflite_file in "$destination_dir"/*.tflite; do
@@ -38,6 +38,7 @@ for tflite_file in "$destination_dir"/*.tflite; do
         --tflite_model "$tflite_file" \
         --weight_cache_path "$weight_cache" \
         --dump_tensor_details \
+        --num_threads 1 \
         --op_tensor_byte_stats 
     # --------------------------------------
     # stop bpftrace
