@@ -7,7 +7,6 @@
 // This module provides tools to record and plan I/O prefetch operations
 // for weight chunks during model execution.
 
-
 #ifndef FLASH_SLIM_PREFETCH_PLANNER_UTIL_H
 #define FLASH_SLIM_PREFETCH_PLANNER_UTIL_H
 
@@ -15,26 +14,30 @@
 #include <string>
 #include <memory>
 #include <map>
+#include <unordered_map>
 #include "nlohmann/json.hpp"
 #include "tflite/delegates/xnnpack/streaming_weight_cache.h"
 
 namespace flash_slim
 {
 
+    //* ==================== JsonWeightChunkInfoWriter ==================== */
+
     // JSON-based implementation of WeightChunkInfoWriter
     // Uses nlohmann/json for serialization
-    class JsonWeightChunkInfoHandler : public tflite::xnnpack::WeightChunkInfoHandler
+    class JsonWeightChunkInfoWriter : public tflite::xnnpack::WeightChunkInfoWriter
     {
     public:
-        explicit JsonWeightChunkInfoHandler(const std::string &output_path);
-        ~JsonWeightChunkInfoHandler() override;
+        explicit JsonWeightChunkInfoWriter(const std::string &output_path);
+        ~JsonWeightChunkInfoWriter() override;
 
         // Delete copy constructor and assignment operator
-        JsonWeightChunkInfoHandler(const JsonWeightChunkInfoHandler &) = delete;
-        JsonWeightChunkInfoHandler &operator=(const JsonWeightChunkInfoHandler &) = delete;
+        JsonWeightChunkInfoWriter(const JsonWeightChunkInfoWriter &) = delete;
+        JsonWeightChunkInfoWriter &operator=(const JsonWeightChunkInfoWriter &) = delete;
 
         void WriteChunkInfo(const tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t &chunk_info,
                             tflite::xnnpack::WeightChunkPrefetcher::PrefetchMode prefetch_mode) override;
+
         void Finalize() override;
 
         // Optional: write model info into metadata (e.g., model path)
@@ -48,6 +51,57 @@ namespace flash_slim
         std::map<std::string, size_t> per_mode_counts_;
         std::map<std::string, size_t> per_mode_total_aligned_size_;
         std::string model_path_;
+    };
+} // namespace flash_slim
+
+namespace flash_slim
+{
+    //* ==================== JsonPrefetchPlanLoader ==================== */
+    class JsonPrefetchPlanLoader : public tflite::xnnpack::PrefetchPlanLoader
+    {
+    public:
+        using Chunk = tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t;
+
+        JsonPrefetchPlanLoader() = default;
+
+        // JSON 파일 로드(성공 시 true)
+        bool LoadFromFile(const std::string &path)  override;
+
+        // 메타데이터 접근자
+        const std::string &version() const { return version_; }
+        const std::string &model() const { return model_path_; }
+        uint64_t max_aligned_size() const { return max_aligned_size_; }
+
+        // 모드 목록("PREFILL", "DECODE", ...)
+        std::vector<std::string> modes() const;
+
+        // 모드별 chunk 벡터(모드가 없으면 빈 벡터 반환)
+        const std::vector<Chunk> &chunks(const std::string &mode) const;
+
+    // 전체 플랜: offset(aligned_offset) -> weight_chunk_info_t 맵을 구성해 반환
+    std::unordered_map<size_t, Chunk> BuildOffsetToWeightChunkInfo() const;
+
+    // 특정 모드만 대상으로 플랜을 구성해 반환
+    std::unordered_map<size_t, Chunk> BuildOffsetToWeightChunkInfoForMode(const std::string& mode) const;
+
+        // 모드별 개수/총 aligned_size
+        const std::map<std::string, size_t> &chunk_count_by_mode() const { return count_by_mode_; }
+        const std::map<std::string, uint64_t> &total_aligned_size_by_mode() const { return size_by_mode_; }
+
+        // 원본 JSON에 접근이 필요하면 제공
+        const nlohmann::ordered_json &raw_json() const { return root_; }
+
+    private:
+        void Clear();
+
+        nlohmann::ordered_json root_;
+        std::string version_;
+        std::string model_path_;
+        uint64_t max_aligned_size_ = 0;
+        std::map<std::string, size_t> count_by_mode_;
+        std::map<std::string, uint64_t> size_by_mode_;
+        std::map<std::string, std::vector<Chunk>> groups_;
+        static std::vector<std::string> KeysOf(const nlohmann::ordered_json &obj);
     };
 
 } // namespace flash_slim

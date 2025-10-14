@@ -1030,9 +1030,9 @@ int main(int argc, char *argv[])
     auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();
 
     // Json handler for weight chunk info
-    flash_slim::JsonWeightChunkInfoHandler handler("weight_chunks_metadata_table.json");
-    handler.WriteModelInfo(absl::GetFlag(FLAGS_tflite_model).c_str());
-    weight_cache_provider->SetWeightChunkInfoHandler(&handler);
+    flash_slim::JsonWeightChunkInfoWriter writer("weight_chunks_metadata_table.json");
+    writer.WriteModelInfo(absl::GetFlag(FLAGS_tflite_model).c_str());
+    weight_cache_provider->SetWeightChunkInfoWriter(&writer);
 
     //* ============ [Phase] 3.5 Apply Delegate ============ */
     if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
@@ -1223,8 +1223,8 @@ int main(int argc, char *argv[])
     std::cout << "[INFO] Decoding Phase completed" << std::endl;
     PrintCurrentPageCacheKB();
     std::cout << "---------------------------------------------------\n\n";
-    // Finalize JSON handler
-    handler.Finalize();
+    
+    writer.Finalize();
 
     // Release resources in reverse order of allocation
     weight_cache_provider->CloseDirectIOFileDescriptor();
