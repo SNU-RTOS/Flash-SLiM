@@ -137,6 +137,9 @@ cc_binary(
     name = "prefetch_planner",
     srcs = [
         "prefetch_planner.cc",
+        "prefetch_planner.h",
+        "prefetch_planner_util.cc",
+        "prefetch_planner_util.h",
     ],
     defines = [
         "TF_LITE_TENSORFLOW_PROFILER",
@@ -145,6 +148,7 @@ cc_binary(
     deps = [
         ":aligned_allocator",
         ":lora_adapter",
+        "//flash-slim/nlohmann:nlohmann_json",
         ":profiler",
         ":sampler",
         ":utils",

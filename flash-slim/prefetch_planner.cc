@@ -53,12 +53,12 @@
 #include "profiler.h"
 #include "aligned_allocator.h"
 #include "lora_adapter.h"
+#include "prefetch_planner.h"
+#include "prefetch_planner_util.h"
 
 // Weight cache
 #include "tflite/delegates/xnnpack/weight_cache.h"
-#ifdef USE_WEIGHT_STREAMING
 #include "tflite/delegates/xnnpack/streaming_weight_cache.h"
-#endif
 // ----------------------
 // absl::FLAGS definition
 // ----------------------
@@ -81,18 +81,12 @@ ABSL_FLAG(bool, dump_tensor_details, false, "Whether to dump detailed tensor inf
 ABSL_FLAG(bool, op_tensor_byte_stats, false, "Whether to append per-operator aggregated tensor bytes (Mmap/Arena) on each operator line.");
 ABSL_FLAG(std::string, model_dump_file_path, "", "Path to save the log file. If empty, no log file is generated.");
 
-
-
 namespace
 {
     using ai_edge_torch::examples::LoRA;
     using ai_edge_torch::mem::AlignedAllocator;
-#ifdef USE_WEIGHT_STREAMING
     using tflite::xnnpack::StreamingWeightCacheProvider;
     using tflite::xnnpack::WeightChunkPrefetcher;
-#else
-    using tflite::xnnpack::MMapWeightCacheProvider;
-#endif
 
     struct ProfilerOutput
     {
@@ -108,7 +102,6 @@ namespace
     // --------------------------------------------------------------------------
     // provider는 delegate보다 오래 살아야 함
 
-#ifdef USE_WEIGHT_STREAMING
     void ApplyXNNPACKWithWeightCachingProvider(tflite::Interpreter *interpreter, StreamingWeightCacheProvider *provider)
     {
 
@@ -129,25 +122,6 @@ namespace
                               [](TfLiteDelegate *d)
                               { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
     }
-#else
-    void ApplyXNNPACKWithWeightCachingProvider(tflite::Interpreter *interpreter)
-    {
-
-        auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
-        delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
-
-        // set file path of weight cache
-        std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
-        delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-
-        // create and apply delegate
-        MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
-                          tflite::Interpreter::TfLiteDelegatePtr(
-                              TfLiteXNNPackDelegateCreate(&delegate_options),
-                              [](TfLiteDelegate *d)
-                              { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
-    }
-#endif
 
     // --------------------------------------------------------------------------
     // Allocates KV cache memory structures for decode, based on the decode signature
@@ -803,17 +777,14 @@ namespace
         return sig_index;
     }
 
-    
-#if USE_WEIGHT_STREAMING
     // ----------------------------------------------------------------------------------
-    // Validate Weight Cache Mappings 
+    // Validate Weight Cache Mappings
     // ----------------------------------------------------------------------------------
-    void ValidateWeightCacheMappings(tflite::Interpreter *interpreter, 
-        const std::string &selected_signature_key, 
-        const TensorToBufferIdMap &tbm,
-        StreamingWeightCacheProvider *weight_cache_provider,
-        const std::string &save_path = "weight_cache_validation.log"
-        )
+    void ValidateWeightCacheMappings(tflite::Interpreter *interpreter,
+                                     const std::string &selected_signature_key,
+                                     const TensorToBufferIdMap &tbm,
+                                     StreamingWeightCacheProvider *weight_cache_provider,
+                                     const std::string &save_path = "weight_cache_validation.log")
     {
         // 0) Get Subgraph and tensors
         int sg_idx = interpreter->GetSubgraphIndexFromSignature(selected_signature_key.c_str());
@@ -873,16 +844,16 @@ namespace
         std::ofstream vout(save_path);
         vout << "\n=== Validation (signature=" << selected_signature_key << ") ===\n";
         vout << "\n";
-       // Human-friendly aligned header
-       vout << std::left << std::setw(8) << "Tensor" << " | "
-           << std::setw(18) << "Ptr" << " | -> | "
-           << std::setw(15) << "Pack Algo ID" << " | "
-           << std::setw(18) << "Weights(Buffer) ID" << " | "
-           << std::setw(11) << "Bias ID" << " | -> | "
-           << std::setw(18) << "Offset" << " | -> | "
-           << std::setw(18) << "Addr(used)" << "  ||  "
-           << std::setw(18) << "MmappedAddr" << "\n";
-       vout << std::string(160, '-') << "\n";
+        // Human-friendly aligned header
+        vout << std::left << std::setw(8) << "Tensor" << " | "
+             << std::setw(18) << "Ptr" << " | -> | "
+             << std::setw(15) << "Pack Algo ID" << " | "
+             << std::setw(18) << "Weights(Buffer) ID" << " | "
+             << std::setw(11) << "Bias ID" << " | -> | "
+             << std::setw(18) << "Offset" << " | -> | "
+             << std::setw(18) << "Addr(used)" << "  ||  "
+             << std::setw(18) << "MmappedAddr" << "\n";
+        vout << std::string(160, '-') << "\n";
         size_t validated = 0, attempted = 0;
 
         for (size_t i = 0; i < num_tensors; ++i)
@@ -950,11 +921,10 @@ namespace
              << " attempted=" << attempted << "\n";
         vout.close();
     }
-#endif
     // --------------------------------------------------------------------------
     // Utility to get current page cache size from /proc/meminfo (Linux only)
     // --------------------------------------------------------------------------
-    size_t GetPageCacheKB()
+    void PrintCurrentPageCacheKB()
     {
         std::ifstream meminfo("/proc/meminfo");
         if (!meminfo.is_open())
@@ -974,7 +944,7 @@ namespace
                 return value; // in KB
             }
         }
-        return 0;
+        std::cout << "[INFO] Current Page Cache: " << value << " kB" << std::endl;
     }
 }
 
@@ -1014,31 +984,25 @@ int main(int argc, char *argv[])
 
     //* ============ [Phase] 1. Load Model ============ */
     std::unique_ptr<tflite::FlatBufferModel> model;
-    {
-        model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
-    }
+    model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
     MINIMAL_CHECK(model != nullptr);
 
     // Initialize tensor->buffer map from FlatBuffer model
     TensorToBufferIdMap tensor_buffer_map;
     tensor_buffer_map.BuildFromFlatBufferModel(model.get());
 
-
     //* ============ [Phase] 2. Build Interpreter ============ */
 
     std::unique_ptr<tflite::Interpreter> interpreter;
-    {
-        // Register Ops
-        tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates resolver;
-        tflite::ops::custom::GenAIOpsRegisterer(&resolver); // Register GenAI custom ops
+    // Register Ops
+    tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates resolver;
+    tflite::ops::custom::GenAIOpsRegisterer(&resolver); // Register GenAI custom ops
 
-        // Build the interpreter
-        tflite::InterpreterBuilder builder(*model, resolver);
-        builder.SetNumThreads(absl::GetFlag(FLAGS_num_threads));
-        builder(&interpreter);
-    }
+    // Build the interpreter
+    tflite::InterpreterBuilder builder(*model, resolver);
+    builder.SetNumThreads(absl::GetFlag(FLAGS_num_threads));
+    builder(&interpreter);
     MINIMAL_CHECK(interpreter != nullptr);
-
 
     //* ============ [Phase] 2.5. Setup Profiler ============ */
     // Init Tflite Internal Op-level Profiler
@@ -1048,91 +1012,83 @@ int main(int argc, char *argv[])
     constexpr int kProfilingBufferHeadrooms = 512;
     int total_nodes = count_total_nodes(interpreter.get());
     if (total_nodes > kProfilingBufferHeadrooms)
+    {
         total_nodes += kProfilingBufferHeadrooms;
+    }
     op_profiler = std::make_unique<tflite::profiling::BufferedProfiler>(total_nodes, true);
 
     // Set profiler to interpreter
     interpreter->SetProfiler(op_profiler.get());
 
-    //* ============ [Phase] 3. Apply Delegate ============ */
-#ifdef USE_WEIGHT_STREAMING
+    //* ============ [Phase] 3. Define Weight Cache Provider and Prefetcher ============ */
     std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
-
-    constexpr size_t buf_size = 380 * 1024 * 1024;
-    weight_cache_provider->AllocManagedBuffer(buf_size);
-    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
+    weight_cache_provider->SetProviderMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUNTIME);
+    // constexpr size_t buf_size = 500 * 1024 * 1024;
+    // weight_cache_provider->AllocManagedBuffer(buf_size);
+    // weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
     weight_cache_provider->InitWeightChunkPrefetcher();
     auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();
-#endif
-    {
 
-        if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
-        {
-#ifdef USE_WEIGHT_STREAMING
-            ApplyXNNPACKWithWeightCachingProvider(interpreter.get(), weight_cache_provider.get());
-#else
-            ApplyXNNPACKWithWeightCachingProvider(interpreter.get());
-#endif
-        }
+    // Json handler for weight chunk info
+    flash_slim::JsonWeightChunkInfoHandler handler("weight_chunks_metadata_table.json");
+    handler.WriteModelInfo(absl::GetFlag(FLAGS_tflite_model).c_str());
+    weight_cache_provider->SetWeightChunkInfoHandler(&handler);
+
+    //* ============ [Phase] 3.5 Apply Delegate ============ */
+    if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
+    {
+        ApplyXNNPACKWithWeightCachingProvider(interpreter.get(), weight_cache_provider.get());
     }
     std::cout << std::endl;
 
     //* ============ [Phase] 4. Load Tokenizer ============ */
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
-    {
-        sp_processor = LoadSentencePieceProcessor();
-    }
+    sp_processor = LoadSentencePieceProcessor();
 
     //* ============ [Phase] 5. Allocate KV Cache ============ */
     std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
-    {
-        kv_cache = AllocateKVCache(interpreter.get());
-    }
+    kv_cache = AllocateKVCache(interpreter.get());
     MINIMAL_CHECK(!kv_cache.empty());
 
     //* ============ [Phase] 6. Prepare Prompt ============ */
+    prompt = absl::GetFlag(FLAGS_prompt);
+    MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
+
+    // Initialize start and stop tokens
+    start_token = absl::GetFlag(FLAGS_start_token);
+    if (!start_token.empty())
     {
-        prompt = absl::GetFlag(FLAGS_prompt);
-        MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
+        prompt_tokens.insert(prompt_tokens.begin(), sp_processor->PieceToId(start_token));
+    }
 
-        // Initialize start and stop tokens
-        start_token = absl::GetFlag(FLAGS_start_token);
-        if (!start_token.empty())
-        {
-            prompt_tokens.insert(prompt_tokens.begin(), sp_processor->PieceToId(start_token));
-        }
+    stop_token = absl::GetFlag(FLAGS_stop_token);
+    if (!stop_token.empty())
+    {
+        stop_token_id = sp_processor->PieceToId(stop_token);
+    }
 
-        stop_token = absl::GetFlag(FLAGS_stop_token);
-        if (!stop_token.empty())
+    // Initialize previously generated tokens with prompt tokens for repetition penalty
+    if (absl::GetFlag(FLAGS_enable_repetition_penalty))
+    {
+        for (int token : prompt_tokens)
         {
-            stop_token_id = sp_processor->PieceToId(stop_token);
-        }
-
-        // Initialize previously generated tokens with prompt tokens for repetition penalty
-        if (absl::GetFlag(FLAGS_enable_repetition_penalty))
-        {
-            for (int token : prompt_tokens)
-            {
-                previously_generated_tokens.insert(token);
-            }
+            previously_generated_tokens.insert(token);
         }
     }
     std::cout << "[INFO] Stop token ID: " << stop_token_id << " for token: " << stop_token << std::endl;
 
     //* ============ [Phase] 7. Prepare Signature Runners ============ */
-    
+
     tflite::SignatureRunner *prefill_runner = nullptr;
     tflite::SignatureRunner *decode_runner = nullptr;
-    {
-        std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
-        prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
-        decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
-    }
+
+    std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
+    prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
+    decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
+
     MINIMAL_CHECK(prefill_runner != nullptr || decode_runner != nullptr);
     std::cout << "[INFO] Prefill Signature: " << prefill_runner->signature_key() << std::endl;
     std::cout << "[INFO] Decode Signature: " << decode_runner->signature_key() << std::endl;
-
-
 
     //* ============ [Phase] 8. Prepare Input Tensors ============ */
     TfLiteTensor *prefill_input = nullptr;
@@ -1144,95 +1100,80 @@ int main(int argc, char *argv[])
     int kv_cache_max_size = 0;
     int prefill_seq_size = 0;
     int seq_dim_index = 0;
+
+    prefill_input = prefill_runner->input_tensor("tokens");
+    prefill_input_pos = prefill_runner->input_tensor("input_pos");
+    decode_input = decode_runner->input_tensor("tokens");
+    decode_input_pos = decode_runner->input_tensor("input_pos");
+    kv_cache_k_0 = decode_runner->input_tensor("kv_cache_k_0");
+    max_seq_size = prefill_input->dims->data[1];
+
+    // Detect KV cache sequence dimension and set max size accordingly
+    seq_dim_index = DetectKVCacheSequenceDimension(kv_cache_k_0);
+    if (seq_dim_index >= 0 && seq_dim_index < kv_cache_k_0->dims->size)
     {
-
-        prefill_input = prefill_runner->input_tensor("tokens");
-        prefill_input_pos = prefill_runner->input_tensor("input_pos");
-        decode_input = decode_runner->input_tensor("tokens");
-        decode_input_pos = decode_runner->input_tensor("input_pos");
-        kv_cache_k_0 = decode_runner->input_tensor("kv_cache_k_0");
-        max_seq_size = prefill_input->dims->data[1];
-
-        // Detect KV cache sequence dimension and set max size accordingly
-        seq_dim_index = DetectKVCacheSequenceDimension(kv_cache_k_0);
-        if (seq_dim_index >= 0 && seq_dim_index < kv_cache_k_0->dims->size)
-        {
-            kv_cache_max_size = kv_cache_k_0->dims->data[seq_dim_index];
-        }
-        else // Fallback to default behavior
-        {
-            kv_cache_max_size = kv_cache_k_0->dims->data[1];
-        }
-
-        prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
-
-        // Zero out the input tensors
-        std::memset(prefill_input->data.i32, 0, prefill_input->bytes);
-        std::memset(prefill_input_pos->data.i32, 0, prefill_input_pos->bytes);
-
-        // Prefill uses all but the last token from the prompt
-        for (int i = 0; i < prefill_seq_size - 1; ++i)
-        {
-            prefill_input->data.i32[i] = prompt_tokens[i];
-            prefill_input_pos->data.i32[i] = i;
-        }
+        kv_cache_max_size = kv_cache_k_0->dims->data[seq_dim_index];
     }
+    else // Fallback to default behavior
+    {
+        kv_cache_max_size = kv_cache_k_0->dims->data[1];
+    }
+
+    prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
+
+    // Zero out the input tensors
+    std::memset(prefill_input->data.i32, 0, prefill_input->bytes);
+    std::memset(prefill_input_pos->data.i32, 0, prefill_input_pos->bytes);
+
+    // Prefill uses all but the last token from the prompt
+    for (int i = 0; i < prefill_seq_size - 1; ++i)
+    {
+        prefill_input->data.i32[i] = prompt_tokens[i];
+        prefill_input_pos->data.i32[i] = i;
+    }
+
     std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")" << std::endl;
 
     //* ============================================== Generate Prefetch Plan ========================================================= */
 
-//     //* ============ [Optional 1] Inspect Model ============ */
+    //     //* ============ [Optional 1] Inspect Model ============ */
 
-//     std::string prefill_selected_signature_key = prefill_runner->signature_key();
-//     std::string decode_selected_signature_key = decode_runner->signature_key();
+    //     std::string prefill_selected_signature_key = prefill_runner->signature_key();
+    //     std::string decode_selected_signature_key = decode_runner->signature_key();
 
-//     std::ofstream dump_file(absl::GetFlag(FLAGS_model_dump_file_path));
-//     if (!dump_file.is_open())
-//     {
-//         std::cerr << "❌ Failed to open log file: " << absl::GetFlag(FLAGS_model_dump_file_path) << std::endl;
-//         return 1;
-//     }
-//     dump_file << "\n=== After Applying Delegate ===" << std::endl;
-//     InspectSignatureExecutionPlan(interpreter.get(), prefill_selected_signature_key, tensor_buffer_map, &dump_file);
-//     dump_file.close();
+    //     std::ofstream dump_file(absl::GetFlag(FLAGS_model_dump_file_path));
+    //     if (!dump_file.is_open())
+    //     {
+    //         std::cerr << "❌ Failed to open log file: " << absl::GetFlag(FLAGS_model_dump_file_path) << std::endl;
+    //         return 1;
+    //     }
+    //     dump_file << "\n=== After Applying Delegate ===" << std::endl;
+    //     InspectSignatureExecutionPlan(interpreter.get(), prefill_selected_signature_key, tensor_buffer_map, &dump_file);
+    //     dump_file.close();
 
-//     //* ============ [Optional 2] Dump Weight Cache ============ */
-// #ifdef USE_WEIGHT_STREAMING
-//     weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
-//     weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
-//     ValidateWeightCacheMappings(interpreter.get(),
-//         prefill_selected_signature_key,
-//         tensor_buffer_map,
-//         weight_cache_provider.get(),
-//         "weight_cache_validation.log");    
-// #endif
+    //     //* ============ [Optional 2] Dump Weight Cache ============ */
+    //     weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
+    //     weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
+    //     ValidateWeightCacheMappings(interpreter.get(),
+    //         prefill_selected_signature_key,
+    //         tensor_buffer_map,
+    //         weight_cache_provider.get(),
+    //         "weight_cache_validation.log");
 
-//     //* ============ [Optional 3] Buffer Test ============ */
-//     std::cout << "Verifying Buffer in weight cache" << std::endl;
-//     weight_cache_provider->VerifyAllBuffers();
-//     std::cout << "Verification done" << std::endl;
-
-
-
-    size_t cached_kb = GetPageCacheKB();
-    std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
+    //     //* ============ [Optional 3] Buffer Test ============ */
+    //     std::cout << "Verifying Buffer in weight cache" << std::endl;
+    //     weight_cache_provider->VerifyAllBuffers();
+    //     std::cout << "Verification done" << std::endl;
 
     //* ============ [Phase] 9. Prefill Phase ============ */
-    double prefill_time_ms = 0.0;
+    PrintCurrentPageCacheKB();
+
     std::cout << "[INFO] Prefill Phase started" << std::endl;
-#ifdef USE_WEIGHT_STREAMING
     weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
-#endif
-
-    {
-        status = prefill_runner->Invoke(); // Execute the prefill runner
-    }
-
-    MINIMAL_CHECK(status == kTfLiteOk);
+    MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk); // Invoke the prefill runner
 
     std::cout << "[INFO] Prefill Phase completed" << std::endl;
-    cached_kb = GetPageCacheKB();
-    std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
+    PrintCurrentPageCacheKB();
 
     //* ============ [Phase] 10. Decoding Phase ============ */
     // Determine how many tokens to generate
@@ -1249,76 +1190,46 @@ int main(int argc, char *argv[])
     std::cout << "[INFO] Limits of Tokens to Generate: " << kv_cache_max_size << "\n";
     std::cout << "\nPrompt:\n"
               << prompt
-              << "\n\nOutput Text:\n"
+              << "\n\nOutput Text for Test:\n"
               << std::endl;
 
     MINIMAL_CHECK(decode_steps > 0);
 
-#ifdef USE_WEIGHT_STREAMING
     weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
-#endif
 
-    // Decoding loop
-    for (int i = 0; i < decode_steps; ++i)
-    {
-        std::string single_decoded_text;
-        {
+    // Decode a single token
+    std::string single_decoded_text;
 
-            // 1) Model Inference
-            decode_input->data.i32[0] = next_token_id;
-            decode_input_pos->data.i32[0] = next_position;
-            MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
+    // 1) Model Inference
+    decode_input->data.i32[0] = next_token_id;
+    decode_input_pos->data.i32[0] = next_position;
+    MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
 
-            // 2) Token Sampling
-            if (absl::GetFlag(FLAGS_enable_repetition_penalty))
-            {
-                next_token_id = custom::sampler::temperature_top_k_top_p_repetition_sampler(
-                    decode_runner->output_tensor("logits"),
-                    absl::GetFlag(FLAGS_temperature),
-                    absl::GetFlag(FLAGS_top_k),
-                    absl::GetFlag(FLAGS_top_p),
-                    previously_generated_tokens,
-                    absl::GetFlag(FLAGS_repetition_penalty));
-            }
-            else
-            {
-                next_token_id = custom::sampler::temperature_top_k_top_p_sampler(
-                    decode_runner->output_tensor("logits"),
-                    absl::GetFlag(FLAGS_temperature),
-                    absl::GetFlag(FLAGS_top_k),
-                    absl::GetFlag(FLAGS_top_p));
-            }
+    // 2) Token Sampling
+    next_token_id = custom::sampler::temperature_top_k_top_p_sampler(
+        decode_runner->output_tensor("logits"),
+        absl::GetFlag(FLAGS_temperature),
+        absl::GetFlag(FLAGS_top_k),
+        absl::GetFlag(FLAGS_top_p));
 
-            // 3) Token Detokenization
-            std::vector<int> next_token = {next_token_id};
-            MINIMAL_CHECK(sp_processor->Decode(next_token, &single_decoded_text).ok());
-        }
+    // 3) Token Detokenization
+    std::vector<int> next_token = {next_token_id};
+    MINIMAL_CHECK(sp_processor->Decode(next_token, &single_decoded_text).ok());
 
-        // Check if the next token is a stop token
-        if (next_token_id == stop_token_id)
-            break;
-
-        // Add the generated token to previously generated tokens for repetition penalty
-        if (absl::GetFlag(FLAGS_enable_repetition_penalty))
-            previously_generated_tokens.insert(next_token_id);
-
-        std::cout << single_decoded_text << std::flush;
-        next_position++;
-    }
-
-#ifdef USE_WEIGHT_STREAMING
-    weight_cache_provider->CloseDirectIOFileDescriptor();
-    weight_cache_provider->FreeManagedBuffer();
-    weight_cache_provider->Release();
-#endif
+    std::cout << single_decoded_text << std::flush;
 
     std::cout << "\n\n\n";
     std::cout << "[INFO] Decoded " << decode_steps << " tokens." << std::endl;
     std::cout << "[INFO] Decoding Phase completed" << std::endl;
-    cached_kb = GetPageCacheKB();
-    std::cout << "Current Page Cache: " << cached_kb << " kB" << std::endl;
-
+    PrintCurrentPageCacheKB();
     std::cout << "---------------------------------------------------\n\n";
+    // Finalize JSON handler
+    handler.Finalize();
+
+    // Release resources in reverse order of allocation
+    weight_cache_provider->CloseDirectIOFileDescriptor();
+    weight_cache_provider->FreeManagedBuffer();
+    weight_cache_provider->Release();
 
     return 0;
 }
