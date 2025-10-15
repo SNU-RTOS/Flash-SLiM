@@ -67,7 +67,7 @@ namespace flash_slim
         ~JsonPrefetchPlanLoader() override;
 
         // JSON 파일 로드(성공 시 true)
-        bool LoadFromFile(const std::string &path)  override;
+        bool LoadFromFile(const std::string &path) override;
 
         // 메타데이터 접근자
         const std::string &version() const { return version_; }
@@ -81,25 +81,20 @@ namespace flash_slim
         const std::vector<weight_chunk_info_t> &chunks(const std::string &mode) const;
 
         // 편의 접근자: PREFILL / DECODE 전용 벡터
-        const std::vector<weight_chunk_info_t>& prefill_chunks() const { return prefill_chunks_; }
-        const std::vector<weight_chunk_info_t>& decode_chunks() const { return decode_chunks_; }
+        const std::vector<weight_chunk_info_t> &prefill_chunks() const { return prefill_chunks_; }
+        const std::vector<weight_chunk_info_t> &decode_chunks() const { return decode_chunks_; }
 
-    // 메타데이터 출력
-    void PrintMetadata(std::ostream& os) const;
-    // 표준 출력으로 메타데이터 출력 (구현은 .cc에서 std::cout 사용)
-    void PrintMetadata() const;
+        // 메타데이터 출력
+        void PrintMetadata(std::ostream &os) const;
+        // 표준 출력으로 메타데이터 출력 (구현은 .cc에서 std::cout 사용)
+        void PrintMetadata() const;
 
-    // 전체 플랜: offset(origin_offset) -> weight_chunk_info_t 맵을 구성해 반환
-    std::unordered_map<size_t, weight_chunk_info_t> BuildOffsetToWeightChunkInfo() const;
 
-    // 특정 모드만 대상으로 플랜을 구성해 반환
-    std::unordered_map<size_t, weight_chunk_info_t> BuildOffsetToWeightChunkInfoForMode(const std::string& mode) const;
+        // 특정 모드: origin_offset -> index 맵(사본) 반환
+        std::unordered_map<size_t, size_t> BuildOffsetToIndexForMode(const std::string &mode) const;
 
-    // 특정 모드: origin_offset -> index 맵(사본) 반환
-    std::unordered_map<size_t, size_t> BuildOffsetToIndexForMode(const std::string& mode) const;
-
-    // 특정 모드: index -> weight_chunk_info_t 벡터(사본) 반환
-    std::vector<weight_chunk_info_t> BuildIndexToChunkVectorForMode(const std::string& mode) const;
+        // 특정 모드: index -> weight_chunk_info_t 벡터(사본) 반환
+        std::vector<weight_chunk_info_t> BuildIndexToChunkVectorForMode(const std::string &mode) const;
 
         // 모드별 개수/총 aligned_size
         const std::map<std::string, size_t> &chunk_count_by_mode() const { return count_by_mode_; }

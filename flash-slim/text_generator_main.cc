@@ -509,6 +509,7 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
     auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();
     weight_chunk_prefetcher->SetPrefetchPlan(WeightChunkPrefetcher::PrefetchMode::PREFILL, std::move(offset_to_index_prefill), std::move(chunks_prefill));
     weight_chunk_prefetcher->SetPrefetchPlan(WeightChunkPrefetcher::PrefetchMode::DECODE,  std::move(offset_to_index_decode),  std::move(chunks_decode));
+    weight_chunk_prefetcher->BuildIndexToChunksFromPlans();
     {
         custom::profiler::ScopeEventHandler handler("Apply_Delegate");
 
@@ -521,10 +522,6 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
 #endif
         }
     }
-
-    // weight_cache_provider->PrefetchFromFile(absl::GetFlag(FLAGS_tflite_model));
-    // weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
-    // weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
 
     //* ============ [Phase] 4. Load Tokenizer ============ */
     std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;

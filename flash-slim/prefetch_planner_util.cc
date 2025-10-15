@@ -280,7 +280,7 @@ namespace flash_slim
             vec.reserve(arr.size());
             for (const auto &j : arr)
             {
-                weight_chunk_info_t c{}; 
+                weight_chunk_info_t c{};
                 if (j.contains("chunk_index"))
                     c.chunk_index = static_cast<size_t>(j.at("chunk_index").get<uint64_t>());
                 if (j.contains("aligned_offset"))
@@ -300,9 +300,12 @@ namespace flash_slim
                 // Note: prefetch_mode field (if present) is ignored; grouping key is authoritative
                 vec.emplace_back(c);
                 // 전용 벡터에도 저장
-                if (mode == "PREFILL") {
+                if (mode == "PREFILL")
+                {
                     prefill_chunks_.emplace_back(c);
-                } else if (mode == "DECODE") {
+                }
+                else if (mode == "DECODE")
+                {
                     decode_chunks_.emplace_back(c);
                 }
             }
@@ -327,7 +330,7 @@ namespace flash_slim
         return it->second;
     }
 
-    void JsonPrefetchPlanLoader::PrintMetadata(std::ostream& os) const
+    void JsonPrefetchPlanLoader::PrintMetadata(std::ostream &os) const
     {
         os << "[INFO] Prefetch Plan - Metadata" << std::endl;
         os << "  version: " << version_ << std::endl;
@@ -347,57 +350,22 @@ namespace flash_slim
         }
     }
 
-    void JsonPrefetchPlanLoader::PrintMetadata() const {
+    void JsonPrefetchPlanLoader::PrintMetadata() const
+    {
         PrintMetadata(std::cout);
     }
 
-    // std::unordered_map<size_t, JsonPrefetchPlanLoader::weight_chunk_info_t>
-    // JsonPrefetchPlanLoader::BuildOffsetToWeightChunkInfo() const
-    // {
-    //     std::unordered_map<size_t, weight_chunk_info_t> plan;
-    //     for (const auto& kv : groups_) {
-    //         const auto& vec = kv.second;
-    //         for (const auto& c : vec) {
-    //             const size_t key = c.origin_offset;
-    //             auto [it, inserted] = plan.emplace(key, c);
-    //             if (!inserted) {
-    //                 // 중복 오프셋이 발견되면 마지막 값을 유지하고 경고만 출력
-    //                 std::cerr << "[JsonPrefetchPlanLoader] duplicate origin_offset=" << key
-    //                           << " (mode=" << kv.first << ")\n";
-    //                 it->second = c;
-    //             }
-    //         }
-    //     }
-    //     return plan;
-    // }
-
-    // std::unordered_map<size_t, JsonPrefetchPlanLoader::weight_chunk_info_t>
-    // JsonPrefetchPlanLoader::BuildOffsetToWeightChunkInfoForMode(const std::string& mode) const
-    // {
-    //     std::unordered_map<size_t, weight_chunk_info_t> plan;
-    //     auto it = groups_.find(mode);
-    //     if (it == groups_.end()) return plan;
-    //     for (const auto& c : it->second) {
-    //         const size_t key = c.origin_offset;
-    //         auto [pit, inserted] = plan.emplace(key, c);
-    //         if (!inserted) {
-    //             std::cerr << "[JsonPrefetchPlanLoader] duplicate origin_offset=" << key
-    //                       << " in mode=" << mode << "\n";
-    //             pit->second = c;
-    //         }
-    //     }
-    //     return plan;
-    // }
-
     std::unordered_map<size_t, size_t>
-    JsonPrefetchPlanLoader::BuildOffsetToIndexForMode(const std::string& mode) const
+    JsonPrefetchPlanLoader::BuildOffsetToIndexForMode(const std::string &mode) const
     {
         std::unordered_map<size_t, size_t> map;
         auto it = groups_.find(mode);
-        if (it == groups_.end()) return map;
-        const auto& vec = it->second;
+        if (it == groups_.end())
+            return map;
+        const auto &vec = it->second;
         map.reserve(vec.size());
-        for (size_t i = 0; i < vec.size(); ++i) {
+        for (size_t i = 0; i < vec.size(); ++i)
+        {
             const size_t key = vec[i].origin_offset;
             // first occurrence wins; if duplicates exist, keep first index
             map.emplace(key, i);
@@ -406,12 +374,13 @@ namespace flash_slim
     }
 
     std::vector<JsonPrefetchPlanLoader::weight_chunk_info_t>
-    JsonPrefetchPlanLoader::BuildIndexToChunkVectorForMode(const std::string& mode) const
+    JsonPrefetchPlanLoader::BuildIndexToChunkVectorForMode(const std::string &mode) const
     {
         std::vector<weight_chunk_info_t> out;
         auto it = groups_.find(mode);
-        if (it == groups_.end()) return out;
-        const auto& vec = it->second;
+        if (it == groups_.end())
+            return out;
+        const auto &vec = it->second;
         out = vec; // 사본 반환
         return out;
     }
