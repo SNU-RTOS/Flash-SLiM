@@ -160,6 +160,25 @@ namespace flash_slim
 {
     //* ==================== JsonPrefetchPlanLoader ==================== */
 
+    JsonPrefetchPlanLoader::JsonPrefetchPlanLoader()
+        : root_(nlohmann::ordered_json::object()),
+          version_(),
+          model_path_(),
+          max_aligned_size_(0),
+          count_by_mode_(),
+          size_by_mode_(),
+          groups_(),
+          prefill_chunks_(),
+          decode_chunks_()
+    {
+        std::cout << "[JsonPrefetchPlanLoader] Initialized" << std::endl;
+    }
+    JsonPrefetchPlanLoader::~JsonPrefetchPlanLoader()
+    {
+        Clear();
+        std::cout << "[JsonPrefetchPlanLoader] Destroyed" << std::endl;
+    }
+
     void JsonPrefetchPlanLoader::Clear()
     {
         root_.clear();
@@ -169,6 +188,8 @@ namespace flash_slim
         count_by_mode_.clear();
         size_by_mode_.clear();
         groups_.clear();
+        prefill_chunks_.clear();
+        decode_chunks_.clear();
     }
 
     std::vector<std::string> JsonPrefetchPlanLoader::KeysOf(const nlohmann::ordered_json &obj)
@@ -259,7 +280,7 @@ namespace flash_slim
             vec.reserve(arr.size());
             for (const auto &j : arr)
             {
-                Chunk c{}; // alias of weight_chunk_info_t
+                weight_chunk_info_t c{}; 
                 if (j.contains("chunk_index"))
                     c.chunk_index = static_cast<size_t>(j.at("chunk_index").get<uint64_t>());
                 if (j.contains("aligned_offset"))
@@ -277,7 +298,13 @@ namespace flash_slim
                 if (j.contains("weights_id"))
                     c.weights_id = static_cast<size_t>(j.at("weights_id").get<uint64_t>());
                 // Note: prefetch_mode field (if present) is ignored; grouping key is authoritative
-                vec.emplace_back(std::move(c));
+                vec.emplace_back(c);
+                // 전용 벡터에도 저장
+                if (mode == "PREFILL") {
+                    prefill_chunks_.emplace_back(c);
+                } else if (mode == "DECODE") {
+                    decode_chunks_.emplace_back(c);
+                }
             }
         }
 
@@ -290,52 +317,103 @@ namespace flash_slim
         return k;
     }
 
-    const std::vector<JsonPrefetchPlanLoader::Chunk> &
+    const std::vector<JsonPrefetchPlanLoader::weight_chunk_info_t> &
     JsonPrefetchPlanLoader::chunks(const std::string &mode) const
     {
-        static const std::vector<Chunk> kEmpty;
+        static const std::vector<weight_chunk_info_t> kEmpty;
         auto it = groups_.find(mode);
         if (it == groups_.end())
             return kEmpty;
         return it->second;
     }
 
-    std::unordered_map<size_t, JsonPrefetchPlanLoader::Chunk>
-    JsonPrefetchPlanLoader::BuildOffsetToWeightChunkInfo() const
+    void JsonPrefetchPlanLoader::PrintMetadata(std::ostream& os) const
     {
-        std::unordered_map<size_t, Chunk> plan;
-        for (const auto& kv : groups_) {
-            const auto& vec = kv.second;
-            for (const auto& c : vec) {
-                const size_t key = c.origin_offset;
-                auto [it, inserted] = plan.emplace(key, c);
-                if (!inserted) {
-                    // 중복 오프셋이 발견되면 마지막 값을 유지하고 경고만 출력
-                    std::cerr << "[JsonPrefetchPlanLoader] duplicate origin_offset=" << key
-                              << " (mode=" << kv.first << ")\n";
-                    it->second = c;
-                }
-            }
+        os << "[INFO] Prefetch Plan - Metadata" << std::endl;
+        os << "  version: " << version_ << std::endl;
+        if (!model_path_.empty())
+            os << "  model: " << model_path_ << std::endl;
+        os << "  max_aligned_size: " << max_aligned_size_ << std::endl;
+
+        os << "  chunk_count_by_mode:" << std::endl;
+        for (const auto &kv : count_by_mode_)
+        {
+            os << "    - " << kv.first << ": " << kv.second << std::endl;
         }
-        return plan;
+        os << "  total_aligned_size_by_mode:" << std::endl;
+        for (const auto &kv : size_by_mode_)
+        {
+            os << "    - " << kv.first << ": " << kv.second << std::endl;
+        }
     }
 
-    std::unordered_map<size_t, JsonPrefetchPlanLoader::Chunk>
-    JsonPrefetchPlanLoader::BuildOffsetToWeightChunkInfoForMode(const std::string& mode) const
+    void JsonPrefetchPlanLoader::PrintMetadata() const {
+        PrintMetadata(std::cout);
+    }
+
+    // std::unordered_map<size_t, JsonPrefetchPlanLoader::weight_chunk_info_t>
+    // JsonPrefetchPlanLoader::BuildOffsetToWeightChunkInfo() const
+    // {
+    //     std::unordered_map<size_t, weight_chunk_info_t> plan;
+    //     for (const auto& kv : groups_) {
+    //         const auto& vec = kv.second;
+    //         for (const auto& c : vec) {
+    //             const size_t key = c.origin_offset;
+    //             auto [it, inserted] = plan.emplace(key, c);
+    //             if (!inserted) {
+    //                 // 중복 오프셋이 발견되면 마지막 값을 유지하고 경고만 출력
+    //                 std::cerr << "[JsonPrefetchPlanLoader] duplicate origin_offset=" << key
+    //                           << " (mode=" << kv.first << ")\n";
+    //                 it->second = c;
+    //             }
+    //         }
+    //     }
+    //     return plan;
+    // }
+
+    // std::unordered_map<size_t, JsonPrefetchPlanLoader::weight_chunk_info_t>
+    // JsonPrefetchPlanLoader::BuildOffsetToWeightChunkInfoForMode(const std::string& mode) const
+    // {
+    //     std::unordered_map<size_t, weight_chunk_info_t> plan;
+    //     auto it = groups_.find(mode);
+    //     if (it == groups_.end()) return plan;
+    //     for (const auto& c : it->second) {
+    //         const size_t key = c.origin_offset;
+    //         auto [pit, inserted] = plan.emplace(key, c);
+    //         if (!inserted) {
+    //             std::cerr << "[JsonPrefetchPlanLoader] duplicate origin_offset=" << key
+    //                       << " in mode=" << mode << "\n";
+    //             pit->second = c;
+    //         }
+    //     }
+    //     return plan;
+    // }
+
+    std::unordered_map<size_t, size_t>
+    JsonPrefetchPlanLoader::BuildOffsetToIndexForMode(const std::string& mode) const
     {
-        std::unordered_map<size_t, Chunk> plan;
+        std::unordered_map<size_t, size_t> map;
         auto it = groups_.find(mode);
-        if (it == groups_.end()) return plan;
-        for (const auto& c : it->second) {
-            const size_t key = c.origin_offset;
-            auto [pit, inserted] = plan.emplace(key, c);
-            if (!inserted) {
-                std::cerr << "[JsonPrefetchPlanLoader] duplicate origin_offset=" << key
-                          << " in mode=" << mode << "\n";
-                pit->second = c;
-            }
+        if (it == groups_.end()) return map;
+        const auto& vec = it->second;
+        map.reserve(vec.size());
+        for (size_t i = 0; i < vec.size(); ++i) {
+            const size_t key = vec[i].origin_offset;
+            // first occurrence wins; if duplicates exist, keep first index
+            map.emplace(key, i);
         }
-        return plan;
+        return map;
+    }
+
+    std::vector<JsonPrefetchPlanLoader::weight_chunk_info_t>
+    JsonPrefetchPlanLoader::BuildIndexToChunkVectorForMode(const std::string& mode) const
+    {
+        std::vector<weight_chunk_info_t> out;
+        auto it = groups_.find(mode);
+        if (it == groups_.end()) return out;
+        const auto& vec = it->second;
+        out = vec; // 사본 반환
+        return out;
     }
 
 } // namespace flash_slim

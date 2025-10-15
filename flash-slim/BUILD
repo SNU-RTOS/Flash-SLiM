@@ -99,6 +99,24 @@ cc_library(
         "@litert//tflite/kernels:builtin_ops",
     ],
 )
+cc_library(
+    name="prefetch_planner_util",
+    srcs = ["prefetch_planner_util.cc"],
+    hdrs = ["prefetch_planner_util.h"],
+    deps = [
+        ":utils",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@litert//tflite:framework",
+        "@litert//tflite:util",
+        "@litert//tflite/schema:schema_fbs",
+        "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
+        "//flash-slim/nlohmann:nlohmann_json",
+    ],
+)
 
 cc_binary(
     name = "text_generator_main",
@@ -115,6 +133,7 @@ cc_binary(
         ":profiler",
         ":sampler",
         ":utils",
+        ":prefetch_planner_util",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",
@@ -138,8 +157,6 @@ cc_binary(
     srcs = [
         "prefetch_planner.cc",
         "prefetch_planner.h",
-        "prefetch_planner_util.cc",
-        "prefetch_planner_util.h",
     ],
     defines = [
         "TF_LITE_TENSORFLOW_PROFILER",
@@ -148,10 +165,10 @@ cc_binary(
     deps = [
         ":aligned_allocator",
         ":lora_adapter",
-        "//flash-slim/nlohmann:nlohmann_json",
         ":profiler",
         ":sampler",
         ":utils",
+        ":prefetch_planner_util",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",

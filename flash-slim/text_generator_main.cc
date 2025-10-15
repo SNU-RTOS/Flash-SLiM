@@ -53,6 +53,7 @@
 #include "profiler.h"
 #include "aligned_allocator.h"
 #include "lora_adapter.h"
+#include "prefetch_planner_util.h"
 
 // Weight cache
 #include "tflite/delegates/xnnpack/weight_cache.h"
@@ -474,15 +475,40 @@ void __run_main(custom::profiler::GenAIMetrics &genai_metrics, std::unique_ptr<t
 
     
     //* ============ [Phase] 3. Apply Delegate ============ */
-#ifdef USE_WEIGHT_STREAMING
-    std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
+    // Load prefetch plan
+    std::unique_ptr<flash_slim::JsonPrefetchPlanLoader> prefetch_plan_loader = std::make_unique<flash_slim::JsonPrefetchPlanLoader>();
+    prefetch_plan_loader->LoadFromFile("weight_chunks_metadata_table.json");
+    size_t buf_size = prefetch_plan_loader->max_aligned_size();
+    std::cout << "[INFO] Allocating weight cache buffer of size " << buf_size << " bytes.\n";
+    std::cout << "[INFO] Loaded prefetch plan for model: " << prefetch_plan_loader->model() << ", planner version: " << prefetch_plan_loader->version() << "\n";
 
-    constexpr size_t buf_size = 380 * 1024 * 1024;
+    // Print all loaded prefetch plan data
+    prefetch_plan_loader->PrintMetadata(std::cout);
+
+    // Build per-mode lookup structures (copies that outlive the loader)
+    auto offset_to_index_prefill = prefetch_plan_loader->BuildOffsetToIndexForMode("PREFILL");
+    auto offset_to_index_decode  = prefetch_plan_loader->BuildOffsetToIndexForMode("DECODE");
+    auto chunks_prefill          = prefetch_plan_loader->BuildIndexToChunkVectorForMode("PREFILL");
+    auto chunks_decode           = prefetch_plan_loader->BuildIndexToChunkVectorForMode("DECODE");
+
+    std::cout << "[INFO] PREFILL: offset_to_index=" << offset_to_index_prefill.size()
+              << ", index_to_chunk=" << chunks_prefill.size() << std::endl;
+    std::cout << "[INFO] DECODE : offset_to_index=" << offset_to_index_decode.size()
+              << ", index_to_chunk=" << chunks_decode.size() << std::endl;
+              
+    prefetch_plan_loader.reset();
+    // End of prefetch plan loading
+
+    // Set up weight cache provider
+    std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
+    weight_cache_provider->SetProviderMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
     weight_cache_provider->AllocManagedBuffer(buf_size);
     weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));    
     weight_cache_provider->InitWeightChunkPrefetcher();
-    auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();   
-#endif
+
+    auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();
+    weight_chunk_prefetcher->SetPrefetchPlan(WeightChunkPrefetcher::PrefetchMode::PREFILL, std::move(offset_to_index_prefill), std::move(chunks_prefill));
+    weight_chunk_prefetcher->SetPrefetchPlan(WeightChunkPrefetcher::PrefetchMode::DECODE,  std::move(offset_to_index_decode),  std::move(chunks_decode));
     {
         custom::profiler::ScopeEventHandler handler("Apply_Delegate");
 
