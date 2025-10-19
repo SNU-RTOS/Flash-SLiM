@@ -41,7 +41,7 @@ limitations under the License.
     }
 #endif // MINIMAL_CHECK
 
-namespace custom::util
+namespace flash_slim::util
 {
     // Timestamp utilities for unified logging across eBPF and application code
 

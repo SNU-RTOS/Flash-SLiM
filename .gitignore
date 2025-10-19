@@ -46,8 +46,6 @@ nohup.out
 .env.*
 
 # Generated executables
-text_generator_main
-text_generator_main_*
 
 # Models and data
 models
@@ -86,7 +84,6 @@ evaluation/*
 # Keep all prompt files
 !prompt/*.txt
 !prompt/README.md
-
 
 tmp
 utils

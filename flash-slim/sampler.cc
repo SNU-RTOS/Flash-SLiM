@@ -3,7 +3,7 @@
 // --------------------------------------------------------------------------
 // A class that provides various sampling methods (Greedy, Top-K, Top-P, etc.)
 // --------------------------------------------------------------------------
-namespace custom::sampler
+namespace flash_slim::sampler
 {
     // ------------------------
     // Greedy Sampler

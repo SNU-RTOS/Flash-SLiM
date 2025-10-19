@@ -9,7 +9,7 @@
 #include <unordered_set>
 #include "tflite/interpreter.h"
 
-namespace custom::sampler
+namespace flash_slim::sampler
 {
     // Greedy Sampler
     int greedy_sampler(const TfLiteTensor *logits);

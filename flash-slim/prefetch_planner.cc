@@ -1,64 +1,8 @@
-#include <algorithm>
-#include <cstddef>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <cmath>
-#include <fstream>
-#include <ios>
-#include <iterator>
-#include <limits>
-#include <map>
-#include <memory>
-#include <string>
-#include <vector>
-#include <chrono>
-#include <random>
-#include <thread>
-#include <iostream>
-#include <unordered_set>
 
-#include <mutex>
-#include <condition_variable>
-
-// abseil
-#include "absl/flags/flag.h"
-#include "absl/flags/parse.h"
-#include "absl/strings/string_view.h"
-#include "absl/strings/match.h"
-
-// Sentencepiece
-#include "src/sentencepiece_processor.h"
-
-// LiteRT Core
-#include "tflite/delegates/xnnpack/xnnpack_delegate.h"
-#include "tflite/experimental/genai/genai_ops.h"
-#include "tflite/interpreter.h"
-#include "tflite/interpreter_builder.h"
-#include "tflite/kernels/register.h"
-#include "tflite/model_builder.h"
-#include "tflite/signature_runner.h"
-
-// LiteRT Profiling
-#include "tflite/profiling/profile_summarizer.h"
-#include "tflite/profiling/buffered_profiler.h"
-#include "tflite/profiling/profile_summary_formatter.h"
-#include "tflite/tools/benchmark/benchmark_model.h"
-#include "tflite/tools/benchmark/benchmark_params.h"
-#include "tflite/tools/logging.h"
-
-// Custom
-#include "utils.h"
-#include "sampler.h"
-#include "profiler.h"
-#include "aligned_allocator.h"
-#include "lora_adapter.h"
 #include "prefetch_planner.h"
 #include "prefetch_planner_util.h"
+#include "common.h"
 
-// Weight cache
-#include "tflite/delegates/xnnpack/weight_cache.h"
-#include "tflite/delegates/xnnpack/streaming_weight_cache.h"
 // ----------------------
 // absl::FLAGS definition
 // ----------------------
@@ -80,248 +24,6 @@ ABSL_FLAG(std::string, csv_profile_output_path, "", "Path to save the profiling 
 ABSL_FLAG(bool, dump_tensor_details, false, "Whether to dump detailed tensor information for each node.");
 ABSL_FLAG(bool, op_tensor_byte_stats, false, "Whether to append per-operator aggregated tensor bytes (Mmap/Arena) on each operator line.");
 ABSL_FLAG(std::string, model_dump_file_path, "", "Path to save the log file. If empty, no log file is generated.");
-
-namespace
-{
-    using ai_edge_torch::examples::LoRA;
-    using ai_edge_torch::mem::AlignedAllocator;
-    using tflite::xnnpack::StreamingWeightCacheProvider;
-    using tflite::xnnpack::WeightChunkPrefetcher;
-
-    struct ProfilerOutput
-    {
-        std::shared_ptr<tflite::profiling::ProfileSummaryFormatter> formatter;
-        std::shared_ptr<tflite::profiling::ProfileSummarizer> init_summarizer;
-        std::shared_ptr<tflite::profiling::ProfileSummarizer> run_summarizer;
-        std::string output_type; // "log" or "csv"
-        std::string output_path; // empty for log, file path for csv
-    };
-
-    // --------------------------------------------------------------------------
-    // Utility for applying XNNPACK weight caching
-    // --------------------------------------------------------------------------
-    // provider는 delegate보다 오래 살아야 함
-
-    void ApplyXNNPACKWithWeightCachingProvider(tflite::Interpreter *interpreter, StreamingWeightCacheProvider *provider)
-    {
-
-        auto delegate_options = TfLiteXNNPackDelegateOptionsDefault();
-        delegate_options.num_threads = absl::GetFlag(FLAGS_num_threads);
-
-        // set file path of weight cache
-        std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
-        delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-
-        // set provider
-        delegate_options.weight_cache_provider = provider;
-
-        // create and apply delegate
-        MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
-                          tflite::Interpreter::TfLiteDelegatePtr(
-                              TfLiteXNNPackDelegateCreate(&delegate_options),
-                              [](TfLiteDelegate *d)
-                              { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
-    }
-
-    // --------------------------------------------------------------------------
-    // Allocates KV cache memory structures for decode, based on the decode signature
-    // --------------------------------------------------------------------------
-    std::map<std::string, std::vector<float, AlignedAllocator<float>>>
-    AllocateKVCache(tflite::Interpreter *interpreter)
-    {
-        tflite::SignatureRunner *runner = interpreter->GetSignatureRunner("decode");
-        if (runner == nullptr)
-        {
-            return {};
-        }
-
-        // Expect runner->input_size() = tokens, input_pos, plus 2*(num_layers)
-        size_t num_layers = (runner->input_size() - 2) / 2;
-        if (num_layers == 0)
-        {
-            return {};
-        }
-
-        std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
-        for (int i = 0; i < num_layers; ++i)
-        {
-            std::string k_cache_name = "kv_cache_k_" + std::to_string(i);
-            std::string v_cache_name = "kv_cache_v_" + std::to_string(i);
-
-            TfLiteTensor *tensor = runner->input_tensor(k_cache_name.c_str());
-            size_t count = tensor->bytes / sizeof(float);
-
-            kv_cache.emplace(k_cache_name,
-                             std::vector<float, AlignedAllocator<float>>(count, 0.0f));
-            kv_cache.emplace(v_cache_name,
-                             std::vector<float, AlignedAllocator<float>>(count, 0.0f));
-        }
-        return kv_cache;
-    }
-
-    // --------------------------------------------------------------------------
-    // Sets custom memory allocations for the KV cache on the given runner
-    // --------------------------------------------------------------------------
-    void PrepareRunner(tflite::SignatureRunner *runner,
-                       std::map<std::string,
-                                std::vector<float, AlignedAllocator<float>>> &kv_cache)
-    {
-        for (auto &[name, cache] : kv_cache)
-        {
-            TfLiteCustomAllocation allocation{
-                .data = static_cast<void *>(cache.data()),
-                .bytes = cache.size() * sizeof(float)};
-
-            MINIMAL_CHECK(runner->SetCustomAllocationForInputTensor(name.c_str(), allocation) == kTfLiteOk);
-            MINIMAL_CHECK(runner->SetCustomAllocationForOutputTensor(name.c_str(), allocation) == kTfLiteOk);
-        }
-        MINIMAL_CHECK(runner->AllocateTensors() == kTfLiteOk);
-    }
-
-    // --------------------------------------------------------------------------
-    // Finds the appropriate "prefill" runner for the given number of tokens.
-    // If LoRA is used, it defers to LoRA's specialized runner selection.
-    // --------------------------------------------------------------------------
-    tflite::SignatureRunner *GetPrefillRunner(
-        tflite::Interpreter *interpreter,
-        std::size_t num_input_tokens,
-        std::map<std::string, std::vector<float, AlignedAllocator<float>>> &kv_cache,
-        const LoRA *lora)
-    {
-        tflite::SignatureRunner *runner = nullptr;
-        int best_seq_size = -1;
-        int delta = std::numeric_limits<int>::max();
-
-        for (const std::string *key : interpreter->signature_keys())
-        {
-            if (!absl::StrContains(*key, "prefill") || absl::StrContains(*key, "lora"))
-            {
-                continue;
-            }
-            TfLiteTensor *input_pos =
-                interpreter->GetSignatureRunner(key->c_str())->input_tensor("input_pos");
-            int seq_size = input_pos->dims->data[0];
-
-            // Choose the runner where seq_size >= num_input_tokens and
-            // (seq_size - num_input_tokens) is minimized
-            if (num_input_tokens <= static_cast<size_t>(seq_size) &&
-                seq_size - static_cast<int>(num_input_tokens) < delta)
-            {
-                if (lora == nullptr)
-                {
-                    runner = interpreter->GetSignatureRunner(key->c_str());
-                }
-                best_seq_size = seq_size;
-                delta = seq_size - static_cast<int>(num_input_tokens);
-            }
-        }
-
-        // If LoRA is enabled, use the LoRA-specific prefill runner
-        if (lora != nullptr)
-        {
-            runner = lora->GetPrefillRunner(interpreter, best_seq_size);
-        }
-        MINIMAL_CHECK(runner != nullptr);
-
-        // Prepare KV memory allocations
-        PrepareRunner(runner, kv_cache);
-        return runner;
-    }
-
-    // --------------------------------------------------------------------------
-    // Retrieves the decode runner (LoRA-based if needed) and prepares it
-    // --------------------------------------------------------------------------
-    tflite::SignatureRunner *GetDecodeRunner(
-        tflite::Interpreter *interpreter,
-        std::map<std::string, std::vector<float, AlignedAllocator<float>>> &kv_cache,
-        LoRA *lora)
-    {
-        tflite::SignatureRunner *runner =
-            (lora == nullptr)
-                ? interpreter->GetSignatureRunner("decode")
-                : lora->GetDecodeRunner(interpreter);
-        MINIMAL_CHECK(runner != nullptr);
-
-        PrepareRunner(runner, kv_cache);
-        return runner;
-    }
-
-    // --------------------------------------------------------------------------
-    // Loads the SentencePiece model from file
-    // --------------------------------------------------------------------------
-    std::unique_ptr<sentencepiece::SentencePieceProcessor> LoadSentencePieceProcessor()
-    {
-        std::ifstream input(absl::GetFlag(FLAGS_sentencepiece_model), std::ios::binary);
-        std::string serialized_proto((std::istreambuf_iterator<char>(input)),
-                                     std::istreambuf_iterator<char>());
-
-        auto processor = std::make_unique<sentencepiece::SentencePieceProcessor>();
-        MINIMAL_CHECK(processor->LoadFromSerializedProto(serialized_proto).ok());
-        return processor;
-    }
-
-    // --------------------------------------------------------------------------
-    // Helper function to detect the sequence dimension in KV cache tensor
-    // --------------------------------------------------------------------------
-    int DetectKVCacheSequenceDimension(TfLiteTensor *kv_cache_tensor)
-    {
-        if (kv_cache_tensor == nullptr || kv_cache_tensor->dims == nullptr)
-        {
-            return -1;
-        }
-
-        int num_dims = kv_cache_tensor->dims->size;
-        if (num_dims < 2)
-        {
-            return -1;
-        }
-
-        // Print tensor dimensions for debugging
-        std::cout << "[INFO] KV Cache tensor dims: [";
-        for (int i = 0; i < num_dims; ++i)
-        {
-            std::cout << kv_cache_tensor->dims->data[i] << (i == num_dims - 1 ? "" : ", ");
-        }
-        std::cout << "]\n";
-
-        // Check different known patterns
-        if (num_dims == 4)
-        {
-            // Pattern 1: [batch, seq_len, num_heads, head_dim] - e.g., [1, 1280, 3, 64]
-            if (kv_cache_tensor->dims->data[1] > 100 && kv_cache_tensor->dims->data[2] < 20)
-            {
-                std::cout << "[INFO] Detected pattern [batch, seq_len, num_heads, head_dim]\n";
-                return 1; // sequence dimension is at index 1
-            }
-            // Pattern 2: [batch, batch, seq_len, hidden_dim,] - e.g., [1, 1, 1280, 256,]
-            else if (kv_cache_tensor->dims->data[1] == 1 && kv_cache_tensor->dims->data[2] > 100)
-            {
-                std::cout << "[INFO] Detected pattern [batch, batch, seq_len, hidden_dim,]\n";
-                return 2; // sequence dimension is at index 2
-            }
-        }
-
-        // Default fallback: assume sequence dimension is at index 1
-        std::cout << "[INFO] Using default: sequence dimension at index 1\n";
-        return 1;
-    }
-
-    int count_total_nodes(tflite::Interpreter *interpreter)
-    {
-        int total_nodes = 0;
-        if (!interpreter)
-            return 0;
-
-        for (int i = 0; i < interpreter->subgraphs_size(); ++i)
-        {
-            total_nodes += static_cast<int>(interpreter->subgraph(i)->nodes_size());
-            // std::cout << "[INFO] Subgraph " << i
-            //           << " has " << interpreter->subgraph(i)->nodes_size() << " nodes." << std::endl;
-        }
-        return total_nodes;
-    }
-
-} // end anonymous namespace
 
 namespace
 {
@@ -921,31 +623,7 @@ namespace
              << " attempted=" << attempted << "\n";
         vout.close();
     }
-    // --------------------------------------------------------------------------
-    // Utility to get current page cache size from /proc/meminfo (Linux only)
-    // --------------------------------------------------------------------------
-    void PrintCurrentPageCacheKB()
-    {
-        std::ifstream meminfo("/proc/meminfo");
-        if (!meminfo.is_open())
-        {
-            std::cerr << "Failed to open /proc/meminfo\n";
-            return 0;
-        }
 
-        std::string key;
-        size_t value;
-        std::string unit;
-
-        while (meminfo >> key >> value >> unit)
-        {
-            if (key == "Cached:")
-            {
-                return value; // in KB
-            }
-        }
-        std::cout << "[INFO] Current Page Cache: " << value << " kB" << std::endl;
-    }
 }
 
 // =======================================================================
@@ -957,20 +635,11 @@ int main(int argc, char *argv[])
     std::cout.precision(5);
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout << std::boolalpha;
-    std::cout << "\n[INFO] Text Generation App on LiteRT Interpreter\n";
+    std::cout << "\n[INFO] Prefetch Planner " << std::endl;
 
     // Parse flags
     std::cout << "\n[INFO] Preparing Required Components" << std::endl;
     absl::ParseCommandLine(argc, argv);
-
-    // Check which cores we're actually running on
-    std::vector<int> active_cores;
-    custom::profiler::detect_active_cores(active_cores);
-
-    std::cout << "[INFO] Cores used for text generation: ";
-    for (const auto &core : active_cores)
-        std::cout << core << " ";
-    std::cout << "\n[INFO] Start Generating Text" << std::endl;
 
     //* ============================================== Initialization ========================================================= */
 
@@ -1010,7 +679,7 @@ int main(int argc, char *argv[])
 
     // Create profiler if profiling is enabled
     constexpr int kProfilingBufferHeadrooms = 512;
-    int total_nodes = count_total_nodes(interpreter.get());
+    int total_nodes = CountTotalNodes(interpreter.get());
     if (total_nodes > kProfilingBufferHeadrooms)
     {
         total_nodes += kProfilingBufferHeadrooms;
@@ -1023,9 +692,6 @@ int main(int argc, char *argv[])
     //* ============ [Phase] 3. Define Weight Cache Provider and Prefetcher ============ */
     std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
     weight_cache_provider->SetProviderMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUNTIME);
-    // constexpr size_t buf_size = 500 * 1024 * 1024;
-    // weight_cache_provider->AllocManagedBuffer(buf_size);
-    // weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
     weight_cache_provider->InitWeightChunkPrefetcher();
     auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();
 
@@ -1081,9 +747,12 @@ int main(int argc, char *argv[])
 
     tflite::SignatureRunner *prefill_runner = nullptr;
     tflite::SignatureRunner *decode_runner = nullptr;
-
     std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
+
+    weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
     prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
+
+    weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
     decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
 
     MINIMAL_CHECK(prefill_runner != nullptr || decode_runner != nullptr);
@@ -1166,14 +835,12 @@ int main(int argc, char *argv[])
     //     std::cout << "Verification done" << std::endl;
 
     //* ============ [Phase] 9. Prefill Phase ============ */
-    PrintCurrentPageCacheKB();
 
     std::cout << "[INFO] Prefill Phase started" << std::endl;
     weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
     MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk); // Invoke the prefill runner
 
     std::cout << "[INFO] Prefill Phase completed" << std::endl;
-    PrintCurrentPageCacheKB();
 
     //* ============ [Phase] 10. Decoding Phase ============ */
     // Determine how many tokens to generate
@@ -1206,7 +873,7 @@ int main(int argc, char *argv[])
     MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
 
     // 2) Token Sampling
-    next_token_id = custom::sampler::temperature_top_k_top_p_sampler(
+    next_token_id = flash_slim::sampler::temperature_top_k_top_p_sampler(
         decode_runner->output_tensor("logits"),
         absl::GetFlag(FLAGS_temperature),
         absl::GetFlag(FLAGS_top_k),
@@ -1221,9 +888,8 @@ int main(int argc, char *argv[])
     std::cout << "\n\n\n";
     std::cout << "[INFO] Decoded " << decode_steps << " tokens." << std::endl;
     std::cout << "[INFO] Decoding Phase completed" << std::endl;
-    PrintCurrentPageCacheKB();
     std::cout << "---------------------------------------------------\n\n";
-    
+
     writer.Finalize();
 
     // Release resources in reverse order of allocation

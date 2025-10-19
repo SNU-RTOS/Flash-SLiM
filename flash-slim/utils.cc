@@ -37,7 +37,7 @@ limitations under the License.
 #include "tflite/schema/schema_generated.h"
 #include "tflite/signature_runner.h"
 
-namespace custom::util
+namespace flash_slim::util
 {
     // --------------------------------------------------------------------------
     // Helper functions to print tensor details.
