@@ -110,6 +110,8 @@ build:avx2_linux --copt=-mfma
 
 # eBPF tracing support
 build:ebpf --copt=-DEBPF_TRACE_ENABLED
+# Weight streaming support
+build:weight_streaming --copt=-DUSE_WEIGHT_STREAMING
 
 # Debug config
 build:dbg -c dbg

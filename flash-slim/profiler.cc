@@ -59,7 +59,7 @@ namespace
     }
 }
 
-namespace custom::profiler
+namespace flash_slim::profiling
 {
     // Function to detect which cores the process is actually running on
     void detect_active_cores(std::vector<int> &cores)
@@ -344,7 +344,7 @@ namespace custom::profiler
 
                     if (log_stdout_)
                     {
-                        custom::profiler::print_rusage(
+                        flash_slim::profiling::print_rusage(
                             usage_start_, usage_end_, duration_ms, ctx_.current_phase_name);
                     }
                     if (usage_records_)

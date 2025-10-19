@@ -1,5 +1,5 @@
-#ifndef AI_EDGE_TORCH_GENERATIVE_PROFILER_H_
-#define AI_EDGE_TORCH_GENERATIVE_PROFILER_H_
+#ifndef FLASH_SLIM_PROFILE_H_
+#define FLASH_SLIM_PROFILE_H_
 
 #include <chrono>
 #include <cmath>
@@ -68,7 +68,7 @@
 #define TRACE_LOGIC_END(phase_name)
 #endif
 
-namespace custom::profiler
+namespace flash_slim::profiling
 {
 
     // RUsage record structure
@@ -213,4 +213,4 @@ namespace custom::profiler
     };
 } // namespace custom::profiler
 
-#endif // AI_EDGE_TORCH_GENERATIVE_PROFILER_H_
+#endif // FLASH_SLIM_PROFILE_H_

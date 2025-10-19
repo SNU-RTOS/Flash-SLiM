@@ -99,22 +99,36 @@ cc_library(
         "@litert//tflite/kernels:builtin_ops",
     ],
 )
+cc_library(
+    name="prefetch_planner_util",
+    srcs = ["prefetch_planner_util.cc"],
+    hdrs = ["prefetch_planner_util.h"],
+    deps = [
+        ":utils",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@litert//tflite:framework",
+        "@litert//tflite:util",
+        "@litert//tflite/schema:schema_fbs",
+        "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
+        "//flash-slim/nlohmann:nlohmann_json",
+    ],
+)
 
-cc_binary(
-    name = "text_generator_main",
-    srcs = [
-        "text_generator_main.cc",
-    ],
-    defines = [
-        "TF_LITE_TENSORFLOW_PROFILER",
-    ],
-    linkopts = tflite_linkopts(),
+cc_library(
+    name = "common",
+    srcs = ["common.cc"],
+    hdrs = ["common.h"],
     deps = [
         ":aligned_allocator",
         ":lora_adapter",
         ":profiler",
         ":sampler",
         ":utils",
+        ":prefetch_planner_util",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",
@@ -127,5 +141,36 @@ cc_binary(
         "@litert//tflite/profiling:profile_summarizer",
         "@litert//tflite/profiling:profiler",
         "@litert//tflite/tools/benchmark:benchmark_model_lib",
+        "@litert//tflite/delegates/xnnpack:weight_cache",
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
+    ],
+)
+cc_binary(
+    name = "text_generator_main",
+    srcs = [
+        "text_generator_main.cc",
+    ],
+    defines = [
+        "TF_LITE_TENSORFLOW_PROFILER",
+    ],
+    linkopts = tflite_linkopts(),
+    deps = [
+        ":common",
+    ],
+)
+
+
+cc_binary(
+    name = "prefetch_planner",
+    srcs = [
+        "prefetch_planner.cc",
+        "prefetch_planner.h",
+    ],
+    defines = [
+        "TF_LITE_TENSORFLOW_PROFILER",
+    ],
+    linkopts = tflite_linkopts(),
+    deps = [
+        ":common",
     ],
 )
