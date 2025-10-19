@@ -46,6 +46,8 @@ nohup.out
 .env.*
 
 # Generated executables
+bin
+bin/*
 
 # Models and data
 models
