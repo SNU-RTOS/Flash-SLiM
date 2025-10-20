@@ -35,9 +35,9 @@ namespace flash_slim
         }
     }
 
-    static inline const char *PrefetchModeToString(tflite::xnnpack::WeightChunkPrefetcher::PrefetchMode mode)
+    static inline const char *PrefetchModeToString(tflite::xnnpack::WeightChunkPrefetchMode mode)
     {
-        using Mode = tflite::xnnpack::WeightChunkPrefetcher::PrefetchMode;
+        using Mode = tflite::xnnpack::WeightChunkPrefetchMode;
         switch (mode)
         {
         case Mode::PREFILL:
@@ -50,7 +50,7 @@ namespace flash_slim
     }
 
     void JsonWeightChunkMetaDataWriter::WriteChunkInfo(const tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t &chunk_info,
-                                                   tflite::xnnpack::WeightChunkPrefetcher::PrefetchMode prefetch_mode)
+                                                   tflite::xnnpack::WeightChunkPrefetchMode prefetch_mode)
     {
         if (finalized_)
         {

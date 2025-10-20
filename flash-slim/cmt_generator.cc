@@ -691,14 +691,16 @@ int main(int argc, char *argv[])
 
     //* ============ [Phase] 3. Define Weight Cache Provider and Prefetcher ============ */
     std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
-    weight_cache_provider->SetProviderMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUNTIME);
-    weight_cache_provider->InitWeightChunkPrefetcher();
-    auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();
+    auto weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
+    weight_cache_provider->SetController(weight_chunk_controller.get());
+    weight_chunk_controller->SetMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUNTIME);
+    auto weight_chunk_prefetcher = std::make_shared<WeightChunkPrefetcher>();
+    weight_chunk_controller->AttachPrefetcher(weight_chunk_prefetcher);
 
     // Json handler for weight chunk info
     flash_slim::JsonWeightChunkMetaDataWriter writer("weight_chunks_metadata_table.json");
     writer.WriteModelInfo(absl::GetFlag(FLAGS_tflite_model).c_str());
-    weight_cache_provider->SetWeightChunkInfoWriter(&writer);
+    weight_chunk_controller->AttachMetadataWriter(&writer);
 
     //* ============ [Phase] 3.5 Apply Delegate ============ */
     if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
@@ -749,10 +751,10 @@ int main(int argc, char *argv[])
     tflite::SignatureRunner *decode_runner = nullptr;
     std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
 
-    weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
+    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
     prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
 
-    weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
+    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
     decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
 
     MINIMAL_CHECK(prefill_runner != nullptr || decode_runner != nullptr);
@@ -837,7 +839,7 @@ int main(int argc, char *argv[])
     //* ============ [Phase] 9. Prefill Phase ============ */
 
     std::cout << "[INFO] Prefill Phase started" << std::endl;
-    weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
+    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
     MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk); // Invoke the prefill runner
 
     std::cout << "[INFO] Prefill Phase completed" << std::endl;
@@ -862,7 +864,7 @@ int main(int argc, char *argv[])
 
     MINIMAL_CHECK(decode_steps > 0);
 
-    weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
+    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
 
     // Decode a single token
     std::string single_decoded_text;

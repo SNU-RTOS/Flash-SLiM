@@ -117,6 +117,25 @@ cc_library(
         "//flash-slim/nlohmann:nlohmann_json",
     ],
 )
+cc_library(
+    name = "weight_chunk_prefetcher",
+    srcs = ["weight_chunk_prefetcher.cc"],
+    hdrs = ["weight_chunk_prefetcher.h"],
+    deps = [
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
+    ],
+)
+
+cc_library(
+    name = "weight_chunk_controller",
+    srcs = ["weight_chunk_controller.cc"],
+    hdrs = ["weight_chunk_controller.h"],
+    deps = [
+        ":weight_chunk_prefetcher",
+        ":cmt_generator_util",
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
+    ],
+)
 
 cc_library(
     name = "common",
@@ -127,6 +146,8 @@ cc_library(
         ":lora_adapter",
         ":profiler",
         ":sampler",
+        ":weight_chunk_prefetcher",
+        ":weight_chunk_controller",
         ":utils",
         ":cmt_generator_util",
         "@com_google_absl//absl/flags:flag",

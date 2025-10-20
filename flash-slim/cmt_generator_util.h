@@ -37,7 +37,7 @@ namespace flash_slim
         JsonWeightChunkMetaDataWriter &operator=(const JsonWeightChunkMetaDataWriter &) = delete;
 
         void WriteChunkInfo(const tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t &chunk_info,
-                            tflite::xnnpack::WeightChunkPrefetcher::PrefetchMode prefetch_mode) override;
+                            tflite::xnnpack::WeightChunkPrefetchMode prefetch_mode) override;
 
         void Finalize() override;
 
