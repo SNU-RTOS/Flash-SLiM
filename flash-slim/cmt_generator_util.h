@@ -7,8 +7,8 @@
 // This module provides tools to record and plan I/O prefetch operations
 // for weight chunks during model execution.
 
-#ifndef FLASH_SLIM_PREFETCH_PLANNER_UTIL_H
-#define FLASH_SLIM_PREFETCH_PLANNER_UTIL_H
+#ifndef FLASH_SLIM_CMT_GENERATOR_UTIL_H
+#define FLASH_SLIM_CMT_GENERATOR_UTIL_H
 
 #include <fstream>
 #include <iosfwd>
@@ -24,17 +24,17 @@ namespace flash_slim
 
     //* ==================== JsonWeightChunkInfoWriter ==================== */
 
-    // JSON-based implementation of WeightChunkInfoWriter
+    // JSON-based implementation of WeightChunkMetaDataWriter
     // Uses nlohmann/json for serialization
-    class JsonWeightChunkInfoWriter : public tflite::xnnpack::WeightChunkInfoWriter
+    class JsonWeightChunkMetaDataWriter : public tflite::xnnpack::WeightChunkMetaDataWriter
     {
     public:
-        explicit JsonWeightChunkInfoWriter(const std::string &output_path);
-        ~JsonWeightChunkInfoWriter() override;
+        explicit JsonWeightChunkMetaDataWriter(const std::string &output_path);
+        ~JsonWeightChunkMetaDataWriter() override;
 
         // Delete copy constructor and assignment operator
-        JsonWeightChunkInfoWriter(const JsonWeightChunkInfoWriter &) = delete;
-        JsonWeightChunkInfoWriter &operator=(const JsonWeightChunkInfoWriter &) = delete;
+        JsonWeightChunkMetaDataWriter(const JsonWeightChunkMetaDataWriter &) = delete;
+        JsonWeightChunkMetaDataWriter &operator=(const JsonWeightChunkMetaDataWriter &) = delete;
 
         void WriteChunkInfo(const tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t &chunk_info,
                             tflite::xnnpack::WeightChunkPrefetcher::PrefetchMode prefetch_mode) override;
@@ -120,4 +120,4 @@ namespace flash_slim
 
 } // namespace flash_slim
 
-#endif // FLASH_SLIM_PREFETCH_PLANNER_UTIL_H
+#endif // FLASH_SLIM_CMT_GENERATOR_UTIL_H

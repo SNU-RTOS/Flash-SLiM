@@ -100,9 +100,9 @@ cc_library(
     ],
 )
 cc_library(
-    name="prefetch_planner_util",
-    srcs = ["prefetch_planner_util.cc"],
-    hdrs = ["prefetch_planner_util.h"],
+    name="cmt_generator_util",
+    srcs = ["cmt_generator_util.cc"],
+    hdrs = ["cmt_generator_util.h"],
     deps = [
         ":utils",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -128,7 +128,7 @@ cc_library(
         ":profiler",
         ":sampler",
         ":utils",
-        ":prefetch_planner_util",
+        ":cmt_generator_util",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",
@@ -161,10 +161,10 @@ cc_binary(
 
 
 cc_binary(
-    name = "prefetch_planner",
+    name = "cmt_generator",
     srcs = [
-        "prefetch_planner.cc",
-        "prefetch_planner.h",
+        "cmt_generator.cc",
+        "cmt_generator.h",
     ],
     defines = [
         "TF_LITE_TENSORFLOW_PROFILER",

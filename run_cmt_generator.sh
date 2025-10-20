@@ -55,7 +55,7 @@ MODEL_NAME="llama3.2_q8_ekv1024"
 # MODEL_DIR="${MODEL_PATH}/SmolLM-135M"
 # MODEL_NAME="smollm_q8_ekv1280"
 
-BIN="bin/prefetch_planner"
+BIN="bin/cmt_generator"
 
 # --- Execution Settings ---
 TARGET="cpu"           # Default target: cpu | gpu

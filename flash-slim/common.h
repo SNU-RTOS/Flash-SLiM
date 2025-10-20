@@ -55,7 +55,7 @@
 #include "profiler.h"
 #include "aligned_allocator.h"
 #include "lora_adapter.h"
-#include "prefetch_planner_util.h"
+#include "cmt_generator_util.h"
 
 
 namespace tflite::profiling

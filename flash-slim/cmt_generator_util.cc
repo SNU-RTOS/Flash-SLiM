@@ -7,15 +7,15 @@
 // This module provides tools to record and plan I/O prefetch operations
 // for weight chunks during model execution.
 
-#include "prefetch_planner_util.h"
+#include "cmt_generator_util.h"
 #include <iostream>
 
 namespace flash_slim
 {
 
-    //* ==================== JsonWeightChunkInfoWriter ==================== */
+    //* ==================== JsonWeightChunkMetaDataWriter ==================== */
 
-    JsonWeightChunkInfoWriter::JsonWeightChunkInfoWriter(const std::string &output_path)
+    JsonWeightChunkMetaDataWriter::JsonWeightChunkMetaDataWriter(const std::string &output_path)
         : output_path_(output_path),
           json_root_(nlohmann::ordered_json::object()),
           finalized_(false),
@@ -23,14 +23,14 @@ namespace flash_slim
     {
         // Initialize containers
         json_root_["weight_chunks"] = nlohmann::ordered_json::object();
-        std::cout << "[JsonWeightChunkInfoWriter] Initialized: " << output_path_ << std::endl;
+        std::cout << "[JsonWeightChunkMetaDataWriter] Initialized: " << output_path_ << std::endl;
     }
 
-    JsonWeightChunkInfoWriter::~JsonWeightChunkInfoWriter()
+    JsonWeightChunkMetaDataWriter::~JsonWeightChunkMetaDataWriter()
     {
         if (!finalized_)
         {
-            std::cerr << "[JsonWeightChunkInfoWriter] Warning: Destroyed without calling Finalize()" << std::endl;
+            std::cerr << "[JsonWeightChunkMetaDataWriter] Warning: Destroyed without calling Finalize()" << std::endl;
             Finalize();
         }
     }
@@ -49,16 +49,16 @@ namespace flash_slim
         }
     }
 
-    void JsonWeightChunkInfoWriter::WriteChunkInfo(const tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t &chunk_info,
+    void JsonWeightChunkMetaDataWriter::WriteChunkInfo(const tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t &chunk_info,
                                                    tflite::xnnpack::WeightChunkPrefetcher::PrefetchMode prefetch_mode)
     {
         if (finalized_)
         {
-            std::cerr << "[JsonWeightChunkInfoWriter] Error: Cannot write after Finalize()" << std::endl;
+            std::cerr << "[JsonWeightChunkMetaDataWriter] Error: Cannot write after Finalize()" << std::endl;
             return;
         }
 
-        // std::cout << "[JsonWeightChunkInfoWriter] Writing chunk_index=" << chunk_info.chunk_index
+        // std::cout << "[JsonWeightChunkMetaDataWriter] Writing chunk_index=" << chunk_info.chunk_index
         //           << " aligned_offset=" << chunk_info.aligned_offset << " aligned_size=" << chunk_info.aligned_size
         //           << " buffer_index=" << chunk_info.managed_buffer_index
         //           << " origin_offset=" << chunk_info.origin_offset
@@ -94,7 +94,7 @@ namespace flash_slim
         per_mode_total_aligned_size_[mode_key] += static_cast<size_t>(chunk_info.aligned_size);
     }
 
-    void JsonWeightChunkInfoWriter::Finalize()
+    void JsonWeightChunkMetaDataWriter::Finalize()
     {
         if (finalized_)
         {
@@ -104,7 +104,7 @@ namespace flash_slim
         std::ofstream output_file(output_path_);
         if (!output_file.is_open())
         {
-            std::cerr << "[JsonWeightChunkInfoWriter] Error: Failed to open: " << output_path_ << std::endl;
+            std::cerr << "[JsonWeightChunkMetaDataWriter] Error: Failed to open: " << output_path_ << std::endl;
             finalized_ = true;
             return;
         }
@@ -150,7 +150,7 @@ namespace flash_slim
         output_file.close();
 
         std::cout << "\n\n"
-                  << "[JsonWeightChunkInfoWriter] Wrote chunk metadata to: " << output_path_ << std::endl;
+                  << "[JsonWeightChunkMetaDataWriter] Wrote chunk metadata to: " << output_path_ << std::endl;
 
         finalized_ = true;
     }

@@ -1,6 +1,6 @@
 
-#include "prefetch_planner.h"
-#include "prefetch_planner_util.h"
+#include "cmt_generator.h"
+#include "cmt_generator_util.h"
 #include "common.h"
 
 // ----------------------
@@ -696,7 +696,7 @@ int main(int argc, char *argv[])
     auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();
 
     // Json handler for weight chunk info
-    flash_slim::JsonWeightChunkInfoWriter writer("weight_chunks_metadata_table.json");
+    flash_slim::JsonWeightChunkMetaDataWriter writer("weight_chunks_metadata_table.json");
     writer.WriteModelInfo(absl::GetFlag(FLAGS_tflite_model).c_str());
     weight_cache_provider->SetWeightChunkInfoWriter(&writer);
 
