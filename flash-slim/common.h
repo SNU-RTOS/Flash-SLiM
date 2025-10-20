@@ -55,7 +55,6 @@
 #include "profiler.h"
 #include "aligned_allocator.h"
 #include "lora_adapter.h"
-#include "cmt_generator_util.h"
 #include "weight_chunk_prefetcher.h"
 
 
@@ -81,6 +80,7 @@ using tflite::profiling::ProfileSummaryCSVFormatter;
 using tflite::profiling::ProfileSummaryFormatter;
 
 using flash_slim::profiling::GenAIMetrics;
+
 
 
 #ifdef USE_WEIGHT_STREAMING

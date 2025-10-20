@@ -1,16 +1,16 @@
-#include "flash-slim/weight_chunk_prefetcher.h"
 
 #include <limits>
 #include <utility>
 
 #include "tflite/minimal_logging.h"
+#include "weight_chunk_prefetcher.h"
 
 namespace flash_slim {
 namespace streaming {
 
 void WeightChunkPrefetcher::SetPrefetchPlan(
     PrefetchMode mode, std::unordered_map<size_t, size_t>&& offset_to_index,
-    std::vector<ChunkInfo>&& chunks) {
+    std::vector<weight_chunk_info_t>&& chunks) {
   const int idx = PrefetchModeToIndex(mode);
   if (idx < 0) {
     return;
@@ -20,12 +20,12 @@ void WeightChunkPrefetcher::SetPrefetchPlan(
   has_plan_[idx] = true;
 }
 
-bool WeightChunkPrefetcher::HasPlan(PrefetchMode mode) const {
+bool WeightChunkPrefetcher::HasPrefetchPlan(PrefetchMode mode) const {
   const int idx = PrefetchModeToIndex(mode);
   return idx >= 0 && has_plan_[idx];
 }
 
-const WeightChunkPrefetcher::PrefetchPlan* WeightChunkPrefetcher::GetPlan(
+const WeightChunkPrefetcher::PrefetchPlan* WeightChunkPrefetcher::GetPrefetchPlan(
     PrefetchMode mode) const {
   const int idx = PrefetchModeToIndex(mode);
   if (idx < 0 || !has_plan_[idx]) {
@@ -54,17 +54,17 @@ void WeightChunkPrefetcher::BuildIndexToChunksFromPlans() {
     return;
   }
 
-  ChunkInfo sentinel;
-  sentinel.chunk_index = SIZE_MAX;
-  sentinel.aligned_offset = 0;
-  sentinel.offset_adjust = 0;
-  sentinel.aligned_size = 0;
-  sentinel.origin_offset = 0;
-  sentinel.origin_size = 0;
-  sentinel.managed_buffer_index = -1;
-  sentinel.weights_id = 0;
+  weight_chunk_info_t tmp_chunk;
+  tmp_chunk.chunk_index = SIZE_MAX;
+  tmp_chunk.aligned_offset = 0;
+  tmp_chunk.offset_adjust = 0;
+  tmp_chunk.aligned_size = 0;
+  tmp_chunk.origin_offset = 0;
+  tmp_chunk.origin_size = 0;
+  tmp_chunk.managed_buffer_index = -1;
+  tmp_chunk.weights_id = 0;
 
-  index_to_chunks_.assign(max_index + 1, sentinel);
+  index_to_chunks_.assign(max_index + 1, tmp_chunk);
 
   for (int i = 0; i < 2; ++i) {
     if (!has_plan_[i]) {

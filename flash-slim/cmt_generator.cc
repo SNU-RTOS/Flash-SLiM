@@ -1,7 +1,5 @@
-
 #include "cmt_generator.h"
-#include "cmt_generator_util.h"
-#include "common.h"
+
 
 // ----------------------
 // absl::FLAGS definition
@@ -693,12 +691,10 @@ int main(int argc, char *argv[])
     std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
     auto weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
     weight_cache_provider->SetController(weight_chunk_controller.get());
-    weight_chunk_controller->SetMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUNTIME);
-    auto weight_chunk_prefetcher = std::make_shared<WeightChunkPrefetcher>();
-    weight_chunk_controller->AttachPrefetcher(weight_chunk_prefetcher);
-
+    weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUNTIME);
+    
     // Json handler for weight chunk info
-    flash_slim::JsonWeightChunkMetaDataWriter writer("weight_chunks_metadata_table.json");
+    JsonWeightChunkMetaDataWriter writer("weight_chunks_metadata_table.json");
     writer.WriteModelInfo(absl::GetFlag(FLAGS_tflite_model).c_str());
     weight_chunk_controller->AttachMetadataWriter(&writer);
 
@@ -896,7 +892,6 @@ int main(int argc, char *argv[])
 
     // Release resources in reverse order of allocation
     weight_cache_provider->CloseDirectIOFileDescriptor();
-    weight_cache_provider->FreeManagedBuffer();
     weight_cache_provider->Release();
 
     return 0;

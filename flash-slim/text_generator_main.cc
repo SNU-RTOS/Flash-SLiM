@@ -154,23 +154,19 @@ void __run_main(GenAIMetrics &genai_metrics,
 
     //* ============ [Phase] 3. Apply Delegate ============ */
 #ifdef USE_WEIGHT_STREAMING
-    std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider;
-    std::unique_ptr<WeightChunkController> weight_chunk_controller;
-    {
-        weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
-        weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
-        weight_cache_provider->SetController(weight_chunk_controller.get());
-        weight_chunk_controller->SetMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
+    const std::string prefetch_plan_path = "weight_chunks_metadata_table.json";
 
-        auto weight_chunk_prefetcher = std::make_shared<WeightChunkPrefetcher>();
-        weight_chunk_controller->AttachPrefetcher(weight_chunk_prefetcher);
+    std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
+    std::unique_ptr<WeightChunkController> weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
+    std::unique_ptr<WeightChunkPrefetcher> weight_chunk_prefetcher = std::make_unique<WeightChunkPrefetcher>();
 
-        const std::string prefetch_plan_path = "weight_chunks_metadata_table.json";
-        MINIMAL_CHECK(weight_chunk_controller->LoadPrefetchPlan(prefetch_plan_path));
+    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
+    weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
+    weight_chunk_controller->AttachPrefetcher(std::move(weight_chunk_prefetcher));
 
-        weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
-    }
+    MINIMAL_CHECK(weight_chunk_controller->LoadPrefetchPlan(prefetch_plan_path));
 #endif
+
     {
         flash_slim::profiling::ScopeEventHandler handler("Apply_Delegate");
 
@@ -427,9 +423,9 @@ void __run_main(GenAIMetrics &genai_metrics,
     if (weight_cache_provider)
     {
         weight_cache_provider->CloseDirectIOFileDescriptor();
-        weight_cache_provider->ClearWeightChunkBuffers();
         weight_cache_provider->Release();
     }
+    
 #endif
     std::cout << "\n\n\n";
     std::cout << "[INFO] Decoded " << decode_steps << " tokens." << std::endl;

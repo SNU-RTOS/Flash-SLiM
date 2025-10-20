@@ -10,5 +10,10 @@
 #ifndef FLASH_SLIM_CMT_GENERATOR_H
 #define FLASH_SLIM_CMT_GENERATOR_H
 
+#include "weight_chunk_controller_utils.h"
+#include "common.h"
+
+using flash_slim::streaming::JsonWeightChunkMetaDataWriter;
+
 
 #endif // FLASH_SLIM_CMT_GENERATOR_H

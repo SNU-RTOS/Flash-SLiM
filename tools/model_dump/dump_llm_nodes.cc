@@ -790,12 +790,12 @@ int main(int argc, char *argv[])
     std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
     auto weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
     weight_cache_provider->SetController(weight_chunk_controller.get());
-    weight_chunk_controller->SetMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
+    weight_chunk_controller->SetPRoviderMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
     auto weight_chunk_prefetcher = std::make_shared<WeightChunkPrefetcher>();
     weight_chunk_controller->AttachPrefetcher(weight_chunk_prefetcher);
 
     constexpr size_t buf_size = 400 * 1024 * 1024;
-    weight_chunk_controller->EnsureWeightChunkBuffer(buf_size);
+    weight_chunk_controller->AllocWeightChunkBuffer(buf_size);
     weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
 #endif
 

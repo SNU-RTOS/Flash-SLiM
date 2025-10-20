@@ -99,24 +99,8 @@ cc_library(
         "@litert//tflite/kernels:builtin_ops",
     ],
 )
-cc_library(
-    name="cmt_generator_util",
-    srcs = ["cmt_generator_util.cc"],
-    hdrs = ["cmt_generator_util.h"],
-    deps = [
-        ":utils",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@litert//tflite:framework",
-        "@litert//tflite:util",
-        "@litert//tflite/schema:schema_fbs",
-        "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
-        "//flash-slim/nlohmann:nlohmann_json",
-    ],
-)
+
+
 cc_library(
     name = "weight_chunk_prefetcher",
     srcs = ["weight_chunk_prefetcher.cc"],
@@ -127,12 +111,25 @@ cc_library(
 )
 
 cc_library(
-    name = "weight_chunk_controller",
-    srcs = ["weight_chunk_controller.cc"],
-    hdrs = ["weight_chunk_controller.h"],
+    name = "weight_chunk_controller_utils",
+    srcs = ["weight_chunk_controller_utils.cc"],
+    hdrs = ["weight_chunk_controller_utils.h"],
     deps = [
         ":weight_chunk_prefetcher",
-        ":cmt_generator_util",
+        "//flash-slim/nlohmann:nlohmann_json",
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
+    ],
+)
+
+cc_library(
+    name = "weight_chunk_controller",
+    srcs = ["weight_chunk_controller.cc"],
+    hdrs = [
+        "weight_chunk_controller.h",
+    ],
+    deps = [
+        ":weight_chunk_controller_utils",
+        ":weight_chunk_prefetcher",
         "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
     ],
 )
@@ -146,26 +143,27 @@ cc_library(
         ":lora_adapter",
         ":profiler",
         ":sampler",
-        ":weight_chunk_prefetcher",
-        ":weight_chunk_controller",
         ":utils",
-        ":cmt_generator_util",
+        ":weight_chunk_controller",
+        ":weight_chunk_controller_utils",
+        ":weight_chunk_prefetcher",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",
         "@com_google_sentencepiece//:sentencepiece_processor",
         "@litert//tflite:framework",
         "@litert//tflite:util",
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
+        "@litert//tflite/delegates/xnnpack:weight_cache",
         "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
         "@litert//tflite/experimental/genai:genai_ops",
         "@litert//tflite/kernels:builtin_ops",
         "@litert//tflite/profiling:profile_summarizer",
         "@litert//tflite/profiling:profiler",
         "@litert//tflite/tools/benchmark:benchmark_model_lib",
-        "@litert//tflite/delegates/xnnpack:weight_cache",
-        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
     ],
 )
+
 cc_binary(
     name = "text_generator_main",
     srcs = [
@@ -179,7 +177,6 @@ cc_binary(
         ":common",
     ],
 )
-
 
 cc_binary(
     name = "cmt_generator",
