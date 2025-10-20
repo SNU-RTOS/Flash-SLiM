@@ -55,7 +55,7 @@
 #include "profiler.h"
 #include "aligned_allocator.h"
 #include "lora_adapter.h"
-#include "prefetch_planner_util.h"
+#include "weight_chunk_prefetcher.h"
 
 
 namespace tflite::profiling
@@ -82,10 +82,13 @@ using tflite::profiling::ProfileSummaryFormatter;
 using flash_slim::profiling::GenAIMetrics;
 
 
+
 #ifdef USE_WEIGHT_STREAMING
 #include "tflite/delegates/xnnpack/streaming_weight_cache.h"
 using tflite::xnnpack::StreamingWeightCacheProvider;
-using tflite::xnnpack::WeightChunkPrefetcher;
+using flash_slim::streaming::WeightChunkPrefetcher;
+#include "flash-slim/weight_chunk_controller.h"
+using flash_slim::streaming::WeightChunkController;
 void ApplyXNNPACKWithWeightCachingProvider(tflite::Interpreter *interpreter, StreamingWeightCacheProvider *provider);
 #else
 #include "tflite/delegates/xnnpack/weight_cache.h"

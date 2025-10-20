@@ -99,22 +99,38 @@ cc_library(
         "@litert//tflite/kernels:builtin_ops",
     ],
 )
+
+
 cc_library(
-    name="prefetch_planner_util",
-    srcs = ["prefetch_planner_util.cc"],
-    hdrs = ["prefetch_planner_util.h"],
+    name = "weight_chunk_prefetcher",
+    srcs = ["weight_chunk_prefetcher.cc"],
+    hdrs = ["weight_chunk_prefetcher.h"],
     deps = [
-        ":utils",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@litert//tflite:framework",
-        "@litert//tflite:util",
-        "@litert//tflite/schema:schema_fbs",
-        "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
+    ],
+)
+
+cc_library(
+    name = "weight_chunk_controller_utils",
+    srcs = ["weight_chunk_controller_utils.cc"],
+    hdrs = ["weight_chunk_controller_utils.h"],
+    deps = [
+        ":weight_chunk_prefetcher",
         "//flash-slim/nlohmann:nlohmann_json",
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
+    ],
+)
+
+cc_library(
+    name = "weight_chunk_controller",
+    srcs = ["weight_chunk_controller.cc"],
+    hdrs = [
+        "weight_chunk_controller.h",
+    ],
+    deps = [
+        ":weight_chunk_controller_utils",
+        ":weight_chunk_prefetcher",
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
     ],
 )
 
@@ -128,23 +144,26 @@ cc_library(
         ":profiler",
         ":sampler",
         ":utils",
-        ":prefetch_planner_util",
+        ":weight_chunk_controller",
+        ":weight_chunk_controller_utils",
+        ":weight_chunk_prefetcher",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",
         "@com_google_sentencepiece//:sentencepiece_processor",
         "@litert//tflite:framework",
         "@litert//tflite:util",
+        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
+        "@litert//tflite/delegates/xnnpack:weight_cache",
         "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
         "@litert//tflite/experimental/genai:genai_ops",
         "@litert//tflite/kernels:builtin_ops",
         "@litert//tflite/profiling:profile_summarizer",
         "@litert//tflite/profiling:profiler",
         "@litert//tflite/tools/benchmark:benchmark_model_lib",
-        "@litert//tflite/delegates/xnnpack:weight_cache",
-        "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
     ],
 )
+
 cc_binary(
     name = "text_generator_main",
     srcs = [
@@ -159,12 +178,11 @@ cc_binary(
     ],
 )
 
-
 cc_binary(
-    name = "prefetch_planner",
+    name = "cmt_generator",
     srcs = [
-        "prefetch_planner.cc",
-        "prefetch_planner.h",
+        "cmt_generator.cc",
+        "cmt_generator.h",
     ],
     defines = [
         "TF_LITE_TENSORFLOW_PROFILER",

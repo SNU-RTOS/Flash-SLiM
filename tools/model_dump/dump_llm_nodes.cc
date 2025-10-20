@@ -28,6 +28,11 @@
 
 #include "tflite/delegates/xnnpack/weight_cache.h"
 #include "tflite/delegates/xnnpack/streaming_weight_cache.h"
+#ifdef USE_WEIGHT_STREAMING
+#include "flash-slim/weight_chunk_controller.h"
+using flash_slim::streaming::WeightChunkController;
+using flash_slim::streaming::WeightChunkPrefetcher;
+#endif
 
 // A minimal check macro.
 #ifndef MINIMAL_CHECK
@@ -783,12 +788,15 @@ int main(int argc, char *argv[])
     // create 400MB buffer for weight caching
 #ifdef USE_WEIGHT_STREAMING
     std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
+    auto weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
+    weight_cache_provider->SetController(weight_chunk_controller.get());
+    weight_chunk_controller->SetPRoviderMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
+    auto weight_chunk_prefetcher = std::make_shared<WeightChunkPrefetcher>();
+    weight_chunk_controller->AttachPrefetcher(weight_chunk_prefetcher);
 
     constexpr size_t buf_size = 400 * 1024 * 1024;
-    weight_cache_provider->AllocManagedBuffer(buf_size);
-    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));    
-    weight_cache_provider->InitWeightChunkPrefetcher();
-    auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();  
+    weight_chunk_controller->AllocWeightChunkBuffer(buf_size);
+    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
 #endif
 
     if (!absl::GetFlag(FLAGS_weight_cache_path).empty())

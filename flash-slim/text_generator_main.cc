@@ -153,41 +153,20 @@ void __run_main(GenAIMetrics &genai_metrics,
     interpreter->SetProfiler(op_profiler.get());
 
     //* ============ [Phase] 3. Apply Delegate ============ */
-    // Load prefetch plan
-    std::unique_ptr<flash_slim::JsonPrefetchPlanLoader> prefetch_plan_loader = std::make_unique<flash_slim::JsonPrefetchPlanLoader>();
-    prefetch_plan_loader->LoadFromFile("weight_chunks_metadata_table.json");
-    size_t buf_size = prefetch_plan_loader->max_aligned_size();
-    std::cout << "[INFO] Allocating weight cache buffer of size " << buf_size << " bytes.\n";
-    std::cout << "[INFO] Loaded prefetch plan for model: " << prefetch_plan_loader->model() << ", planner version: " << prefetch_plan_loader->version() << "\n";
+#ifdef USE_WEIGHT_STREAMING
+    const std::string prefetch_plan_path = "weight_chunks_metadata_table.json";
 
-    // Print all loaded prefetch plan data
-    prefetch_plan_loader->PrintMetadata(std::cout);
-
-    // Build per-mode lookup structures (copies that outlive the loader)
-    auto offset_to_index_prefill = prefetch_plan_loader->BuildOffsetToIndexForMode("PREFILL");
-    auto offset_to_index_decode = prefetch_plan_loader->BuildOffsetToIndexForMode("DECODE");
-    auto chunks_prefill = prefetch_plan_loader->BuildIndexToChunkVectorForMode("PREFILL");
-    auto chunks_decode = prefetch_plan_loader->BuildIndexToChunkVectorForMode("DECODE");
-
-    std::cout << "[INFO] PREFILL: offset_to_index=" << offset_to_index_prefill.size()
-              << ", index_to_chunk=" << chunks_prefill.size() << std::endl;
-    std::cout << "[INFO] DECODE : offset_to_index=" << offset_to_index_decode.size()
-              << ", index_to_chunk=" << chunks_decode.size() << std::endl;
-
-    prefetch_plan_loader.reset();
-    // End of prefetch plan loading
-
-    // Set up weight cache provider
     std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
-    weight_cache_provider->SetProviderMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
-    weight_cache_provider->AllocManagedBuffer(buf_size);
-    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
-    weight_cache_provider->InitWeightChunkPrefetcher();
+    std::unique_ptr<WeightChunkController> weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
+    std::unique_ptr<WeightChunkPrefetcher> weight_chunk_prefetcher = std::make_unique<WeightChunkPrefetcher>();
 
-    auto weight_chunk_prefetcher = weight_cache_provider->GetWeightChunkPrefetcher();
-    weight_chunk_prefetcher->SetPrefetchPlan(WeightChunkPrefetcher::PrefetchMode::PREFILL, std::move(offset_to_index_prefill), std::move(chunks_prefill));
-    weight_chunk_prefetcher->SetPrefetchPlan(WeightChunkPrefetcher::PrefetchMode::DECODE, std::move(offset_to_index_decode), std::move(chunks_decode));
-    weight_chunk_prefetcher->BuildIndexToChunksFromPlans();
+    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
+    weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
+    weight_chunk_controller->AttachPrefetcher(std::move(weight_chunk_prefetcher));
+
+    MINIMAL_CHECK(weight_chunk_controller->LoadPrefetchPlan(prefetch_plan_path));
+#endif
+
     {
         flash_slim::profiling::ScopeEventHandler handler("Apply_Delegate");
 
@@ -267,11 +246,11 @@ void __run_main(GenAIMetrics &genai_metrics,
         std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
 
 #ifdef USE_WEIGHT_STREAMING
-        weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
+    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
 #endif
         prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
 #ifdef USE_WEIGHT_STREAMING
-        weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
+    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
 #endif
         decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
     }
@@ -327,7 +306,7 @@ void __run_main(GenAIMetrics &genai_metrics,
     double prefill_time_ms = 0.0;
     std::cout << "[INFO] Prefill Phase started" << std::endl;
 #ifdef USE_WEIGHT_STREAMING
-    weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
+    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
 #endif
     // Start op-level profiling
     op_profiler->Reset();
@@ -369,7 +348,7 @@ void __run_main(GenAIMetrics &genai_metrics,
     MINIMAL_CHECK(decode_steps > 0);
 
 #ifdef USE_WEIGHT_STREAMING
-    weight_chunk_prefetcher->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
+    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
 #endif
     // Decoding loop
     for (int i = 0; i < decode_steps; ++i)
@@ -441,9 +420,12 @@ void __run_main(GenAIMetrics &genai_metrics,
     }
 
 #ifdef USE_WEIGHT_STREAMING
-    weight_cache_provider->CloseDirectIOFileDescriptor();
-    weight_cache_provider->FreeManagedBuffer();
-    weight_cache_provider->Release();
+    if (weight_cache_provider)
+    {
+        weight_cache_provider->CloseDirectIOFileDescriptor();
+        weight_cache_provider->Release();
+    }
+    
 #endif
     std::cout << "\n\n\n";
     std::cout << "[INFO] Decoded " << decode_steps << " tokens." << std::endl;

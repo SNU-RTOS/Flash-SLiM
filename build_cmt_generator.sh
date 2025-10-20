@@ -42,7 +42,7 @@ log "  LINKOPTS: $LINKOPTS"
 log "  GPU_FLAGS: $GPU_FLAGS"
 log "  GPU_COPT_FLAGS: $GPU_COPT_FLAGS"
 
-APP_NAME="prefetch_planner"
+APP_NAME="cmt_generator"
 OUT_DIR=bin
 BAZEL_BIN="bazel-bin/flash-slim/${APP_NAME}"
 OUTPUT_BIN="${OUT_DIR}/${APP_NAME}"
