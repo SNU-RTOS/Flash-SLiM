@@ -121,7 +121,7 @@ bool WeightChunkController::LoadPrefetchPlan(const std::string& path) {
   prefetcher_->BuildIndexToChunksFromPlans();
 
   offset_to_weights_ptr_.clear();
-  chunk_info_cache_.clear();
+  offset_to_chunk_info.clear();
   next_chunk_index_ = 0;
 
   return true;
@@ -200,18 +200,12 @@ void* WeightChunkController::GetWeightChunkBuffer(int index) const {
   return weight_chunk_buffers_[index];
 }
 
-void WeightChunkController::DumpStatus() const {
-  std::cout << "[WeightChunkController] buffer_index=" << active_weight_chunk_buffer_index_
-            << ", cached_chunks=" << chunk_info_cache_.size() << std::endl;
-}
-
-
 void WeightChunkController::RecordChunkAccess(size_t offset) {
   if (!provider_) {
     return;
   }
 
-  if (chunk_info_cache_.find(offset) != chunk_info_cache_.end()) {
+  if (offset_to_chunk_info.find(offset) != offset_to_chunk_info.end()) {
     return;
   }
 
@@ -234,9 +228,8 @@ void WeightChunkController::RecordChunkAccess(size_t offset) {
   info.managed_buffer_index = active_weight_chunk_buffer_index_;
   info.weights_id = weights_id >= 0 ? static_cast<size_t>(weights_id) : 0;
 
-  chunk_info_cache_.emplace(offset, info);
+  offset_to_chunk_info.emplace(offset, info);
 }
-
 
 void WeightChunkController::UpdatePreinvokeHandler(ProviderMode mode) {
   switch (mode) {
@@ -251,7 +244,6 @@ void WeightChunkController::UpdatePreinvokeHandler(ProviderMode mode) {
       break;
   }
 }
-
 
 void WeightChunkController::UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info) {
   const int mode_idx = WeightChunkPrefetcher::PrefetchModeToIndex(prefetch_mode_);
@@ -283,11 +275,11 @@ bool WeightChunkController::HandlePreRuntimePreInvoke(size_t offset) {
     std::cerr << "[WeightChunkController] writer_ is null\n";
     return false;
   }
-  auto it = chunk_info_cache_.find(offset);
-  if (it == chunk_info_cache_.end()) {
+  auto it = offset_to_chunk_info.find(offset);
+  if (it == offset_to_chunk_info.end()) {
     RecordChunkAccess(offset);
-    it = chunk_info_cache_.find(offset);
-    if (it == chunk_info_cache_.end()) {
+    it = offset_to_chunk_info.find(offset);
+    if (it == offset_to_chunk_info.end()) {
         std::cerr << "[WeightChunkController] Failed to record chunk info for offset "
                   << offset << "\n";
       return false;

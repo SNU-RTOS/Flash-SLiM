@@ -38,8 +38,6 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   void* GetActiveWeightChunkBuffer() const override;
   void* GetWeightChunkBuffer(int index) const override;
   
-  void DumpStatus() const;
-
   void PreInvokeImpl(size_t offset) override;
   void PostInvokeImpl(size_t offset) override;
   void TraceWeightsAddrImpl(void* addr, size_t offset) override;
@@ -67,7 +65,7 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   std::array<void*, 2> weight_chunk_buffers_{nullptr, nullptr};
   int active_weight_chunk_buffer_index_ = 0;
   size_t next_chunk_index_ = 0;
-  std::unordered_map<size_t, weight_chunk_info_t> chunk_info_cache_;
+  std::unordered_map<size_t, weight_chunk_info_t> offset_to_chunk_info;
   std::unordered_map<size_t, std::array<void*, 2>> offset_to_weights_ptr_;
 };
 
