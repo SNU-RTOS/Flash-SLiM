@@ -94,6 +94,9 @@ class WeightChunkPrefetcher {
   bool WaitReady(const weight_chunk_info_t* chunk_info);
   bool WaitReady(PrefetchMode mode, size_t offset);
 
+  std::optional<size_t> GetNextChunkIndex(PrefetchMode mode, size_t current_chunk_index) const;
+  const weight_chunk_info_t* GetChunkInfoByIndex(size_t chunk_index) const;
+
  private:
   struct PrefetchJob {
     const weight_chunk_info_t* chunk_info = nullptr;
@@ -121,11 +124,11 @@ class WeightChunkPrefetcher {
   std::array<bool, 2> has_plan_{{false, false}};
 
   std::vector<weight_chunk_info_t> index_to_chunks_;
-
-  std::deque<PrefetchJob> io_job_queue_;
   std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_states_;
+  
+  
   std::mutex chunk_state_mutex_;
-
+  std::deque<PrefetchJob> io_job_queue_;
   std::thread io_worker_thread_;
   std::mutex io_worker_mutex_;
   std::atomic<bool> io_worker_running_{false};

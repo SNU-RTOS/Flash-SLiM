@@ -55,6 +55,7 @@ void WeightChunkController::AttachPrefetcher(
       prefetcher_->UpdatePrefetcherMode(prefetch_mode_);
     }
   }
+  ResetPrefetchState();
 }
 
 void WeightChunkController::AttachMetadataWriter(
@@ -76,6 +77,7 @@ void WeightChunkController::UpdatePrefetcherMode(PrefetchMode mode) {
   if (prefetcher_) {
     prefetcher_->UpdatePrefetcherMode(mode);
   }
+  ResetPrefetchState();
 }
 
 bool WeightChunkController::LoadPrefetchPlan(const std::string& path) {
@@ -123,6 +125,7 @@ bool WeightChunkController::LoadPrefetchPlan(const std::string& path) {
   offset_to_weights_ptr_.clear();
   offset_to_chunk_info.clear();
   next_chunk_index_ = 0;
+  ResetPrefetchState();
 
   return true;
 }
@@ -178,6 +181,7 @@ void WeightChunkController::ReleaseWeightChunkBuffer() {
   weight_chunk_buffer_capacity_ = 0;
   weight_chunk_buffer_requirement_ = 0;
   active_weight_chunk_buffer_index_ = 0;
+  ResetPrefetchState();
 }
 
 
@@ -245,6 +249,99 @@ void WeightChunkController::UpdatePreinvokeHandler(ProviderMode mode) {
   }
 }
 
+void WeightChunkController::ResetPrefetchState() {
+  buffer_chunks_.fill(nullptr);
+  current_chunk_info_ = nullptr;
+  next_chunk_info_ = nullptr;
+  next_chunk_buffer_index_ = -1;
+  next_chunk_expected_offset_.reset();
+}
+
+bool WeightChunkController::EnsureChunkReady(const weight_chunk_info_t* info, int buffer_index,
+                                             int fd) {
+  if (!prefetcher_ || !info) {
+    return false;
+  }
+
+  void* buffer_base = GetWeightChunkBufferAddr(buffer_index);
+  if (!buffer_base) {
+    std::cerr << "[WeightChunkController] Invalid buffer index " << buffer_index << "\n";
+    return false;
+  }
+
+  if (buffer_chunks_[buffer_index] == info) {
+    return true;
+  }
+
+  WeightChunkPrefetcher::PrefetchRequest request;
+  request.chunk_info = info;
+  request.buffer_base = buffer_base;
+  request.direct_io_fd = fd;
+
+  if (!prefetcher_->Submit(request)) {
+    std::cerr << "[WeightChunkController] Submit failed for chunk_index="
+              << info->chunk_index << "\n";
+    return false;
+  }
+
+  if (!prefetcher_->WaitReady(info)) {
+    std::cerr << "[WeightChunkController] WaitReady failed for chunk_index="
+              << info->chunk_index << "\n";
+    return false;
+  }
+
+  buffer_chunks_[buffer_index] = info;
+  return true;
+}
+
+bool WeightChunkController::ScheduleNextChunk(const weight_chunk_info_t* current_info, int fd) {
+  if (!prefetcher_ || !current_info || prefetch_mode_ == PrefetchMode::UNINITIALIZED) {
+    return false;
+  }
+
+  next_chunk_info_ = nullptr;
+  next_chunk_buffer_index_ = -1;
+  next_chunk_expected_offset_.reset();
+
+  const auto next_index =
+      prefetcher_->GetNextChunkIndex(prefetch_mode_, current_info->chunk_index);
+  if (!next_index.has_value()) {
+    return true;
+  }
+
+  const weight_chunk_info_t* next_info = prefetcher_->GetChunkInfoByIndex(*next_index);
+  if (!next_info) {
+    std::cerr << "[WeightChunkController] Failed to resolve next chunk for index "
+              << *next_index << "\n";
+    return false;
+  }
+
+  const int buffer_index = GetInactiveBufferIndex();
+  void* buffer_base = GetWeightChunkBufferAddr(buffer_index);
+  if (!buffer_base) {
+    std::cerr << "[WeightChunkController] Invalid inactive buffer index " << buffer_index
+              << "\n";
+    return false;
+  }
+
+  WeightChunkPrefetcher::PrefetchRequest request;
+  request.chunk_info = next_info;
+  request.buffer_base = buffer_base;
+  request.direct_io_fd = fd;
+
+  if (!prefetcher_->Submit(request)) {
+    std::cerr << "[WeightChunkController] Submit failed for next chunk_index="
+              << next_info->chunk_index << "\n";
+    return false;
+  }
+
+  next_chunk_info_ = next_info;
+  next_chunk_buffer_index_ = buffer_index;
+  next_chunk_expected_offset_ = next_info->origin_offset;
+  buffer_chunks_[buffer_index] = next_info;
+  return true;
+}
+
 void WeightChunkController::UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info) {
   const int mode_idx = WeightChunkPrefetcher::PrefetchModeToIndex(prefetch_mode_);
   if (mode_idx < 0) {
@@ -300,30 +397,65 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     return false;
   }
 
-  void* buffer_base = GetActiveWeightChunkBuffer();
-  if (!buffer_base) {
-    return false;
-  }
-
   const int fd = provider_->GetDirectIOFileDescriptor();
   if (fd < 0) {
     return false;
   }
 
-  WeightChunkPrefetcher::PrefetchRequest request;
-  request.chunk_info = info;
-  request.buffer_base = buffer_base;
-  request.direct_io_fd = fd;
+  if (next_chunk_expected_offset_.has_value() &&
+      next_chunk_expected_offset_.value() != offset && next_chunk_info_) {
+    std::cerr << "[WeightChunkController] Prefetched offset mismatch: expected "
+              << next_chunk_expected_offset_.value() << ", got " << offset << "\n";
+  }
 
-  if (!prefetcher_->Submit(request)) {
+  if (next_chunk_info_ && next_chunk_info_->origin_offset != offset) {
+    // The runtime requested a chunk different from the prefetched one; wait for the in-flight
+    // job to finish so that the state can be reused safely.
+    (void)prefetcher_->WaitReady(next_chunk_info_);
+    next_chunk_info_ = nullptr;
+    next_chunk_buffer_index_ = -1;
+    next_chunk_expected_offset_.reset();
+  }
+
+  if (!GetActiveWeightChunkBuffer()) {
     return false;
   }
 
-  if (!prefetcher_->WaitReady(info)) {
-    return false;
+  const int active_buffer_index = active_weight_chunk_buffer_index_;
+  bool used_prefetched_chunk = false;
+
+  if (next_chunk_info_ && next_chunk_info_->origin_offset == offset &&
+      next_chunk_buffer_index_ == active_buffer_index) {
+    if (!prefetcher_->WaitReady(next_chunk_info_)) {
+      ResetPrefetchState();
+      std::cerr << "[WeightChunkController] Prefetched chunk wait failed for offset " << offset
+                << "\n";
+      return false;
+    }
+    current_chunk_info_ = next_chunk_info_;
+    buffer_chunks_[active_buffer_index] = next_chunk_info_;
+    next_chunk_info_ = nullptr;
+    next_chunk_buffer_index_ = -1;
+    next_chunk_expected_offset_.reset();
+    used_prefetched_chunk = true;
   }
 
-  UpdateWeightsPointer(offset, *info);
+  if (!used_prefetched_chunk) {
+    if (!EnsureChunkReady(info, active_buffer_index, fd)) {
+      ResetPrefetchState();
+      std::cerr << "[WeightChunkController] Failed to synchronously load offset " << offset
+                << "\n";
+      return false;
+    }
+    std::cout << "[WeightChunkController] Synchronously loaded chunk for offset " << offset << "\n";
+    current_chunk_info_ = info;
+    next_chunk_info_ = nullptr;
+    next_chunk_buffer_index_ = -1;
+    next_chunk_expected_offset_.reset();
+  }
+
+  UpdateWeightsPointer(offset, *current_chunk_info_);
+  (void)ScheduleNextChunk(current_chunk_info_, fd);
   return true;
 }
 
@@ -339,6 +471,7 @@ void WeightChunkController::PreInvokeImpl(size_t offset) {
 
 void WeightChunkController::PostInvokeImpl(size_t /*offset*/) {
     SwitchActiveBufferIndex();
+    printf("[WeightChunkController] Switched active buffer to index %d\n", active_weight_chunk_buffer_index_);
 }
 
 void WeightChunkController::TraceWeightsAddrImpl(void* addr, size_t offset) {
@@ -354,40 +487,6 @@ void WeightChunkController::TraceWeightsAddrImpl(void* addr, size_t offset) {
   auto& entry = offset_to_weights_ptr_[offset];
   entry[mode_idx] = addr;
 }
-
-
-//TODO -> Below functions will be changed or moved to WeightChunkPrefetcher to implement compute-io overlap, 
-//TODO -> HandlePreRuntimePreInvoke and HandleRuntimePreInvoke will be changed to just trigger event
-// TODO(Refactor, behavior-preserving):
-// - Move compute–I/O overlap responsibilities into WeightChunkPrefetcher.
-//   Controller will no longer perform direct I/O or buffer filling.
-//   1) Move the following responsibilities to Prefetcher:
-//      - ResolveChunkInfo(offset) logic (plan lookup, index bounds check).
-//      - LoadChunkData(...) including ExecuteIO/pread and any parallel I/O.
-//      - Buffer fill state transitions: EMPTY→FILLING→READY (producer side).
-//   2) Controller will only orchestrate:
-//      - PreInvoke(offset): trigger/submit prefetch for 'offset' and ensure
-//        READY before updating consumer pointers (no blocking I/O here).
-//      - PostInvoke(offset): switch active buffer and release IN_USE→RECLAIM.
-//      - UpdateWeightsPointer(...) remains here (consumer pointer patch).
-//   3) Pre-runtime:
-//      - HandlePreRuntimePreInvoke(offset): only record metadata via writer_.
-//        No I/O or scheduling here.
-//   4) Provider boundary remains I/O primitives only (fd, offsets, sizes).
-//   5) No behavior change allowed: latency/log format/metrics must match.
-//      Keep the existing buffer size, alignment, and switching policy.
-//   6) Prefetcher threading model (run on dedicated worker thread[s]):
-//      - Prefetcher owns its worker thread(s) and lifecycle (start on attach or
-//        first UpdatePrefetcherMode/LoadPrefetchPlan; stop on controller dtor).
-//      - Controller enqueues Prefetcher::Submit(offset) non-blockingly and, if
-//        needed, waits via Prefetcher::WaitReady(offset) before pointer patch.
-//      - Maintain existing overlap ratio and stall/hit-rate metrics (no log format changes).
-//      - Ensure ASAN/TSAN clean shutdown (no leaks, no races).
-//   Follow-up interfaces (non-breaking):
-//      - Prefetcher::Submit(offset), Prefetcher::WaitReady(offset),
-//        Prefetcher::GetPlan(mode), Prefetcher::GetIndexToChunks()
-//        (reads only), Prefetcher owns scheduling threads/queues.
-
 
 
 }  // namespace streaming

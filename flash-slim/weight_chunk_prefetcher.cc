@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <future>
 #include <limits>
+#include <optional>
 #include <utility>
 #include <unistd.h>
 #include <vector>
@@ -277,6 +278,51 @@ bool WeightChunkPrefetcher::WaitReady(const weight_chunk_info_t* chunk_info) {
   state->ready = false;
   state->in_flight = false;
   return success;
+}
+
+std::optional<size_t> WeightChunkPrefetcher::GetNextChunkIndex(PrefetchMode mode,
+                                                            size_t current_chunk_index) const {
+  const int plan_idx = PrefetchModeToIndex(mode);
+  if (plan_idx < 0 || !has_plan_[plan_idx]) {
+    return std::nullopt;
+  }
+
+  const auto& chunks = prefetch_plans_[plan_idx].chunks;
+  if (chunks.empty()) {
+    return std::nullopt;
+  }
+
+  const size_t plan_size = chunks.size();
+  size_t candidate = current_chunk_index + 1;
+  if (candidate >= plan_size) {
+    candidate = 0;
+  }
+
+  for (size_t inspected = 0; inspected < plan_size; ++inspected) {
+    const auto& info = chunks[candidate];
+    if (info.chunk_index != std::numeric_limits<size_t>::max()) {
+      return info.chunk_index;
+    }
+    ++candidate;
+    if (candidate >= plan_size) {
+      candidate = 0;
+    }
+  }
+
+  return std::nullopt;
+}
+
+const weight_chunk_info_t* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chunk_index) const {
+  if (chunk_index >= index_to_chunks_.size()) {
+    return nullptr;
+  }
+
+  const auto& info = index_to_chunks_[chunk_index];
+  if (info.chunk_index == std::numeric_limits<size_t>::max()) {
+    return nullptr;
+  }
+
+  return &info;
 }
 
 void WeightChunkPrefetcher::WorkerLoop() {
