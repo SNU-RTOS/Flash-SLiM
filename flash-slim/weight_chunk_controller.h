@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -35,37 +36,49 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   void ReleaseWeightChunkBuffer();
   void SwitchActiveBufferIndex();
   void UpdateActiveBufferIndex(int index);
-  void* GetActiveWeightChunkBuffer() const override;
-  void* GetWeightChunkBuffer(int index) const override;
   
-  void DumpStatus() const;
-
-  void PreInvoke(size_t offset) override;
-  void PostInvoke(size_t offset) override;
-  void TraceWeightsAddr(void* addr, size_t offset) override;
+  void* GetActiveWeightChunkBuffer() const override;
+  void* GetWeightChunkBufferAddr(int index) const override;
+  
+  void PreInvokeImpl(size_t offset) override;
+  void PostInvokeImpl(size_t offset) override;
+  void TraceWeightsAddrImpl(void* addr, size_t offset) override;
   
   void RecordChunkAccess(size_t offset) override;
 
  private:
+  using PreInvokeHandler = bool (WeightChunkController::*)(size_t);
   
-  void HandlePreRuntimePreInvoke(size_t offset);
+  void UpdatePreinvokeHandler(ProviderMode mode);
+  bool HandlePreRuntimePreInvoke(size_t offset);
   bool HandleRuntimePreInvoke(size_t offset);
-  const weight_chunk_info_t* ResolveChunkInfo(size_t offset) const;
-  void UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info);
-  bool LoadChunkData(const weight_chunk_info_t& info);
+  bool HandleDefaultPreInvoke(size_t offset);
 
+  void ResetPrefetchState();
+  void ClearNextChunkState();
+  bool EnsureChunkReady(const weight_chunk_info_t* info, int buffer_index, int fd);
+  bool ScheduleNextChunk(const weight_chunk_info_t* current_info, int fd);
+  int GetInactiveBufferIndex() const { return 1 - active_weight_chunk_buffer_index_; }
+  
+  void UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info);
+  
   tflite::xnnpack::StreamingWeightCacheProvider* provider_ = nullptr;
   std::unique_ptr<WeightChunkPrefetcher> prefetcher_ = nullptr;
   WeightChunkMetaDataWriter* writer_ = nullptr;
   ProviderMode provider_mode_ = ProviderMode::RUNTIME;
   PrefetchMode prefetch_mode_ = PrefetchMode::UNINITIALIZED;
+  PreInvokeHandler preinvoke_handler_ = &WeightChunkController::HandleDefaultPreInvoke;
   size_t weight_chunk_buffer_requirement_ = 0;
   size_t weight_chunk_buffer_capacity_ = 0;
   std::array<void*, 2> weight_chunk_buffers_{nullptr, nullptr};
   int active_weight_chunk_buffer_index_ = 0;
   size_t next_chunk_index_ = 0;
-  std::unordered_map<size_t, weight_chunk_info_t> chunk_info_cache_;
+  std::unordered_map<size_t, weight_chunk_info_t> offset_to_chunk_info;
   std::unordered_map<size_t, std::array<void*, 2>> offset_to_weights_ptr_;
+  const weight_chunk_info_t* current_chunk_info_ = nullptr;
+  const weight_chunk_info_t* next_chunk_info_ = nullptr;
+  int next_chunk_buffer_index_ = -1;
+  std::optional<size_t> next_chunk_expected_offset_;
 };
 
 }  // namespace streaming

@@ -142,7 +142,6 @@ Flash-SLiM implements a **Storage-Aware Weight Streaming Pipeline** with two dis
 - `AttachMetadataWriter()` - Attach metadata writer (pre-runtime mode)
 - `PreInvoke()` / `PostInvoke()` - Hook points for operator execution
 - `SwitchActiveBuffer()` / `ResetBuffers()` - Buffer management
-- `DumpStatus()` - Status logging
 
 **Buffer States**: READY, FILLING, IN_USE
 
