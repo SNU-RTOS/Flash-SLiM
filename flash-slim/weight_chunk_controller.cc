@@ -189,15 +189,15 @@ void WeightChunkController::UpdateActiveBufferIndex(int index) {
   active_weight_chunk_buffer_index_ = index;
 }
 
-void* WeightChunkController::GetActiveWeightChunkBuffer() const {
-  return GetWeightChunkBuffer(active_weight_chunk_buffer_index_);
-}
-
-void* WeightChunkController::GetWeightChunkBuffer(int index) const {
+void* WeightChunkController::GetWeightChunkBufferAddr(int index) const {
   if (index < 0 || index >= static_cast<int>(weight_chunk_buffers_.size())) {
     return nullptr;
   }
-  return weight_chunk_buffers_[index];
+  return weight_chunk_buffers_.at(index);
+}
+
+void* WeightChunkController::GetActiveWeightChunkBuffer() const {
+  return GetWeightChunkBufferAddr(active_weight_chunk_buffer_index_);
 }
 
 void WeightChunkController::RecordChunkAccess(size_t offset) {
@@ -311,8 +311,7 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
   }
 
   WeightChunkPrefetcher::PrefetchRequest request;
-  request.mode = prefetch_mode_;
-  request.offset = offset;
+  request.chunk_info = info;
   request.buffer_base = buffer_base;
   request.direct_io_fd = fd;
 
@@ -320,7 +319,7 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     return false;
   }
 
-  if (!prefetcher_->WaitReady(prefetch_mode_, offset)) {
+  if (!prefetcher_->WaitReady(info)) {
     return false;
   }
 

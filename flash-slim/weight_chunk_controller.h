@@ -37,7 +37,7 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   void UpdateActiveBufferIndex(int index);
   
   void* GetActiveWeightChunkBuffer() const override;
-  void* GetWeightChunkBuffer(int index) const override;
+  void* GetWeightChunkBufferAddr(int index) const override;
   
   void PreInvokeImpl(size_t offset) override;
   void PostInvokeImpl(size_t offset) override;

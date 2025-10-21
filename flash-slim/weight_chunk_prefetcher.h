@@ -33,7 +33,7 @@ class WeightChunkPrefetcher {
  public:
   struct PrefetchPlan {
     std::unordered_map<size_t, size_t> offset_to_index;  // origin_offset -> index
-    std::vector<weight_chunk_info_t> chunks;                      // index -> chunk metadata
+    std::vector<weight_chunk_info_t> chunks;             // index -> chunk metadata
   };
 
   enum class PrefetchMode {
@@ -43,8 +43,7 @@ class WeightChunkPrefetcher {
   };
 
   struct PrefetchRequest {
-    PrefetchMode mode = PrefetchMode::UNINITIALIZED;
-    size_t offset = 0;
+    const weight_chunk_info_t* chunk_info = nullptr;
     void* buffer_base = nullptr;
     int direct_io_fd = -1;
   };
@@ -82,8 +81,6 @@ class WeightChunkPrefetcher {
   
   std::string GetPrefetcherModeString() const;
 
-  // TODO(worker-lifecycle): hook these into controller lifecycle once the
-  // compute/I-O overlap refactor lands.
   void StartWorker();
   void StopWorker();
 
@@ -94,13 +91,12 @@ class WeightChunkPrefetcher {
   const weight_chunk_info_t* LookupChunkInfo(PrefetchMode mode, size_t offset) const;
 
   bool Submit(const PrefetchRequest& request);
+  bool WaitReady(const weight_chunk_info_t* chunk_info);
   bool WaitReady(PrefetchMode mode, size_t offset);
 
  private:
   struct PrefetchJob {
-    PrefetchMode mode = PrefetchMode::UNINITIALIZED;
-    size_t offset = 0;
-    weight_chunk_info_t chunk_info{};
+    const weight_chunk_info_t* chunk_info = nullptr;
     void* buffer_base = nullptr;
     int direct_io_fd = -1;
   };
@@ -116,7 +112,6 @@ class WeightChunkPrefetcher {
   void WorkerLoop();
   void ApplyWorkerAffinity();
   void ResetRuntimeState();
-  bool ResolvePrefetchJob(const PrefetchRequest& request, PrefetchJob* job);
   void MarkJobCompleted(const PrefetchJob& job, bool success);
   std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
 

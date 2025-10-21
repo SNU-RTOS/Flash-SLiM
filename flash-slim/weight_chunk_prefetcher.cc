@@ -236,18 +236,14 @@ const weight_chunk_info_t* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode m
 }
 
 bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
-  if (!request.buffer_base || request.direct_io_fd < 0) {
-    return false;
-  }
-
-  PrefetchJob job;
-  if (!ResolvePrefetchJob(request, &job)) {
+  const weight_chunk_info_t* info = request.chunk_info;
+  if (!request.buffer_base || request.direct_io_fd < 0 || !info) {
     return false;
   }
 
   {
     std::lock_guard<std::mutex> lock(io_worker_mutex_);
-    auto state = GetChunkIOState(job.chunk_info.chunk_index);
+    auto state = GetChunkIOState(info->chunk_index);
     {
       std::lock_guard<std::mutex> state_lock(state->mutex);
       if (state->in_flight) {
@@ -258,6 +254,10 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
       state->ready = false;
       state->success = false;
     }
+    PrefetchJob job;
+    job.chunk_info = info;
+    job.buffer_base = request.buffer_base;
+    job.direct_io_fd = request.direct_io_fd;
     io_job_queue_.push_back(std::move(job));
   }
 
@@ -265,13 +265,12 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
   return true;
 }
 
-bool WeightChunkPrefetcher::WaitReady(PrefetchMode mode, size_t offset) {
-  const weight_chunk_info_t* info = LookupChunkInfo(mode, offset);
-  if (!info) {
+bool WeightChunkPrefetcher::WaitReady(const weight_chunk_info_t* chunk_info) {
+  if (!chunk_info) {
     return false;
   }
 
-  auto state = GetChunkIOState(info->chunk_index);
+  auto state = GetChunkIOState(chunk_info->chunk_index);
   std::unique_lock<std::mutex> lock(state->mutex);
   state->cv.wait(lock, [&]() { return state->ready || !state->in_flight; });
   const bool success = state->success;
@@ -297,8 +296,10 @@ void WeightChunkPrefetcher::WorkerLoop() {
       io_job_queue_.pop_front();
     }
 
-    const bool success = ExecuteIO(job.direct_io_fd, job.buffer_base,
-                                   job.chunk_info.aligned_size, job.chunk_info.aligned_offset);
+    const weight_chunk_info_t* info = job.chunk_info;
+    const bool success = info &&
+                         ExecuteIO(job.direct_io_fd, job.buffer_base, info->aligned_size,
+                                   info->aligned_offset);
     MarkJobCompleted(job, success);
   }
 }
@@ -355,25 +356,13 @@ void WeightChunkPrefetcher::ResetRuntimeState() {
   }
 }
 
-bool WeightChunkPrefetcher::ResolvePrefetchJob(const PrefetchRequest& request, PrefetchJob* job) {
-  if (!job) {
-    return false;
-  }
-  const weight_chunk_info_t* info = LookupChunkInfo(request.mode, request.offset);
-  if (!info) {
-    return false;
-  }
-
-  job->mode = request.mode;
-  job->offset = request.offset;
-  job->chunk_info = *info;
-  job->buffer_base = request.buffer_base;
-  job->direct_io_fd = request.direct_io_fd;
-  return true;
-}
-
 void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool success) {
-  auto state = GetChunkIOState(job.chunk_info.chunk_index);
+  const weight_chunk_info_t* info = job.chunk_info;
+  if (!info) {
+    return;
+  }
+
+  auto state = GetChunkIOState(info->chunk_index);
   {
     std::lock_guard<std::mutex> lock(state->mutex);
     state->success = success;
@@ -385,7 +374,7 @@ void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool succes
   if (!success) {
     TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
                     "WeightChunkPrefetcher: prefetch failed (offset=%zu, chunk_index=%zu)",
-                    job.offset, job.chunk_info.chunk_index);
+                    info->origin_offset, info->chunk_index);
   }
 }
 
