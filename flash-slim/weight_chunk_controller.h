@@ -40,25 +40,28 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   
   void DumpStatus() const;
 
-  void PreInvoke(size_t offset) override;
-  void PostInvoke(size_t offset) override;
-  void TraceWeightsAddr(void* addr, size_t offset) override;
+  void PreInvokeImpl(size_t offset) override;
+  void PostInvokeImpl(size_t offset) override;
+  void TraceWeightsAddrImpl(void* addr, size_t offset) override;
   
   void RecordChunkAccess(size_t offset) override;
 
  private:
+  using PreInvokeHandler = bool (WeightChunkController::*)(size_t);
   
-  void HandlePreRuntimePreInvoke(size_t offset);
+  void UpdatePreinvokeHandler(ProviderMode mode);
+  bool HandlePreRuntimePreInvoke(size_t offset);
   bool HandleRuntimePreInvoke(size_t offset);
-  const weight_chunk_info_t* ResolveChunkInfo(size_t offset) const;
+  bool HandleDefaultPreInvoke(size_t offset);
+  
   void UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info);
-  bool LoadChunkData(const weight_chunk_info_t& info);
-
+  
   tflite::xnnpack::StreamingWeightCacheProvider* provider_ = nullptr;
   std::unique_ptr<WeightChunkPrefetcher> prefetcher_ = nullptr;
   WeightChunkMetaDataWriter* writer_ = nullptr;
   ProviderMode provider_mode_ = ProviderMode::RUNTIME;
   PrefetchMode prefetch_mode_ = PrefetchMode::UNINITIALIZED;
+  PreInvokeHandler preinvoke_handler_ = &WeightChunkController::HandleDefaultPreInvoke;
   size_t weight_chunk_buffer_requirement_ = 0;
   size_t weight_chunk_buffer_capacity_ = 0;
   std::array<void*, 2> weight_chunk_buffers_{nullptr, nullptr};

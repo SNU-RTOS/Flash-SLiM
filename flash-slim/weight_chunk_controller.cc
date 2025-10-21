@@ -2,11 +2,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <future>
 #include <iostream>
 #include <limits>
 #include <vector>
-#include <unistd.h>
 
 #include "weight_chunk_controller.h"
 
@@ -23,49 +21,6 @@ inline size_t AlignTo(size_t value, size_t alignment) {
   return remainder == 0 ? value : value + (alignment - remainder);
 }
 
-bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
-  constexpr size_t kMinBlockSize = 512 * 1024;
-  constexpr size_t kMaxThreads = 4;
-
-  if (fd < 0 || buffer == nullptr || size == 0) {
-    return false;
-  }
-
-  if (size < kMinBlockSize * 2) {
-    const ssize_t bytes_read = pread(fd, buffer, size, offset);
-    return bytes_read > 0 && static_cast<size_t>(bytes_read) == size;
-  }
-
-  const size_t num_threads = std::min(kMaxThreads, size / kMinBlockSize);
-  const size_t block_size = size / num_threads;
-  const size_t remainder = size % num_threads;
-
-  std::vector<std::future<bool>> futures;
-  futures.reserve(num_threads);
-
-  for (size_t i = 0; i < num_threads; ++i) {
-    const size_t current_block_size = block_size + (i < remainder ? 1 : 0);
-    const size_t block_offset = i * block_size + std::min(i, remainder);
-
-    uint8_t* block_buffer = static_cast<uint8_t*>(buffer) + block_offset;
-    const off_t block_file_offset = offset + block_offset;
-
-    futures.emplace_back(std::async(std::launch::async, [=]() -> bool {
-      const ssize_t bytes_read = pread(fd, block_buffer, current_block_size, block_file_offset);
-      return bytes_read > 0 && static_cast<size_t>(bytes_read) == current_block_size;
-    }));
-  }
-
-  bool all_success = true;
-  for (auto& future : futures) {
-    if (!future.get()) {
-      all_success = false;
-    }
-  }
-
-  return all_success;
-}
-
 }  // namespace
 
 namespace flash_slim {
@@ -77,14 +32,29 @@ WeightChunkController::WeightChunkController(
     if (provider_) {
         provider_->SetController(this);
     }
+  UpdatePreinvokeHandler(provider_mode_);
 }
 
-WeightChunkController::~WeightChunkController() { ReleaseWeightChunkBuffer(); }
+WeightChunkController::~WeightChunkController() {
+  if (prefetcher_) {
+    prefetcher_->StopWorker();
+  }
+  ReleaseWeightChunkBuffer();
+}
 
 
 void WeightChunkController::AttachPrefetcher(
     std::unique_ptr<WeightChunkPrefetcher> prefetcher) {
+  if (prefetcher_) {
+    prefetcher_->StopWorker();
+  }
   prefetcher_ = std::move(prefetcher);
+  if (prefetcher_) {
+    prefetcher_->StartWorker();
+    if (prefetch_mode_ != PrefetchMode::UNINITIALIZED) {
+      prefetcher_->UpdatePrefetcherMode(prefetch_mode_);
+    }
+  }
 }
 
 void WeightChunkController::AttachMetadataWriter(
@@ -95,6 +65,7 @@ void WeightChunkController::AttachMetadataWriter(
 void WeightChunkController::UpdateProviderMode(
     ProviderMode mode) {
   provider_mode_ = mode;
+  UpdatePreinvokeHandler(mode);
   if (provider_) {
     provider_->UpdateProviderMode(mode);
   }
@@ -235,74 +206,6 @@ void WeightChunkController::DumpStatus() const {
 }
 
 
-void WeightChunkController::PreInvoke(size_t offset) {
-  if (provider_mode_ == ProviderMode::RUNTIME) {
-    HandleRuntimePreInvoke(offset);
-  } else if (provider_mode_ == ProviderMode::PRE_RUNTIME) {
-    HandlePreRuntimePreInvoke(offset);
-  }
-}
-
-void WeightChunkController::PostInvoke(size_t /*offset*/) {
-    SwitchActiveBufferIndex();
-}
-
-void WeightChunkController::TraceWeightsAddr(void* addr, size_t offset) {
-  if (!addr) {
-    std::cerr << "[WeightChunkController] addr is nullptr\n";
-    return;
-  }
-  const int mode_idx = WeightChunkPrefetcher::PrefetchModeToIndex(prefetch_mode_);
-  if (mode_idx < 0) {
-    return;
-  }
-
-  auto& entry = offset_to_weights_ptr_[offset];
-  entry[mode_idx] = addr;
-}
-
-//TODO -> Below functions will be changed or moved to WeightChunkPrefetcher to implement compute-io overlap, 
-//TODO -> HandlePreRuntimePreInvoke and HandleRuntimePreInvoke will be changed to just trigger event
-// TODO(Refactor, behavior-preserving):
-// - Move compute–I/O overlap responsibilities into WeightChunkPrefetcher.
-//   Controller will no longer perform direct I/O or buffer filling.
-//   1) Move the following responsibilities to Prefetcher:
-//      - ResolveChunkInfo(offset) logic (plan lookup, index bounds check).
-//      - LoadChunkData(...) including ExecuteIO/pread and any parallel I/O.
-//      - Buffer fill state transitions: EMPTY→FILLING→READY (producer side).
-//   2) Controller will only orchestrate:
-//      - PreInvoke(offset): trigger/submit prefetch for 'offset' and ensure
-//        READY before updating consumer pointers (no blocking I/O here).
-//      - PostInvoke(offset): switch active buffer and release IN_USE→RECLAIM.
-//      - UpdateWeightsPointer(...) remains here (consumer pointer patch).
-//   3) Pre-runtime:
-//      - HandlePreRuntimePreInvoke(offset): only record metadata via writer_.
-//        No I/O or scheduling here.
-//   4) Provider boundary remains I/O primitives only (fd, offsets, sizes).
-//   5) No behavior change allowed: latency/log format/metrics must match.
-//      Keep the existing buffer size, alignment, and switching policy.
-//   Follow-up interfaces (non-breaking):
-//      - Prefetcher::Submit(offset), Prefetcher::WaitReady(offset),
-//        Prefetcher::GetPlan(mode), Prefetcher::GetIndexToChunks()
-//        (reads only), Prefetcher owns scheduling threads/queues.
-
-void WeightChunkController::HandlePreRuntimePreInvoke(size_t offset) {
-  if (!writer_) {
-    std::cerr << "[WeightChunkController] writer_ is null\n";
-    return;
-  }
-  auto it = chunk_info_cache_.find(offset);
-  if (it == chunk_info_cache_.end()) {
-    RecordChunkAccess(offset);
-    it = chunk_info_cache_.find(offset);
-    if (it == chunk_info_cache_.end()) {
-      return;
-    }
-  }
-
-  writer_->WriteChunkInfo(it->second, prefetch_mode_);
-}
-
 void WeightChunkController::RecordChunkAccess(size_t offset) {
   if (!provider_) {
     return;
@@ -334,52 +237,21 @@ void WeightChunkController::RecordChunkAccess(size_t offset) {
   chunk_info_cache_.emplace(offset, info);
 }
 
-bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
-  if (!prefetcher_ || prefetch_mode_ == PrefetchMode::UNINITIALIZED) {
-    return false;
-  }
 
-  const weight_chunk_info_t* info = ResolveChunkInfo(offset);
-  if (!info) {
-    return false;
+void WeightChunkController::UpdatePreinvokeHandler(ProviderMode mode) {
+  switch (mode) {
+    case ProviderMode::RUNTIME:
+      preinvoke_handler_ = &WeightChunkController::HandleRuntimePreInvoke;
+      break;
+    case ProviderMode::PRE_RUNTIME:
+      preinvoke_handler_ = &WeightChunkController::HandlePreRuntimePreInvoke;
+      break;
+    default:
+      preinvoke_handler_ = &WeightChunkController::HandleDefaultPreInvoke;
+      break;
   }
-
-  UpdateWeightsPointer(offset, *info);
-  return LoadChunkData(*info);
 }
 
-const weight_chunk_info_t* WeightChunkController::ResolveChunkInfo(size_t offset) const {
-  if (!prefetcher_) {
-    return nullptr;
-  }
-
-  const int mode_idx = WeightChunkPrefetcher::PrefetchModeToIndex(prefetch_mode_);
-  if (mode_idx < 0) {
-    return nullptr;
-  }
-
-  const auto* plan = prefetcher_ ? prefetcher_->GetPrefetchPlan(prefetch_mode_) : nullptr;
-  if (!plan) {
-    return nullptr;
-  }
-
-  const auto it = plan->offset_to_index.find(offset);
-  if (it == plan->offset_to_index.end()) {
-    return nullptr;
-  }
-
-  const auto& index_to_chunks = prefetcher_->GetIndexToChunks();
-  const size_t index = it->second;
-  if (index >= index_to_chunks.size()) {
-    return nullptr;
-  }
-
-  const auto& candidate = index_to_chunks[index];
-  if (candidate.chunk_index == std::numeric_limits<size_t>::max()) {
-    return nullptr;
-  }
-  return &candidate;
-}
 
 void WeightChunkController::UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info) {
   const int mode_idx = WeightChunkPrefetcher::PrefetchModeToIndex(prefetch_mode_);
@@ -406,7 +278,36 @@ void WeightChunkController::UpdateWeightsPointer(size_t offset, const weight_chu
   *slot = static_cast<uint8_t*>(buffer_base) + info.offset_adjust;
 }
 
-bool WeightChunkController::LoadChunkData(const weight_chunk_info_t& info) {
+bool WeightChunkController::HandlePreRuntimePreInvoke(size_t offset) {
+  if (!writer_) {
+    std::cerr << "[WeightChunkController] writer_ is null\n";
+    return false;
+  }
+  auto it = chunk_info_cache_.find(offset);
+  if (it == chunk_info_cache_.end()) {
+    RecordChunkAccess(offset);
+    it = chunk_info_cache_.find(offset);
+    if (it == chunk_info_cache_.end()) {
+        std::cerr << "[WeightChunkController] Failed to record chunk info for offset "
+                  << offset << "\n";
+      return false;
+    }
+  }
+
+  writer_->WriteChunkInfo(it->second, prefetch_mode_);
+  return true;
+}
+
+bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
+  if (!prefetcher_ || !provider_ || prefetch_mode_ == PrefetchMode::UNINITIALIZED) {
+    return false;
+  }
+
+  const weight_chunk_info_t* info = prefetcher_->LookupChunkInfo(prefetch_mode_, offset);
+  if (!info) {
+    return false;
+  }
+
   void* buffer_base = GetActiveWeightChunkBuffer();
   if (!buffer_base) {
     return false;
@@ -417,8 +318,86 @@ bool WeightChunkController::LoadChunkData(const weight_chunk_info_t& info) {
     return false;
   }
 
-  return ExecuteIO(fd, buffer_base, info.aligned_size, info.aligned_offset);
+  WeightChunkPrefetcher::PrefetchRequest request;
+  request.mode = prefetch_mode_;
+  request.offset = offset;
+  request.buffer_base = buffer_base;
+  request.direct_io_fd = fd;
+
+  if (!prefetcher_->Submit(request)) {
+    return false;
+  }
+
+  if (!prefetcher_->WaitReady(prefetch_mode_, offset)) {
+    return false;
+  }
+
+  UpdateWeightsPointer(offset, *info);
+  return true;
 }
+
+bool WeightChunkController::HandleDefaultPreInvoke(size_t /*offset*/) {
+  return false;
+}
+
+
+//* ================ Hook ================
+void WeightChunkController::PreInvokeImpl(size_t offset) {
+  (void)(this->*preinvoke_handler_)(offset);
+}
+
+void WeightChunkController::PostInvokeImpl(size_t /*offset*/) {
+    SwitchActiveBufferIndex();
+}
+
+void WeightChunkController::TraceWeightsAddrImpl(void* addr, size_t offset) {
+  if (!addr) {
+    std::cerr << "[WeightChunkController] addr is nullptr\n";
+    return;
+  }
+  const int mode_idx = WeightChunkPrefetcher::PrefetchModeToIndex(prefetch_mode_);
+  if (mode_idx < 0) {
+    return;
+  }
+
+  auto& entry = offset_to_weights_ptr_[offset];
+  entry[mode_idx] = addr;
+}
+
+
+//TODO -> Below functions will be changed or moved to WeightChunkPrefetcher to implement compute-io overlap, 
+//TODO -> HandlePreRuntimePreInvoke and HandleRuntimePreInvoke will be changed to just trigger event
+// TODO(Refactor, behavior-preserving):
+// - Move compute–I/O overlap responsibilities into WeightChunkPrefetcher.
+//   Controller will no longer perform direct I/O or buffer filling.
+//   1) Move the following responsibilities to Prefetcher:
+//      - ResolveChunkInfo(offset) logic (plan lookup, index bounds check).
+//      - LoadChunkData(...) including ExecuteIO/pread and any parallel I/O.
+//      - Buffer fill state transitions: EMPTY→FILLING→READY (producer side).
+//   2) Controller will only orchestrate:
+//      - PreInvoke(offset): trigger/submit prefetch for 'offset' and ensure
+//        READY before updating consumer pointers (no blocking I/O here).
+//      - PostInvoke(offset): switch active buffer and release IN_USE→RECLAIM.
+//      - UpdateWeightsPointer(...) remains here (consumer pointer patch).
+//   3) Pre-runtime:
+//      - HandlePreRuntimePreInvoke(offset): only record metadata via writer_.
+//        No I/O or scheduling here.
+//   4) Provider boundary remains I/O primitives only (fd, offsets, sizes).
+//   5) No behavior change allowed: latency/log format/metrics must match.
+//      Keep the existing buffer size, alignment, and switching policy.
+//   6) Prefetcher threading model (run on dedicated worker thread[s]):
+//      - Prefetcher owns its worker thread(s) and lifecycle (start on attach or
+//        first UpdatePrefetcherMode/LoadPrefetchPlan; stop on controller dtor).
+//      - Controller enqueues Prefetcher::Submit(offset) non-blockingly and, if
+//        needed, waits via Prefetcher::WaitReady(offset) before pointer patch.
+//      - Maintain existing overlap ratio and stall/hit-rate metrics (no log format changes).
+//      - Ensure ASAN/TSAN clean shutdown (no leaks, no races).
+//   Follow-up interfaces (non-breaking):
+//      - Prefetcher::Submit(offset), Prefetcher::WaitReady(offset),
+//        Prefetcher::GetPlan(mode), Prefetcher::GetIndexToChunks()
+//        (reads only), Prefetcher owns scheduling threads/queues.
+
+
 
 }  // namespace streaming
 }  // namespace flash_slim
