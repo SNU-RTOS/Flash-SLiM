@@ -66,6 +66,7 @@ class WeightChunkPrefetcher {
   const std::vector<weight_chunk_info_t>& GetIndexToChunks() const { return index_to_chunks_; }
 
   void UpdatePrefetcherMode(PrefetchMode mode) { prefetch_mode_ = mode; }
+
   static inline int PrefetchModeToIndex(PrefetchMode mode) {
         switch (mode) {
         case PrefetchMode::PREFILL:
@@ -76,7 +77,9 @@ class WeightChunkPrefetcher {
         return -1;
     }
   }
+
   PrefetchMode GetPrefetcherMode() const { return prefetch_mode_; }
+  
   std::string GetPrefetcherModeString() const;
 
   // TODO(worker-lifecycle): hook these into controller lifecycle once the
@@ -102,7 +105,7 @@ class WeightChunkPrefetcher {
     int direct_io_fd = -1;
   };
 
-  struct ChunkRuntimeState {
+  struct ChunkIOState {
     std::mutex mutex;
     std::condition_variable cv;
     bool in_flight = false;
@@ -112,26 +115,28 @@ class WeightChunkPrefetcher {
 
   void WorkerLoop();
   void ApplyWorkerAffinity();
-  std::shared_ptr<ChunkRuntimeState> GetChunkState(size_t chunk_index);
   void ResetRuntimeState();
   bool ResolvePrefetchJob(const PrefetchRequest& request, PrefetchJob* job);
   void MarkJobCompleted(const PrefetchJob& job, bool success);
+  std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
 
   PrefetchMode prefetch_mode_ = PrefetchMode::UNINITIALIZED;
+
   std::array<PrefetchPlan, 2> prefetch_plans_{};  // [PREFILL=0, DECODE=1]
   std::array<bool, 2> has_plan_{{false, false}};
+
   std::vector<weight_chunk_info_t> index_to_chunks_;
 
-  std::deque<PrefetchJob> job_queue_;
-  std::unordered_map<size_t, std::shared_ptr<ChunkRuntimeState>> chunk_states_;
+  std::deque<PrefetchJob> io_job_queue_;
+  std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_states_;
   std::mutex chunk_state_mutex_;
 
-  std::thread worker_thread_;
-  std::atomic<bool> worker_running_{false};
-  std::atomic<bool> worker_stop_requested_{false};
-  std::mutex worker_mutex_;
-  std::condition_variable worker_cv_;
-  std::optional<int> worker_core_id_;
+  std::thread io_worker_thread_;
+  std::mutex io_worker_mutex_;
+  std::atomic<bool> io_worker_running_{false};
+  std::atomic<bool> io_worker_stop_requested_{false};
+  std::condition_variable io_worker_cv_;
+  std::optional<int> io_worker_core_id_;
 };
 
 using PrefetchMode = WeightChunkPrefetcher::PrefetchMode;

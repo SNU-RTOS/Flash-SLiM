@@ -161,13 +161,13 @@ std::string WeightChunkPrefetcher::GetPrefetcherModeString() const {
 
 void WeightChunkPrefetcher::StartWorker() {
   bool expected = false;
-  if (!worker_running_.compare_exchange_strong(expected, true)) {
+  if (!io_worker_running_.compare_exchange_strong(expected, true)) {
     return;  // already running
   }
 
-  worker_stop_requested_.store(false, std::memory_order_relaxed);
+  io_worker_stop_requested_.store(false, std::memory_order_relaxed);
 
-  worker_thread_ = std::thread([this]() {
+  io_worker_thread_ = std::thread([this]() {
     WorkerLoop();
   });
 
@@ -175,26 +175,26 @@ void WeightChunkPrefetcher::StartWorker() {
 }
 
 void WeightChunkPrefetcher::StopWorker() {
-  if (!worker_running_.exchange(false)) {
+  if (!io_worker_running_.exchange(false)) {
     return;  // not running
   }
 
   {
-    std::lock_guard<std::mutex> lock(worker_mutex_);
-    worker_stop_requested_.store(true, std::memory_order_relaxed);
-    job_queue_.clear();
+    std::lock_guard<std::mutex> lock(io_worker_mutex_);
+    io_worker_stop_requested_.store(true, std::memory_order_relaxed);
+    io_job_queue_.clear();
   }
-  worker_cv_.notify_all();
+  io_worker_cv_.notify_all();
 
-  if (worker_thread_.joinable()) {
-    worker_thread_.join();
+  if (io_worker_thread_.joinable()) {
+    io_worker_thread_.join();
   }
 
-  worker_stop_requested_.store(false, std::memory_order_relaxed);
+  io_worker_stop_requested_.store(false, std::memory_order_relaxed);
 
   {
     std::lock_guard<std::mutex> states_lock(chunk_state_mutex_);
-    for (auto& kv : chunk_states_) {
+    for (auto& kv : index_to_chunk_states_) {
       const auto& state = kv.second;
       if (!state) {
         continue;
@@ -246,8 +246,8 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
   }
 
   {
-    std::lock_guard<std::mutex> lock(worker_mutex_);
-    auto state = GetChunkState(job.chunk_info.chunk_index);
+    std::lock_guard<std::mutex> lock(io_worker_mutex_);
+    auto state = GetChunkIOState(job.chunk_info.chunk_index);
     {
       std::lock_guard<std::mutex> state_lock(state->mutex);
       if (state->in_flight) {
@@ -258,10 +258,10 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
       state->ready = false;
       state->success = false;
     }
-    job_queue_.push_back(std::move(job));
+    io_job_queue_.push_back(std::move(job));
   }
 
-  worker_cv_.notify_one();
+  io_worker_cv_.notify_one();
   return true;
 }
 
@@ -271,7 +271,7 @@ bool WeightChunkPrefetcher::WaitReady(PrefetchMode mode, size_t offset) {
     return false;
   }
 
-  auto state = GetChunkState(info->chunk_index);
+  auto state = GetChunkIOState(info->chunk_index);
   std::unique_lock<std::mutex> lock(state->mutex);
   state->cv.wait(lock, [&]() { return state->ready || !state->in_flight; });
   const bool success = state->success;
@@ -284,17 +284,17 @@ void WeightChunkPrefetcher::WorkerLoop() {
   while (true) {
     PrefetchJob job;
     {
-      std::unique_lock<std::mutex> lock(worker_mutex_);
-      worker_cv_.wait(lock, [this]() {
-        return worker_stop_requested_.load(std::memory_order_relaxed) || !job_queue_.empty();
+      std::unique_lock<std::mutex> lock(io_worker_mutex_);
+      io_worker_cv_.wait(lock, [this]() {
+        return io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty();
       });
 
-      if (worker_stop_requested_.load(std::memory_order_relaxed) && job_queue_.empty()) {
+      if (io_worker_stop_requested_.load(std::memory_order_relaxed) && io_job_queue_.empty()) {
         break;
       }
 
-      job = std::move(job_queue_.front());
-      job_queue_.pop_front();
+      job = std::move(io_job_queue_.front());
+      io_job_queue_.pop_front();
     }
 
     const bool success = ExecuteIO(job.direct_io_fd, job.buffer_base,
@@ -305,42 +305,42 @@ void WeightChunkPrefetcher::WorkerLoop() {
 
 void WeightChunkPrefetcher::ApplyWorkerAffinity() {
 #if defined(__linux__)
-  if (!worker_core_id_.has_value() || !worker_thread_.joinable()) {
+  if (!io_worker_core_id_.has_value() || !io_worker_thread_.joinable()) {
     return;
   }
 
   cpu_set_t set;
   CPU_ZERO(&set);
-  CPU_SET(static_cast<unsigned long>(*worker_core_id_), &set);
-  const int rc = pthread_setaffinity_np(worker_thread_.native_handle(), sizeof(set), &set);
+  CPU_SET(static_cast<unsigned long>(*io_worker_core_id_), &set);
+  const int rc = pthread_setaffinity_np(io_worker_thread_.native_handle(), sizeof(set), &set);
   if (rc != 0) {
     TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
                     "WeightChunkPrefetcher: failed to set worker affinity (core=%d, errno=%d)",
-                    *worker_core_id_, rc);
+                    *io_worker_core_id_, rc);
   }
 #else
   (void)worker_core_id_;
 #endif
 }
 
-std::shared_ptr<WeightChunkPrefetcher::ChunkRuntimeState> WeightChunkPrefetcher::GetChunkState(
+std::shared_ptr<WeightChunkPrefetcher::ChunkIOState> WeightChunkPrefetcher::GetChunkIOState(
     size_t chunk_index) {
   std::lock_guard<std::mutex> lock(chunk_state_mutex_);
-  auto it = chunk_states_.find(chunk_index);
-  if (it == chunk_states_.end() || !(it->second)) {
-    auto state = std::make_shared<ChunkRuntimeState>();
-    it = chunk_states_.emplace(chunk_index, std::move(state)).first;
+  auto it = index_to_chunk_states_.find(chunk_index);
+  if (it == index_to_chunk_states_.end() || !(it->second)) {
+    auto state = std::make_shared<ChunkIOState>();
+    it = index_to_chunk_states_.emplace(chunk_index, std::move(state)).first;
   }
   return it->second;
 }
 
 void WeightChunkPrefetcher::ResetRuntimeState() {
   {
-    std::lock_guard<std::mutex> lock(worker_mutex_);
-    job_queue_.clear();
+    std::lock_guard<std::mutex> lock(io_worker_mutex_);
+    io_job_queue_.clear();
   }
   std::lock_guard<std::mutex> states_lock(chunk_state_mutex_);
-  for (auto& kv : chunk_states_) {
+  for (auto& kv : index_to_chunk_states_) {
     const auto& state = kv.second;
     if (!state) {
       continue;
@@ -373,7 +373,7 @@ bool WeightChunkPrefetcher::ResolvePrefetchJob(const PrefetchRequest& request, P
 }
 
 void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool success) {
-  auto state = GetChunkState(job.chunk_info.chunk_index);
+  auto state = GetChunkIOState(job.chunk_info.chunk_index);
   {
     std::lock_guard<std::mutex> lock(state->mutex);
     state->success = success;
