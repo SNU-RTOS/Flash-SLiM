@@ -422,6 +422,14 @@ void WeightChunkController::TraceWeightsAddrImpl(void* addr, size_t offset) {
   entry[mode_idx] = addr;
 }
 
+int WeightChunkController::FetchArgIntImpl() {
+    const int mode_idx = WeightChunkPrefetcher::PrefetchModeToIndex(prefetch_mode_);
+    if (mode_idx < 0) {
+        return -1;
+    }
+    return mode_idx;
+}
+
 
 }  // namespace streaming
 }  // namespace flash_slim

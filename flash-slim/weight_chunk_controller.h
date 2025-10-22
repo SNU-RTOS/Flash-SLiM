@@ -43,6 +43,7 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   void PreInvokeImpl(size_t offset) override;
   void PostInvokeImpl(size_t offset) override;
   void TraceWeightsAddrImpl(void* addr, size_t offset) override;
+  int FetchArgIntImpl() override;
   
   void RecordChunkAccess(size_t offset) override;
 
