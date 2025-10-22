@@ -16,19 +16,47 @@ WeightChunkIOEngine::WeightChunkIOEngine() = default;
 
 WeightChunkIOEngine::~WeightChunkIOEngine() { Shutdown(); }
 
-bool WeightChunkIOEngine::Initialize(unsigned ring_depth, size_t subread_bytes) {
+bool WeightChunkIOEngine::Initialize(unsigned ring_depth, size_t subread_bytes, void* buffer_0,
+                                     size_t size_0, void* buffer_1, size_t size_1) {
   ring_depth_ = ring_depth == 0 ? 16 : ring_depth;
   subread_bytes_ = subread_bytes == 0 ? 1024 * 1024 : subread_bytes;
 
 #if defined(__linux__)
   if (ready_) {
-    return true;
+    Shutdown();
+  }
+
+  buffers_registered_ = false;
+  registered_buffers_[0] = {};
+  registered_buffers_[1] = {};
+
+  if (!buffer_0 || !buffer_1 || size_0 == 0 || size_1 == 0) {
+    ready_ = false;
+    return false;
   }
 
   if (io_uring_queue_init(ring_depth_, &ring_, 0) != 0) {
     ready_ = false;
     return false;
   }
+
+  struct iovec iovs[2];
+  iovs[0].iov_base = buffer_0;
+  iovs[0].iov_len = size_0;
+  iovs[1].iov_base = buffer_1;
+  iovs[1].iov_len = size_1;
+
+  if (io_uring_register_buffers(&ring_, iovs, 2) != 0) {
+    io_uring_queue_exit(&ring_);
+    ready_ = false;
+    return false;
+  }
+
+  registered_buffers_[0].base = buffer_0;
+  registered_buffers_[0].size = size_0;
+  registered_buffers_[1].base = buffer_1;
+  registered_buffers_[1].size = size_1;
+  buffers_registered_ = true;
 
   ready_ = true;
   return true;
@@ -42,6 +70,12 @@ void WeightChunkIOEngine::Shutdown() {
 #if defined(__linux__)
   if (ready_) {
     CollectCompletions(false);
+    if (buffers_registered_) {
+      io_uring_unregister_buffers(&ring_);
+      buffers_registered_ = false;
+      registered_buffers_[0] = {};
+      registered_buffers_[1] = {};
+    }
     io_uring_queue_exit(&ring_);
   }
 #endif
@@ -63,6 +97,20 @@ bool WeightChunkIOEngine::Submit(const IORequest& request) {
   }
 
   if (!request.chunk_info || request.direct_io_fd < 0 || !request.buffer_base) {
+    return false;
+  }
+
+  if (!buffers_registered_ || request.buffer_index < 0 ||
+      request.buffer_index >= static_cast<int>(registered_buffers_.size())) {
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                    "WeightChunkIOEngine: invalid buffer index %d", request.buffer_index);
+    return false;
+  }
+
+  if (!ValidateRequestBuffer(request)) {
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                    "WeightChunkIOEngine: request buffer out of range for index %d",
+                    request.buffer_index);
     return false;
   }
 
@@ -190,8 +238,8 @@ bool WeightChunkIOEngine::SubmitInternal(const IORequest& request) {
         }
       }
     }
-
-    io_uring_prep_read(sqe, request.direct_io_fd, buffer, len, offset);
+    io_uring_prep_read_fixed(sqe, request.direct_io_fd, buffer, len, offset,
+                             static_cast<unsigned>(request.buffer_index));
     sqe->user_data = PackTag(static_cast<uint32_t>(chunk_index),
                              static_cast<uint16_t>(state.epoch & 0xFFFFu),
                              sub_index++);
@@ -270,6 +318,33 @@ void WeightChunkIOEngine::ProcessCqe(struct io_uring_cqe* cqe) {
     pending_completions_.push_back(completion);
     inflight_.erase(it);
   }
+}
+
+bool WeightChunkIOEngine::ValidateRequestBuffer(const IORequest& request) const {
+  const size_t index = static_cast<size_t>(request.buffer_index);
+  if (index >= registered_buffers_.size()) {
+    return false;
+  }
+
+  const auto& registered = registered_buffers_[index];
+  if (!registered.base || registered.size == 0) {
+    return false;
+  }
+
+  const uint8_t* base = static_cast<const uint8_t*>(registered.base);
+  const uint8_t* ptr = static_cast<const uint8_t*>(request.buffer_base);
+  const uint8_t* end = base + registered.size;
+
+  if (ptr < base || ptr >= end) {
+    return false;
+  }
+
+  const uint8_t* ptr_end = ptr + request.chunk_info->aligned_size;
+  if (ptr_end > end) {
+    return false;
+  }
+
+  return true;
 }
 
 #endif  // defined(__linux__)

@@ -47,6 +47,7 @@ class WeightChunkPrefetcher {
     const weight_chunk_info_t* chunk_info = nullptr;
     void* buffer_base = nullptr;
     int direct_io_fd = -1;
+    int buffer_index = -1;
   };
 
   WeightChunkPrefetcher() = default;
@@ -85,6 +86,8 @@ class WeightChunkPrefetcher {
   void StartWorker();
   void StopWorker();
 
+  void ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1, size_t size1);
+
   // Assign a target CPU core for the worker thread. Passing a negative value
   // clears the affinity.
   void SetWorkerThreadCpu(int core_id);
@@ -102,6 +105,7 @@ class WeightChunkPrefetcher {
     const weight_chunk_info_t* chunk_info = nullptr;
     void* buffer_base = nullptr;
     int direct_io_fd = -1;
+    int buffer_index = -1;
   };
 
   struct ChunkIOState {
@@ -130,6 +134,11 @@ class WeightChunkPrefetcher {
   
   std::unique_ptr<WeightChunkIOEngine> io_engine_;
 
+  std::array<void*, 2> registered_buffers_{nullptr, nullptr};
+  std::array<size_t, 2> registered_buffer_sizes_{0, 0};
+  bool buffers_configured_ = false;
+  std::mutex io_config_mutex_;
+  
   
   std::mutex chunk_state_mutex_;
   std::deque<PrefetchJob> io_job_queue_;

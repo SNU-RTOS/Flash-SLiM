@@ -6,6 +6,7 @@
 #ifndef FLASH_SLIM_WEIGHT_CHUNK_IO_ENGINE_H_
 #define FLASH_SLIM_WEIGHT_CHUNK_IO_ENGINE_H_
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -28,6 +29,7 @@ class WeightChunkIOEngine {
     const tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t* chunk_info = nullptr;
     void* buffer_base = nullptr;
     int direct_io_fd = -1;
+    int buffer_index = -1;
   };
 
   struct Completion {
@@ -40,7 +42,8 @@ class WeightChunkIOEngine {
   WeightChunkIOEngine();
   ~WeightChunkIOEngine();
 
-  bool Initialize(unsigned ring_depth, size_t subread_bytes);
+  bool Initialize(unsigned ring_depth, size_t subread_bytes, void* buffer_0, size_t size_0,
+                  void* buffer_1, size_t size_1);
   void Shutdown();
 
   bool IsReady() const;
@@ -68,6 +71,13 @@ class WeightChunkIOEngine {
   void ProcessCqe(struct io_uring_cqe* cqe);
 #endif
 
+  struct RegisteredBuffer {
+    void* base = nullptr;
+    size_t size = 0;
+  };
+
+  bool ValidateRequestBuffer(const IORequest& request) const;
+
   bool ready_ = false;
   unsigned ring_depth_ = 32;
   size_t subread_bytes_ = 256 * 1024;
@@ -76,6 +86,8 @@ class WeightChunkIOEngine {
   struct io_uring ring_ {};
 #endif
 
+  std::array<RegisteredBuffer, 2> registered_buffers_{};
+  bool buffers_registered_ = false;
   std::unordered_map<size_t, InflightState> inflight_;
   std::deque<Completion> pending_completions_;
 };

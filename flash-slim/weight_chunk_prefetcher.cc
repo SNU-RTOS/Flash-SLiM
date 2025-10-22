@@ -25,6 +25,13 @@ namespace {
 constexpr unsigned kDefaultRingDepth = 64;
 constexpr size_t kDefaultSubreadBytes = 512 * 1024;
 
+// constexpr unsigned kDefaultRingDepth = 128;
+// constexpr size_t kDefaultSubreadBytes = 4 * 1024 * 1024;
+
+// constexpr unsigned kDefaultRingDepth = 256;
+// constexpr size_t kDefaultSubreadBytes = 1024 * 1024;
+
+
 bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
   constexpr size_t kMinBlockSize = 512 * 1024;
   constexpr size_t kMaxThreads = 4;
@@ -71,6 +78,16 @@ bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
 }  // namespace
 
 WeightChunkPrefetcher::~WeightChunkPrefetcher() { StopWorker(); }
+
+void WeightChunkPrefetcher::ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1,
+                                               size_t size1) {
+  std::lock_guard<std::mutex> lock(io_config_mutex_);
+  registered_buffers_[0] = buffer0;
+  registered_buffer_sizes_[0] = size0;
+  registered_buffers_[1] = buffer1;
+  registered_buffer_sizes_[1] = size1;
+  buffers_configured_ = buffer0 != nullptr && buffer1 != nullptr && size0 > 0 && size1 > 0;
+}
 
 void WeightChunkPrefetcher::SetPrefetchPlan(
     PrefetchMode mode, std::unordered_map<size_t, size_t>&& offset_to_index,
@@ -173,13 +190,35 @@ void WeightChunkPrefetcher::StartWorker() {
 
   io_worker_stop_requested_.store(false, std::memory_order_relaxed);
 
+  void* buffer0 = nullptr;
+  void* buffer1 = nullptr;
+  size_t size0 = 0;
+  size_t size1 = 0;
+  bool configured = false;
+  {
+    std::lock_guard<std::mutex> lock(io_config_mutex_);
+    buffer0 = registered_buffers_[0];
+    buffer1 = registered_buffers_[1];
+    size0 = registered_buffer_sizes_[0];
+    size1 = registered_buffer_sizes_[1];
+    configured = buffers_configured_;
+  }
+
+  if (!configured) {
+    io_worker_running_.store(false, std::memory_order_relaxed);
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO,
+                    "WeightChunkPrefetcher: IO buffers not configured; worker start deferred");
+    return;
+  }
+
 #if defined(__linux__)
   if (!io_engine_) {
     io_engine_ = std::make_unique<WeightChunkIOEngine>();
   }
   if (io_engine_ && !io_engine_->IsReady()) {
     printf("[INFO] Initializing io_uring engine for WeightChunkPrefetcher...\n");
-    if (!io_engine_->Initialize(kDefaultRingDepth, kDefaultSubreadBytes)) {
+    if (!io_engine_->Initialize(kDefaultRingDepth, kDefaultSubreadBytes, buffer0, size0, buffer1,
+                                size1)) {
       TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
                       "WeightChunkPrefetcher: failed to initialize io_uring engine; using sync IO");
     }
@@ -262,7 +301,7 @@ const weight_chunk_info_t* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode m
 
 bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
   const weight_chunk_info_t* info = request.chunk_info;
-  if (!request.buffer_base || request.direct_io_fd < 0 || !info) {
+  if (!request.buffer_base || request.direct_io_fd < 0 || !info || request.buffer_index < 0) {
     return false;
   }
 
@@ -283,6 +322,7 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
     job.chunk_info = info;
     job.buffer_base = request.buffer_base;
     job.direct_io_fd = request.direct_io_fd;
+    job.buffer_index = request.buffer_index;
     io_job_queue_.push_back(std::move(job));
   }
 
@@ -350,8 +390,6 @@ const weight_chunk_info_t* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chu
 }
 
 void WeightChunkPrefetcher::WorkerLoop() {
-//   RunSyncWorkerLoop();
-//   return;
 #if defined(__linux__)
   if (io_engine_ && io_engine_->IsReady()) {
     RunAsyncWorkerLoop();
@@ -397,11 +435,17 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
         continue;
       }
 
+      if (job.buffer_index < 0) {
+        MarkJobCompleted(job, false);
+        continue;
+      }
+
       WeightChunkIOEngine::IORequest request;
       request.chunk_index = info->chunk_index;
       request.chunk_info = info;
       request.buffer_base = job.buffer_base;
       request.direct_io_fd = job.direct_io_fd;
+      request.buffer_index = job.buffer_index;
 
       const bool submitted = io_engine_->Submit(request);
       if (!submitted) {
@@ -451,86 +495,6 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
     }
   }
 }
-
-/* v1 -> with milisecond wait
-void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
-  while (true) {
-    std::vector<PrefetchJob> jobs_to_submit;
-    bool stop_requested = false;
-
-    {
-      std::unique_lock<std::mutex> lock(io_worker_mutex_);
-      io_worker_cv_.wait_for(lock, std::chrono::milliseconds(1), [this]() {
-        return io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty();
-      });
-
-      stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
-
-      while (!io_job_queue_.empty()) {
-        jobs_to_submit.push_back(std::move(io_job_queue_.front()));
-        io_job_queue_.pop_front();
-      }
-    }
-
-    // if (!jobs_to_submit.empty()) {
-    //   printf("WeightChunkPrefetcher: submitting %zu IO jobs\n", jobs_to_submit.size());
-    // }
-    for (auto& job : jobs_to_submit) {
-      const weight_chunk_info_t* info = job.chunk_info;
-      if (!info) {
-        MarkJobCompleted(job, false);
-        continue;
-      }
-
-      WeightChunkIOEngine::IORequest request;
-      request.chunk_index = info->chunk_index;
-      request.chunk_info = info;
-      request.buffer_base = job.buffer_base;
-      request.direct_io_fd = job.direct_io_fd;
-
-      const bool submitted = io_engine_->Submit(request);
-      if (!submitted) {
-        {
-          std::lock_guard<std::mutex> requeue_lock(io_worker_mutex_);
-          io_job_queue_.push_back(std::move(job));
-        }
-        std::this_thread::sleep_for(std::chrono::microseconds(50));
-        continue;
-      }
-    }
-
-    std::vector<WeightChunkIOEngine::Completion> completions;
-    const bool wait_for_events = stop_requested;
-    io_engine_->DrainCompletions(&completions, wait_for_events);
-
-    for (const auto& completion : completions) {
-      PrefetchJob job_snapshot;
-      job_snapshot.chunk_info = GetChunkInfoByIndex(completion.chunk_index);
-      if (!job_snapshot.chunk_info) {
-        TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                        "WeightChunkPrefetcher: missing chunk metadata for chunk_index=%zu", 
-                        completion.chunk_index);
-        continue;
-      }
-      MarkJobCompleted(job_snapshot, completion.success);
-    }
-    // if (!completions.empty()) {
-    //   printf("WeightChunkPrefetcher: completed %zu IO jobs\n", completions.size());
-    // }
-    bool queue_empty = false;
-    {
-      std::lock_guard<std::mutex> lock(io_worker_mutex_);
-      queue_empty = io_job_queue_.empty();
-    }
-
-    if (stop_requested && queue_empty && !io_engine_->HasPending()) {
-      break;
-    }
-  }
-}
-*/
-
-
 
 void WeightChunkPrefetcher::RunSyncWorkerLoop() {
   while (true) {

@@ -50,9 +50,14 @@ void WeightChunkController::AttachPrefetcher(
   }
   prefetcher_ = std::move(prefetcher);
   if (prefetcher_) {
-    prefetcher_->StartWorker();
     if (prefetch_mode_ != PrefetchMode::UNINITIALIZED) {
       prefetcher_->UpdatePrefetcherMode(prefetch_mode_);
+    }
+    if (weight_chunk_buffers_[0] && weight_chunk_buffers_[1] &&
+        weight_chunk_buffer_capacity_ > 0) {
+      prefetcher_->ConfigureIOBuffers(weight_chunk_buffers_[0], weight_chunk_buffer_capacity_,
+                                      weight_chunk_buffers_[1], weight_chunk_buffer_capacity_);
+      prefetcher_->StartWorker();
     }
   }
 }
@@ -139,8 +144,18 @@ void WeightChunkController::AllocWeightChunkBuffer(size_t size) {
       weight_chunk_buffers_[0] && weight_chunk_buffers_[1]) {
     weight_chunk_buffer_requirement_ = size;
     UpdateActiveBufferIndex(0);
+    if (prefetcher_) {
+      prefetcher_->ConfigureIOBuffers(weight_chunk_buffers_[0], weight_chunk_buffer_capacity_,
+                                      weight_chunk_buffers_[1], weight_chunk_buffer_capacity_);
+      prefetcher_->StartWorker();
+    }
     return;
   }
+
+  if (prefetcher_) {
+    prefetcher_->StopWorker();
+  }
+  ReleaseWeightChunkBuffer();
 
   bool allocation_failed = false;
   for (int i = 0; i < 2; ++i) {
@@ -164,6 +179,11 @@ void WeightChunkController::AllocWeightChunkBuffer(size_t size) {
   weight_chunk_buffer_requirement_ = size;
   weight_chunk_buffer_capacity_ = aligned_size;
   UpdateActiveBufferIndex(0);
+  if (prefetcher_) {
+    prefetcher_->ConfigureIOBuffers(weight_chunk_buffers_[0], weight_chunk_buffer_capacity_,
+                                    weight_chunk_buffers_[1], weight_chunk_buffer_capacity_);
+    prefetcher_->StartWorker();
+  }
 }
 
 void WeightChunkController::ReleaseWeightChunkBuffer() {
@@ -172,6 +192,9 @@ void WeightChunkController::ReleaseWeightChunkBuffer() {
       std::free(buffer);
       buffer = nullptr;
     }
+  }
+  if (prefetcher_) {
+    prefetcher_->ConfigureIOBuffers(nullptr, 0, nullptr, 0);
   }
   weight_chunk_buffer_capacity_ = 0;
   weight_chunk_buffer_requirement_ = 0;
@@ -275,6 +298,7 @@ bool WeightChunkController::ScheduleNextChunk(const weight_chunk_info_t* current
   request.chunk_info = next_info;
   request.buffer_base = buffer_base;
   request.direct_io_fd = fd;
+  request.buffer_index = buffer_index;
 
   // Submit asynchronously; Prefetcher tracks state via ChunkIOState
   if (!prefetcher_->Submit(request)) {
@@ -360,6 +384,7 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     request.chunk_info = current_chunk_info;
     request.buffer_base = buffer_base;
     request.direct_io_fd = fd;
+  request.buffer_index = active_weight_chunk_buffer_index_;
     // Submit handles duplicate detection via ChunkIOState
     if (!prefetcher_->Submit(request)) {
         std::cerr << "[WeightChunkController] Submit failed for chunk_index="
