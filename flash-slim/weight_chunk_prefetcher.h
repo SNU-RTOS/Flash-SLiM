@@ -92,7 +92,6 @@ class WeightChunkPrefetcher {
 
   bool Submit(const PrefetchRequest& request);
   bool WaitReady(const weight_chunk_info_t* chunk_info);
-  bool WaitReady(PrefetchMode mode, size_t offset);
 
   std::optional<size_t> GetNextChunkIndex(PrefetchMode mode, size_t current_chunk_index) const;
   const weight_chunk_info_t* GetChunkInfoByIndex(size_t chunk_index) const;
