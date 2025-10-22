@@ -3,7 +3,8 @@ from bcc import BPF, USDT
 import atexit, signal, sys, re, os
 
 
-binary_path = "bin/text_generator_main"
+binary_path = "bin/text_generator_main_mmap"
+# binary_path = "bin/text_generator_main"
 # binary_path = "tools/bin/benchmark_model"  # 추적할 바이너리 경로
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
