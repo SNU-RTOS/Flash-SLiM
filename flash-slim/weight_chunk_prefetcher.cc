@@ -347,6 +347,8 @@ void WeightChunkPrefetcher::WorkerLoop() {
                          ExecuteIO(job.direct_io_fd, job.buffer_base, info->aligned_size,
                                    info->aligned_offset);
     MarkJobCompleted(job, success);
+    // printf("[WeightChunkPrefetcher] Prefetched chunk_index=%zu, success=%s\n",
+    //        info->chunk_index, success ? "true" : "false");
   }
 }
 

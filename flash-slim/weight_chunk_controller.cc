@@ -251,62 +251,18 @@ void WeightChunkController::UpdatePreinvokeHandler(ProviderMode mode) {
 
 void WeightChunkController::ResetPrefetchState() {
   current_chunk_info_ = nullptr;
-  ClearNextChunkState();
 }
 
-void WeightChunkController::ClearNextChunkState() {
-  next_chunk_info_ = nullptr;
-  next_chunk_buffer_index_ = -1;
-  next_chunk_expected_offset_.reset();
-}
-
-bool WeightChunkController::EnsureChunkReady(const weight_chunk_info_t* info, int buffer_index,
-                                             int fd) {
-  if (!prefetcher_ || !info) {
-    return false;
-  }
-
-  if ((buffer_index == active_weight_chunk_buffer_index_ && current_chunk_info_ == info) ||
-      (next_chunk_info_ == info && next_chunk_buffer_index_ == buffer_index)) {
-    return true;
-  }
-
-  void* buffer_base = GetWeightChunkBufferAddr(buffer_index);
-  if (!buffer_base) {
-    std::cerr << "[WeightChunkController] Invalid buffer index " << buffer_index << "\n";
-    return false;
-  }
-
-  WeightChunkPrefetcher::PrefetchRequest request;
-  request.chunk_info = info;
-  request.buffer_base = buffer_base;
-  request.direct_io_fd = fd;
-
-  if (!prefetcher_->Submit(request)) {
-    std::cerr << "[WeightChunkController] Submit failed for chunk_index="
-              << info->chunk_index << "\n";
-    return false;
-  }
-
-  if (!prefetcher_->WaitReady(info)) {
-    std::cerr << "[WeightChunkController] WaitReady failed for chunk_index="
-              << info->chunk_index << "\n";
-    return false;
-  }
-  return true;
-}
 
 bool WeightChunkController::ScheduleNextChunk(const weight_chunk_info_t* current_info, int fd) {
   if (!prefetcher_ || !current_info || prefetch_mode_ == PrefetchMode::UNINITIALIZED) {
     return false;
   }
 
-  ClearNextChunkState();
-
   const auto next_index =
       prefetcher_->GetNextChunkIndex(prefetch_mode_, current_info->chunk_index);
   if (!next_index.has_value()) {
-    return true;
+    return true;  // No next chunk in plan
   }
 
   const weight_chunk_info_t* next_info = prefetcher_->GetChunkInfoByIndex(*next_index);
@@ -329,15 +285,13 @@ bool WeightChunkController::ScheduleNextChunk(const weight_chunk_info_t* current
   request.buffer_base = buffer_base;
   request.direct_io_fd = fd;
 
+  // Submit asynchronously; Prefetcher tracks state via ChunkIOState
   if (!prefetcher_->Submit(request)) {
     std::cerr << "[WeightChunkController] Submit failed for next chunk_index="
               << next_info->chunk_index << "\n";
     return false;
   }
 
-  next_chunk_info_ = next_info;
-  next_chunk_buffer_index_ = buffer_index;
-  next_chunk_expected_offset_ = next_info->origin_offset;
   return true;
 }
 
@@ -387,66 +341,72 @@ bool WeightChunkController::HandlePreRuntimePreInvoke(size_t offset) {
 }
 
 bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
+  
+  auto start = std::chrono::steady_clock::now();
+
+  // 1. Validate prerequisites
   if (!prefetcher_ || !provider_ || prefetch_mode_ == PrefetchMode::UNINITIALIZED) {
     return false;
   }
 
+  
   const weight_chunk_info_t* info = prefetcher_->LookupChunkInfo(prefetch_mode_, offset);
   if (!info) {
     return false;
   }
+
+  current_chunk_info_ = info;
 
   const int fd = provider_->GetDirectIOFileDescriptor();
   if (fd < 0) {
     return false;
   }
 
-  if (next_chunk_expected_offset_.has_value() &&
-      next_chunk_expected_offset_.value() != offset && next_chunk_info_) {
-    std::cerr << "[WeightChunkController] Prefetched offset mismatch: expected "
-              << next_chunk_expected_offset_.value() << ", got " << offset << "\n";
+  const int active_chunk_buffer_index = active_weight_chunk_buffer_index_;
+  
+  // 2. Ensure chunk is ready (handles cache hit via ChunkIOState automatically)
+  static bool first_call = true;
+  
+  if (first_call) { // Synchronously submit prefetch request and wait only for the first call
+    void* buffer_base = GetWeightChunkBufferAddr(active_chunk_buffer_index);
+    if (!buffer_base) {
+        std::cerr << "[WeightChunkController] Invalid buffer index " << active_chunk_buffer_index << "\n";
+        return false;
+    }
+    WeightChunkPrefetcher::PrefetchRequest request;
+    request.chunk_info = info;
+    request.buffer_base = buffer_base;
+    request.direct_io_fd = fd;
+    // Submit handles duplicate detection via ChunkIOState
+    if (!prefetcher_->Submit(request)) {
+        std::cerr << "[WeightChunkController] Submit failed for chunk_index="
+                << info->chunk_index << "\n";
+        return false;
+    }
   }
-
-  if (next_chunk_info_ && next_chunk_info_->origin_offset != offset) {
-    // The runtime requested a chunk different from the prefetched one; wait for the in-flight
-    // job to finish so that the state can be reused safely.
-    (void)prefetcher_->WaitReady(next_chunk_info_);
-    ClearNextChunkState();
-  }
-
-  if (!GetActiveWeightChunkBuffer()) {
+  first_call = false;
+    
+  // WaitReady returns immediately if already ready
+  if (!prefetcher_->WaitReady(info)) {
+    std::cerr << "[WeightChunkController] WaitReady failed for chunk_index="
+            << info->chunk_index << "\n";
     return false;
   }
 
-  const int active_buffer_index = active_weight_chunk_buffer_index_;
-  bool used_prefetched_chunk = false;
+  auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+  printf("[WeightChunkController] Used prefetched chunk_index=%zu for offset=%zu, chunk_size=%zu wait time=%ld us\n",
+           current_chunk_info_->chunk_index, offset, current_chunk_info_->aligned_size, elapsed.count());
 
-  if (next_chunk_info_ && next_chunk_info_->origin_offset == offset &&
-      next_chunk_buffer_index_ == active_buffer_index) {
-    if (!prefetcher_->WaitReady(next_chunk_info_)) {
-      ResetPrefetchState();
-      std::cerr << "[WeightChunkController] Prefetched chunk wait failed for offset " << offset
-                << "\n";
-      return false;
-    }
-    current_chunk_info_ = next_chunk_info_;
-    ClearNextChunkState();
-    used_prefetched_chunk = true;
-  }
-
-  if (!used_prefetched_chunk) {
-    if (!EnsureChunkReady(info, active_buffer_index, fd)) {
-      ResetPrefetchState();
-      std::cerr << "[WeightChunkController] Failed to synchronously load offset " << offset
-                << "\n";
-      return false;
-    }
-    current_chunk_info_ = info;
-    ClearNextChunkState();
-  }
-
+  // 3. Update state and pointer
   UpdateWeightsPointer(offset, *current_chunk_info_);
+  
+  start = std::chrono::steady_clock::now();
+  // 4. Schedule next chunk to inactive buffer asynchronously
   (void)ScheduleNextChunk(current_chunk_info_, fd);
+  elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+   printf("[WeightChunkController] Scheduled next chunk_index asynchronously, time=%ld us\n\n",
+           elapsed.count());
+
   return true;
 }
 
@@ -462,6 +422,7 @@ void WeightChunkController::PreInvokeImpl(size_t offset) {
 
 void WeightChunkController::PostInvokeImpl(size_t /*offset*/) {
     SwitchActiveBufferIndex();
+    // printf("[WeightChunkController] PostInvokeImpl called\n");
 }
 
 void WeightChunkController::TraceWeightsAddrImpl(void* addr, size_t offset) {

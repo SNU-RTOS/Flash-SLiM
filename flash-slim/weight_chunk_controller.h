@@ -55,7 +55,6 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   bool HandleDefaultPreInvoke(size_t offset);
 
   void ResetPrefetchState();
-  void ClearNextChunkState();
   bool EnsureChunkReady(const weight_chunk_info_t* info, int buffer_index, int fd);
   bool ScheduleNextChunk(const weight_chunk_info_t* current_info, int fd);
   int GetInactiveBufferIndex() const { return 1 - active_weight_chunk_buffer_index_; }
@@ -76,9 +75,6 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   std::unordered_map<size_t, weight_chunk_info_t> offset_to_chunk_info;
   std::unordered_map<size_t, std::array<void*, 2>> offset_to_weights_ptr_;
   const weight_chunk_info_t* current_chunk_info_ = nullptr;
-  const weight_chunk_info_t* next_chunk_info_ = nullptr;
-  int next_chunk_buffer_index_ = -1;
-  std::optional<size_t> next_chunk_expected_offset_;
 };
 
 }  // namespace streaming
