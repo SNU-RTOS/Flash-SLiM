@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "tflite/delegates/xnnpack/streaming_weight_cache.h"
+#include "weight_chunk_io_engine.h"
 
 namespace flash_slim {
 namespace streaming {
@@ -116,6 +117,8 @@ class WeightChunkPrefetcher {
   void ResetRuntimeState();
   void MarkJobCompleted(const PrefetchJob& job, bool success);
   std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
+  void RunAsyncWorkerLoop();
+  void RunSyncWorkerLoop();
 
   PrefetchMode prefetch_mode_ = PrefetchMode::UNINITIALIZED;
 
@@ -125,6 +128,8 @@ class WeightChunkPrefetcher {
   std::vector<weight_chunk_info_t> index_to_chunks_;
   std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_states_;
   
+  std::unique_ptr<WeightChunkIOEngine> io_engine_;
+
   
   std::mutex chunk_state_mutex_;
   std::deque<PrefetchJob> io_job_queue_;

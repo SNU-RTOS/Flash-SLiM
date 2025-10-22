@@ -349,7 +349,7 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
 
   // 2. Ensure chunk is ready (handles cache hit via ChunkIOState automatically)
   static bool first_call = true;
-  //   auto start = std::chrono::steady_clock::now();
+//   auto start = std::chrono::steady_clock::now();
   if (first_call) { // Synchronously submit prefetch request and wait only for the first call
     void* buffer_base = GetWeightChunkBufferAddr(active_weight_chunk_buffer_index_);
     if (!buffer_base) {

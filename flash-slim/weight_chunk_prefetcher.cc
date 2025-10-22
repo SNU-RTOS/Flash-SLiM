@@ -1,7 +1,9 @@
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <future>
+#include <thread>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -19,6 +21,9 @@ namespace flash_slim {
 namespace streaming {
 
 namespace {
+
+constexpr unsigned kDefaultRingDepth = 64;
+constexpr size_t kDefaultSubreadBytes = 512 * 1024;
 
 bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
   constexpr size_t kMinBlockSize = 512 * 1024;
@@ -168,6 +173,19 @@ void WeightChunkPrefetcher::StartWorker() {
 
   io_worker_stop_requested_.store(false, std::memory_order_relaxed);
 
+#if defined(__linux__)
+  if (!io_engine_) {
+    io_engine_ = std::make_unique<WeightChunkIOEngine>();
+  }
+  if (io_engine_ && !io_engine_->IsReady()) {
+    printf("[INFO] Initializing io_uring engine for WeightChunkPrefetcher...\n");
+    if (!io_engine_->Initialize(kDefaultRingDepth, kDefaultSubreadBytes)) {
+      TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                      "WeightChunkPrefetcher: failed to initialize io_uring engine; using sync IO");
+    }
+  }
+#endif
+
   io_worker_thread_ = std::thread([this]() {
     WorkerLoop();
   });
@@ -192,6 +210,12 @@ void WeightChunkPrefetcher::StopWorker() {
   }
 
   io_worker_stop_requested_.store(false, std::memory_order_relaxed);
+
+#if defined(__linux__)
+  if (io_engine_) {
+    io_engine_->Shutdown();
+  }
+#endif
 
   {
     std::lock_guard<std::mutex> states_lock(chunk_state_mutex_);
@@ -326,6 +350,189 @@ const weight_chunk_info_t* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chu
 }
 
 void WeightChunkPrefetcher::WorkerLoop() {
+//   RunSyncWorkerLoop();
+//   return;
+#if defined(__linux__)
+  if (io_engine_ && io_engine_->IsReady()) {
+    RunAsyncWorkerLoop();
+    return;
+  }
+#endif
+  RunSyncWorkerLoop();
+}
+
+void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
+  while (true) {
+    std::vector<PrefetchJob> jobs_to_submit;
+    bool stop_requested = false;
+    bool had_pending_before_wait = false;
+
+    {
+      std::unique_lock<std::mutex> lock(io_worker_mutex_);
+      io_worker_cv_.wait(lock, [this]() {
+        if (io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty()) {
+          return true;
+        }
+        return io_engine_ && io_engine_->HasPending();
+      });
+
+      stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
+      had_pending_before_wait = io_engine_ && io_engine_->HasPending();
+
+      while (!io_job_queue_.empty()) {
+        jobs_to_submit.push_back(std::move(io_job_queue_.front()));
+        io_job_queue_.pop_front();
+      }
+    }
+
+    // if (!jobs_to_submit.empty()) {
+    //   printf("WeightChunkPrefetcher: submitting %zu IO jobs\n", jobs_to_submit.size());
+    // }
+
+    bool needs_blocking_drain = had_pending_before_wait;
+    for (auto& job : jobs_to_submit) {
+      const weight_chunk_info_t* info = job.chunk_info;
+      if (!info) {
+        MarkJobCompleted(job, false);
+        continue;
+      }
+
+      WeightChunkIOEngine::IORequest request;
+      request.chunk_index = info->chunk_index;
+      request.chunk_info = info;
+      request.buffer_base = job.buffer_base;
+      request.direct_io_fd = job.direct_io_fd;
+
+      const bool submitted = io_engine_->Submit(request);
+      if (!submitted) {
+        {
+          std::lock_guard<std::mutex> requeue_lock(io_worker_mutex_);
+          io_job_queue_.push_front(std::move(job));
+        }
+        needs_blocking_drain = true;
+        io_worker_cv_.notify_one();
+        continue;
+      }
+  needs_blocking_drain = true;
+    }
+
+    std::vector<WeightChunkIOEngine::Completion> completions;
+    bool queue_empty_after_submit = false;
+    {
+      std::lock_guard<std::mutex> lock(io_worker_mutex_);
+      queue_empty_after_submit = io_job_queue_.empty();
+    }
+    const bool wait_for_events = stop_requested || needs_blocking_drain ||
+                                 (queue_empty_after_submit && io_engine_ && io_engine_->HasPending());
+    io_engine_->DrainCompletions(&completions, wait_for_events);
+
+    for (const auto& completion : completions) {
+      PrefetchJob job_snapshot;
+      job_snapshot.chunk_info = GetChunkInfoByIndex(completion.chunk_index);
+      if (!job_snapshot.chunk_info) {
+        TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                        "WeightChunkPrefetcher: missing chunk metadata for chunk_index=%zu", 
+                        completion.chunk_index);
+        continue;
+      }
+      MarkJobCompleted(job_snapshot, completion.success);
+    }
+    // if (!completions.empty()) {
+    //   printf("WeightChunkPrefetcher: completed %zu IO jobs\n", completions.size());
+    // }
+    bool queue_empty = false;
+    {
+      std::lock_guard<std::mutex> lock(io_worker_mutex_);
+      queue_empty = io_job_queue_.empty();
+    }
+
+    if (stop_requested && queue_empty && !(io_engine_ && io_engine_->HasPending())) {
+      break;
+    }
+  }
+}
+
+/* v1 -> with milisecond wait
+void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
+  while (true) {
+    std::vector<PrefetchJob> jobs_to_submit;
+    bool stop_requested = false;
+
+    {
+      std::unique_lock<std::mutex> lock(io_worker_mutex_);
+      io_worker_cv_.wait_for(lock, std::chrono::milliseconds(1), [this]() {
+        return io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty();
+      });
+
+      stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
+
+      while (!io_job_queue_.empty()) {
+        jobs_to_submit.push_back(std::move(io_job_queue_.front()));
+        io_job_queue_.pop_front();
+      }
+    }
+
+    // if (!jobs_to_submit.empty()) {
+    //   printf("WeightChunkPrefetcher: submitting %zu IO jobs\n", jobs_to_submit.size());
+    // }
+    for (auto& job : jobs_to_submit) {
+      const weight_chunk_info_t* info = job.chunk_info;
+      if (!info) {
+        MarkJobCompleted(job, false);
+        continue;
+      }
+
+      WeightChunkIOEngine::IORequest request;
+      request.chunk_index = info->chunk_index;
+      request.chunk_info = info;
+      request.buffer_base = job.buffer_base;
+      request.direct_io_fd = job.direct_io_fd;
+
+      const bool submitted = io_engine_->Submit(request);
+      if (!submitted) {
+        {
+          std::lock_guard<std::mutex> requeue_lock(io_worker_mutex_);
+          io_job_queue_.push_back(std::move(job));
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
+        continue;
+      }
+    }
+
+    std::vector<WeightChunkIOEngine::Completion> completions;
+    const bool wait_for_events = stop_requested;
+    io_engine_->DrainCompletions(&completions, wait_for_events);
+
+    for (const auto& completion : completions) {
+      PrefetchJob job_snapshot;
+      job_snapshot.chunk_info = GetChunkInfoByIndex(completion.chunk_index);
+      if (!job_snapshot.chunk_info) {
+        TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                        "WeightChunkPrefetcher: missing chunk metadata for chunk_index=%zu", 
+                        completion.chunk_index);
+        continue;
+      }
+      MarkJobCompleted(job_snapshot, completion.success);
+    }
+    // if (!completions.empty()) {
+    //   printf("WeightChunkPrefetcher: completed %zu IO jobs\n", completions.size());
+    // }
+    bool queue_empty = false;
+    {
+      std::lock_guard<std::mutex> lock(io_worker_mutex_);
+      queue_empty = io_job_queue_.empty();
+    }
+
+    if (stop_requested && queue_empty && !io_engine_->HasPending()) {
+      break;
+    }
+  }
+}
+*/
+
+
+
+void WeightChunkPrefetcher::RunSyncWorkerLoop() {
   while (true) {
     PrefetchJob job;
     {
@@ -347,8 +554,6 @@ void WeightChunkPrefetcher::WorkerLoop() {
                          ExecuteIO(job.direct_io_fd, job.buffer_base, info->aligned_size,
                                    info->aligned_offset);
     MarkJobCompleted(job, success);
-    // printf("[WeightChunkPrefetcher] Prefetched chunk_index=%zu, success=%s\n",
-    //        info->chunk_index, success ? "true" : "false");
   }
 }
 
