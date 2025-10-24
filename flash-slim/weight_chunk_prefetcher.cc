@@ -28,8 +28,8 @@ constexpr size_t kDefaultSubreadBytes = 512 * 1024;
 // constexpr unsigned kDefaultRingDepth = 128;
 // constexpr size_t kDefaultSubreadBytes = 4 * 1024 * 1024;
 
-// constexpr unsigned kDefaultRingDepth = 256;
-// constexpr size_t kDefaultSubreadBytes = 1024 * 1024;
+// constexpr unsigned kDefaultRingDepth = 128;
+// constexpr size_t kDefaultSubreadBytes = 2 * 1024 * 1024;
 
 
 bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
@@ -87,6 +87,13 @@ void WeightChunkPrefetcher::ConfigureIOBuffers(void* buffer0, size_t size0, void
   registered_buffers_[1] = buffer1;
   registered_buffer_sizes_[1] = size1;
   buffers_configured_ = buffer0 != nullptr && buffer1 != nullptr && size0 > 0 && size1 > 0;
+}
+
+void WeightChunkPrefetcher::SetWorkerThreadAffinity(const std::vector<int>& cores) {
+  {
+    std::lock_guard<std::mutex> lock(io_worker_mutex_);
+    io_worker_cores_ = cores;
+  }
 }
 
 void WeightChunkPrefetcher::SetPrefetchPlan(
@@ -390,12 +397,14 @@ const weight_chunk_info_t* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chu
 }
 
 void WeightChunkPrefetcher::WorkerLoop() {
-#if defined(__linux__)
-  if (io_engine_ && io_engine_->IsReady()) {
-    RunAsyncWorkerLoop();
-    return;
-  }
-#endif
+// #if defined(__linux__)
+//   if (io_engine_ && io_engine_->IsReady()) {
+//     printf("[INFO] WeightChunkPrefetcher: using io_uring IO worker loop\n");
+//     RunAsyncWorkerLoop();
+//     return;
+//   }
+// #endif
+  printf("[INFO] WeightChunkPrefetcher: using parallel pread IO worker loop\n");
   RunSyncWorkerLoop();
 }
 
@@ -457,7 +466,7 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
         io_worker_cv_.notify_one();
         continue;
       }
-  needs_blocking_drain = true;
+      needs_blocking_drain = true;
     }
 
     std::vector<WeightChunkIOEngine::Completion> completions;
@@ -481,9 +490,11 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
       }
       MarkJobCompleted(job_snapshot, completion.success);
     }
+
     // if (!completions.empty()) {
     //   printf("WeightChunkPrefetcher: completed %zu IO jobs\n", completions.size());
     // }
+
     bool queue_empty = false;
     {
       std::lock_guard<std::mutex> lock(io_worker_mutex_);
@@ -523,21 +534,25 @@ void WeightChunkPrefetcher::RunSyncWorkerLoop() {
 
 void WeightChunkPrefetcher::ApplyWorkerAffinity() {
 #if defined(__linux__)
-  if (!io_worker_core_id_.has_value() || !io_worker_thread_.joinable()) {
+  std::lock_guard<std::mutex> lock(io_worker_mutex_);
+  if (io_worker_cores_.empty() || !io_worker_thread_.joinable()) {
     return;
   }
 
   cpu_set_t set;
   CPU_ZERO(&set);
-  CPU_SET(static_cast<unsigned long>(*io_worker_core_id_), &set);
+  for (int core : io_worker_cores_) {
+    if (core >= 0) {
+      CPU_SET(static_cast<unsigned long>(core), &set);
+    }
+  }
   const int rc = pthread_setaffinity_np(io_worker_thread_.native_handle(), sizeof(set), &set);
   if (rc != 0) {
     TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                    "WeightChunkPrefetcher: failed to set worker affinity (core=%d, errno=%d)",
-                    *io_worker_core_id_, rc);
+                    "WeightChunkPrefetcher: failed to set worker affinity (errno=%d)", rc);
   }
 #else
-  (void)worker_core_id_;
+  (void)io_worker_cores_;
 #endif
 }
 

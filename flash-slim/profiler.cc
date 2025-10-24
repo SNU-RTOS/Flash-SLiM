@@ -61,31 +61,7 @@ namespace
 
 namespace flash_slim::profiling
 {
-    // Function to detect which cores the process is actually running on
-    void detect_active_cores(std::vector<int> &cores)
-    {
-        // Try to read process affinity mask
-        cpu_set_t mask;
-        CPU_ZERO(&mask);
-
-        if (sched_getaffinity(0, sizeof(mask), &mask) == 0)
-        {
-            for (int i = 0; i < CPU_SETSIZE; i++)
-            {
-                if (CPU_ISSET(i, &mask))
-                {
-                    cores.push_back(i);
-                }
-            }
-        }
-
-        std::cout << "[INFO] Process is running on cores: ";
-        for (int core : cores)
-        {
-            std::cout << core << " ";
-        }
-        std::cout << std::endl;
-    }
+    
 
     void print_rusage(rusage usage_start, rusage usage_end, double wall_time_ms, const std::string phase_name)
     {
@@ -260,8 +236,8 @@ namespace flash_slim::profiling
     double TimerUtility::Stop() const
     {
         auto end_ = std::chrono::high_resolution_clock::now();
-        auto duration_us = std::chrono::duration_cast<std::chrono::nanoseconds>(end_ - start_).count();
-        return static_cast<double>(duration_us) / 1000000.0;
+        auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_ - start_).count();
+        return duration_ns / 1000000.0;  // Convert to milliseconds
     }
 
     /* Scope Timer */

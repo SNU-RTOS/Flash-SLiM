@@ -88,15 +88,16 @@ class WeightChunkPrefetcher {
 
   void ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1, size_t size1);
 
-  // Assign a target CPU core for the worker thread. Passing a negative value
-  // clears the affinity.
-  void SetWorkerThreadCpu(int core_id);
+  // Configure the worker thread's CPU affinity. Passing an empty `cores`
+  // vector clears the affinity preference. The thread will adopt the new
+  // affinity upon the next `StartWorker()` call (or immediately if running).
+  void SetWorkerThreadAffinity(const std::vector<int>& cores);
 
-  const weight_chunk_info_t* LookupChunkInfo(PrefetchMode mode, size_t offset) const;
-
+  
   bool Submit(const PrefetchRequest& request);
   bool WaitReady(const weight_chunk_info_t* chunk_info);
-
+  
+  const weight_chunk_info_t* LookupChunkInfo(PrefetchMode mode, size_t offset) const;
   std::optional<size_t> GetNextChunkIndex(PrefetchMode mode, size_t current_chunk_index) const;
   const weight_chunk_info_t* GetChunkInfoByIndex(size_t chunk_index) const;
 
@@ -147,7 +148,7 @@ class WeightChunkPrefetcher {
   std::atomic<bool> io_worker_running_{false};
   std::atomic<bool> io_worker_stop_requested_{false};
   std::condition_variable io_worker_cv_;
-  std::optional<int> io_worker_core_id_;
+  std::vector<int> io_worker_cores_;
 };
 
 using PrefetchMode = WeightChunkPrefetcher::PrefetchMode;

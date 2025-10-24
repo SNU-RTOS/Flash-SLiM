@@ -3,6 +3,7 @@
 // =======================================================================
 
 #include "common.h"
+#include "utils.h"
 
 // ----------------------
 // absl::FLAGS definition
@@ -22,10 +23,17 @@ ABSL_FLAG(float, top_p, 0.9f, "Top-p (nucleus) sampling parameter. Only consider
 ABSL_FLAG(float, repetition_penalty, 1.2f, "Repetition penalty for sampling. Higher values reduce repetition. Defaults to 1.2.");
 ABSL_FLAG(bool, enable_repetition_penalty, false, "Enable repetition penalty. Defaults to false.");
 ABSL_FLAG(std::string, csv_profile_output_path, "", "Path to save the profiling results in CSV format. If empty, no CSV output is generated.");
+ABSL_FLAG(std::string, prefetch_plan_path, "weight_chunks_metadata_table.json", "Path to the weight chunk prefetch plan JSON file.");
+// TODO : add io_engine selection logic
+ABSL_FLAG(std::string, io_engine, "io_uring", "IO engine to use for weight chunk prefetching. Options: 'io_uring', 'pread'.");
 
 void __run_main(GenAIMetrics &genai_metrics,
                 std::unique_ptr<BufferedProfiler> &op_profiler,
-                const std::vector<ProfilerOutput> &op_profiler_outputs);
+                const std::vector<ProfilerOutput> &op_profiler_outputs,
+                std::unique_ptr<StreamingWeightCacheProvider> &weight_cache_provider,
+                std::unique_ptr<WeightChunkController> &weight_chunk_controller);
+
+
 
 // =======================================================================
 // main() entry
@@ -48,12 +56,12 @@ int main(int argc, char *argv[])
 
     // Check which cores we're actually running on
     std::vector<int> active_cores;
-    flash_slim::profiling::detect_active_cores(active_cores);
+    flash_slim::util::detect_active_cores(active_cores);
 
-    std::cout << "[INFO] Cores used for text generation: ";
-    for (const auto &core : active_cores)
-        std::cout << core << " ";
-    std::cout << "\n[INFO] Start Generating Text" << std::endl;
+    // Determine cores to use for inference and I/O
+    std::vector<int> cores_to_use_inference;
+    std::vector<int> cores_to_use_io;
+    flash_slim::util::set_cores_for_inference_and_io(active_cores, cores_to_use_inference, cores_to_use_io, absl::GetFlag(FLAGS_num_threads));
 
     // Init Custom GenAI Metrics Profiler
     GenAIMetrics genai_metrics;
@@ -64,17 +72,7 @@ int main(int argc, char *argv[])
     // Init Profiler Output configurations
     std::vector<ProfilerOutput> op_profiler_outputs;
 
-    // // Default Formatter
-    // auto default_formatter = std::make_shared<ProfileSummaryDefaultFormatter>();
-    // ProfilerOutput pf_out_default;
-    // pf_out_default.formatter = default_formatter;
-    // pf_out_default.init_summarizer = std::make_shared<ProfileSummarizer>(default_formatter);
-    // pf_out_default.run_summarizer = std::make_shared<ProfileSummarizer>(default_formatter);
-    // pf_out_default.output_type = "log";
-    // pf_out_default.output_path = "";
-    // op_profiler_outputs.emplace_back(pf_out_default);
-
-    // CSV Formatter
+    // Use CSV Formatter
     std::string csv_path = absl::GetFlag(FLAGS_csv_profile_output_path);
     auto csv_formatter = std::make_shared<ProfileSummaryCSVFormatter>();
     ProfilerOutput pf_out_csv;
@@ -85,9 +83,30 @@ int main(int argc, char *argv[])
     pf_out_csv.output_path = csv_path.empty() ? "" : csv_path;
     op_profiler_outputs.emplace_back(pf_out_csv);
 
-    //* ============ Generate Token ============ */
+#ifdef USE_WEIGHT_STREAMING
+    const std::string prefetch_plan_path = absl::GetFlag(FLAGS_prefetch_plan_path);
 
-    __run_main(genai_metrics, op_profiler, op_profiler_outputs);
+    std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
+    std::unique_ptr<WeightChunkController> weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
+    std::unique_ptr<WeightChunkPrefetcher> weight_chunk_prefetcher = std::make_unique<WeightChunkPrefetcher>();
+
+    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
+    weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
+    weight_chunk_controller->AttachPrefetcher(std::move(weight_chunk_prefetcher), cores_to_use_io);
+
+    MINIMAL_CHECK(weight_chunk_controller->LoadPrefetchPlan(prefetch_plan_path));
+#endif
+
+    //* ============ Generate Token ============ */
+    std::cout << "\n[INFO] Start Generating Text" << std::endl;
+
+    // Run __run_main in a separate thread while optionally setting that
+    // thread's CPU affinity to the first FLAGS_num_threads entries of
+    // active_cores. This keeps the main() body simpler by delegating
+    // affinity+threading behavior to util helpers.
+
+    flash_slim::util::run_thread_with_affinity_and_join([&]()
+                                                        { __run_main(genai_metrics, op_profiler, op_profiler_outputs, weight_cache_provider, weight_chunk_controller); }, cores_to_use_inference);
 
     //* ============ Print Results ============ */
 
@@ -97,10 +116,9 @@ int main(int argc, char *argv[])
     // Print Op-level profiling results
     std::cout << "\n[INFO] Generating Ops-level profiling (log)" << std::endl;
 
-    // pf_out_default.formatter->HandleOutput(pf_out_default.init_summarizer->GetOutputString(),
-    //                                     pf_out_default.run_summarizer->GetOutputString(), pf_out_default.output_path);
     pf_out_csv.formatter->HandleOutput(pf_out_csv.init_summarizer->GetOutputString(),
                                        pf_out_csv.run_summarizer->GetOutputString(), pf_out_csv.output_path);
+
     std::cout << "\n[INFO] Text Generation App completed successfully.\n";
     std::cout << "---------------------------------------------------\n\n";
 
@@ -109,7 +127,9 @@ int main(int argc, char *argv[])
 
 void __run_main(GenAIMetrics &genai_metrics,
                 std::unique_ptr<BufferedProfiler> &op_profiler,
-                const std::vector<ProfilerOutput> &op_profiler_outputs)
+                const std::vector<ProfilerOutput> &op_profiler_outputs,
+                std::unique_ptr<StreamingWeightCacheProvider> &weight_cache_provider,
+                std::unique_ptr<WeightChunkController> &weight_chunk_controller)
 {
     // Declare local variables
     std::vector<int> prompt_tokens;
@@ -153,19 +173,6 @@ void __run_main(GenAIMetrics &genai_metrics,
     interpreter->SetProfiler(op_profiler.get());
 
     //* ============ [Phase] 3. Apply Delegate ============ */
-#ifdef USE_WEIGHT_STREAMING
-    const std::string prefetch_plan_path = "weight_chunks_metadata_table.json";
-
-    std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
-    std::unique_ptr<WeightChunkController> weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
-    std::unique_ptr<WeightChunkPrefetcher> weight_chunk_prefetcher = std::make_unique<WeightChunkPrefetcher>();
-
-    weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
-    weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);
-    weight_chunk_controller->AttachPrefetcher(std::move(weight_chunk_prefetcher));
-
-    MINIMAL_CHECK(weight_chunk_controller->LoadPrefetchPlan(prefetch_plan_path));
-#endif
 
     {
         flash_slim::profiling::ScopeEventHandler handler("Apply_Delegate");
@@ -246,11 +253,11 @@ void __run_main(GenAIMetrics &genai_metrics,
         std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
 
 #ifdef USE_WEIGHT_STREAMING
-    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
+        weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
 #endif
         prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
 #ifdef USE_WEIGHT_STREAMING
-    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
+        weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
 #endif
         decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
     }
@@ -425,7 +432,7 @@ void __run_main(GenAIMetrics &genai_metrics,
         weight_cache_provider->CloseDirectIOFileDescriptor();
         weight_cache_provider->Release();
     }
-    
+
 #endif
     std::cout << "\n\n\n";
     std::cout << "[INFO] Decoded " << decode_steps << " tokens." << std::endl;

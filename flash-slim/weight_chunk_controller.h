@@ -26,7 +26,9 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   ~WeightChunkController();
 
   void AttachPrefetcher(std::unique_ptr<WeightChunkPrefetcher> prefetcher);
+  void AttachPrefetcher(std::unique_ptr<WeightChunkPrefetcher> prefetcher, const std::vector<int>& io_cores);
   void AttachMetadataWriter(WeightChunkMetaDataWriter* writer);
+  
   void UpdateProviderMode(ProviderMode mode);
   void UpdatePrefetcherMode(PrefetchMode mode);
 

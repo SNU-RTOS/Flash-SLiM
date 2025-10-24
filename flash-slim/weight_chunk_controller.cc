@@ -62,6 +62,15 @@ void WeightChunkController::AttachPrefetcher(
   }
 }
 
+void WeightChunkController::AttachPrefetcher(
+    std::unique_ptr<WeightChunkPrefetcher> prefetcher,
+    const std::vector<int>& io_cores) {
+  if (prefetcher_) {
+    prefetcher_->SetWorkerThreadAffinity(io_cores);
+  }
+  return AttachPrefetcher(std::move(prefetcher));
+}
+
 void WeightChunkController::AttachMetadataWriter(
     WeightChunkMetaDataWriter* writer) {
   writer_ = writer;
