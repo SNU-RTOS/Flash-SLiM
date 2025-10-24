@@ -6,6 +6,9 @@
 #include <limits>
 #include <vector>
 
+#include <sys/sdt.h>
+
+
 #include "weight_chunk_controller.h"
 
 namespace {
@@ -32,7 +35,8 @@ WeightChunkController::WeightChunkController(
     if (provider_) {
         provider_->SetController(this);
     }
-  UpdatePreinvokeHandler(provider_mode_);
+  UpdatePreInvokeHandler(provider_mode_);
+  UpdatePostInvokeHandler(provider_mode_);
 }
 
 WeightChunkController::~WeightChunkController() {
@@ -79,7 +83,8 @@ void WeightChunkController::AttachMetadataWriter(
 void WeightChunkController::UpdateProviderMode(
     ProviderMode mode) {
   provider_mode_ = mode;
-  UpdatePreinvokeHandler(mode);
+  UpdatePreInvokeHandler(mode);
+  UpdatePostInvokeHandler(mode);
   if (provider_) {
     provider_->UpdateProviderMode(mode);
   }
@@ -261,13 +266,16 @@ void WeightChunkController::RecordChunkAccess(size_t offset) {
   offset_to_chunk_info.emplace(offset, info);
 }
 
-void WeightChunkController::UpdatePreinvokeHandler(ProviderMode mode) {
+void WeightChunkController::UpdatePreInvokeHandler(ProviderMode mode) {
   switch (mode) {
+    case ProviderMode::PRE_RUN_WARMUP:
+      preinvoke_handler_ = &WeightChunkController::HandlePreRunWarmUpPreInvoke;
+      break;
+    case ProviderMode::PRE_RUN_PROFILE:
+      preinvoke_handler_ = &WeightChunkController::HandlePreRunProfilePreInvoke;
+      break;
     case ProviderMode::RUNTIME:
       preinvoke_handler_ = &WeightChunkController::HandleRuntimePreInvoke;
-      break;
-    case ProviderMode::PRE_RUNTIME:
-      preinvoke_handler_ = &WeightChunkController::HandlePreRuntimePreInvoke;
       break;
     default:
       preinvoke_handler_ = &WeightChunkController::HandleDefaultPreInvoke;
@@ -275,6 +283,22 @@ void WeightChunkController::UpdatePreinvokeHandler(ProviderMode mode) {
   }
 }
 
+void WeightChunkController::UpdatePostInvokeHandler(ProviderMode mode) {
+  switch (mode) {
+    case ProviderMode::PRE_RUN_WARMUP:
+      postinvoke_handler_ = &WeightChunkController::HandlePreRunWarmUpPostInvoke;
+      break;
+    case ProviderMode::PRE_RUN_PROFILE:
+      postinvoke_handler_ = &WeightChunkController::HandlePreRunProfilePostInvoke;
+      break;
+    case ProviderMode::RUNTIME:
+      postinvoke_handler_ = &WeightChunkController::HandleRuntimePostInvoke;
+      break;
+    default:
+      postinvoke_handler_ = &WeightChunkController::HandleDefaultPostInvoke;
+      break;
+  }
+}
 
 
 bool WeightChunkController::ScheduleNextChunk(const weight_chunk_info_t* current_info, int fd) {
@@ -327,6 +351,7 @@ void WeightChunkController::UpdateWeightsPointer(size_t offset, const weight_chu
 
   auto entry = offset_to_weights_ptr_.find(offset);
   if (entry == offset_to_weights_ptr_.end()) {
+    printf("[WeightChunkController] Warning: no weights pointer entry for offset=%zu\n", offset);
     return;
   }
 
@@ -344,7 +369,7 @@ void WeightChunkController::UpdateWeightsPointer(size_t offset, const weight_chu
   *slot = static_cast<uint8_t*>(buffer_base) + info.offset_adjust;
 }
 
-bool WeightChunkController::HandlePreRuntimePreInvoke(size_t offset) {
+bool WeightChunkController::HandlePreRunWarmUpPreInvoke(size_t offset) {
   if (!writer_) {
     std::cerr << "[WeightChunkController] writer_ is null\n";
     return false;
@@ -364,6 +389,30 @@ bool WeightChunkController::HandlePreRuntimePreInvoke(size_t offset) {
   return true;
 }
 
+bool WeightChunkController::HandlePreRunProfilePreInvoke(size_t offset) {
+
+  static bool first_call = true;
+  if (first_call) {
+    DTRACE_PROBE(text_gen, ops_start);
+    first_call=false;
+  }
+  else{
+    auto it = offset_to_chunk_info.find(offset);
+    weight_chunk_info_t chunk_info = it->second;
+
+    std::string current_mode = (prefetch_mode_ == PrefetchMode::PREFILL) ? "PREFILL" :
+                               (prefetch_mode_ == PrefetchMode::DECODE) ? "DECODE" :
+                               "UNINITIALIZED";
+
+    DTRACE_PROBE3(text_gen, ops_check, (uint64_t)offset, (uint64_t)chunk_info.chunk_index, \
+        (char*)current_mode.c_str());
+    DTRACE_PROBE(text_gen, ops_start);
+  }
+  
+  return true;
+}
+
+
 bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
   // 1. Validate prerequisites
   if (!prefetcher_ || !provider_ || prefetch_mode_ == PrefetchMode::UNINITIALIZED) {
@@ -382,7 +431,7 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
 
   // 2. Ensure chunk is ready (handles cache hit via ChunkIOState automatically)
   static bool first_call = true;
-//   auto start = std::chrono::steady_clock::now();
+  
   if (first_call) { // Synchronously submit prefetch request and wait only for the first call
     void* buffer_base = GetWeightChunkBufferAddr(active_weight_chunk_buffer_index_);
     if (!buffer_base) {
@@ -410,27 +459,35 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     return false;
   }
 
-//   auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
-//   printf("[WeightChunkController] Used prefetched chunk_index=%zu for offset=%zu, chunk_size=%zu wait time=%ld us\n",
-//            current_chunk_info->chunk_index, offset, current_chunk_info->aligned_size, elapsed.count());
-
   // 3. Update state and pointer
   UpdateWeightsPointer(offset, *current_chunk_info);
   
-//   start = std::chrono::steady_clock::now();
   // 4. Schedule next chunk to inactive buffer asynchronously
   (void)ScheduleNextChunk(current_chunk_info, fd);
-//   elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
-//    printf("[WeightChunkController] Scheduled next chunk_index asynchronously, time=%ld us\n\n",
-//            elapsed.count());
 
   return true;
 }
 
 bool WeightChunkController::HandleDefaultPreInvoke(size_t /*offset*/) {
-  return false;
+  return true;
+    
 }
 
+
+bool WeightChunkController::HandlePreRunWarmUpPostInvoke() {
+    return true;
+}
+bool WeightChunkController::HandlePreRunProfilePostInvoke() {
+    return true;
+}
+
+bool WeightChunkController::HandleRuntimePostInvoke() {
+    SwitchActiveBufferIndex();
+    return true;
+}
+bool WeightChunkController::HandleDefaultPostInvoke() {
+    return true;
+}
 
 //* ================ Hook ================
 void WeightChunkController::PreInvokeImpl(size_t offset) {
@@ -438,8 +495,7 @@ void WeightChunkController::PreInvokeImpl(size_t offset) {
 }
 
 void WeightChunkController::PostInvokeImpl(size_t /*offset*/) {
-    SwitchActiveBufferIndex();
-    // printf("[WeightChunkController] PostInvokeImpl called\n");
+    (void)(this->*postinvoke_handler_)();
 }
 
 void WeightChunkController::TraceWeightsAddrImpl(void* addr, size_t offset) {

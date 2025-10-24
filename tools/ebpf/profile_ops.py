@@ -2,8 +2,8 @@
 from bcc import BPF, USDT
 import atexit, signal, sys, re, os
 
-
-binary_path = "bin/text_generator_main_mmap"
+binary_path = "bin/cmt_generator"
+# binary_path = "bin/text_generator_main_mmap"
 # binary_path = "bin/text_generator_main"
 # binary_path = "tools/bin/benchmark_model"  # 추적할 바이너리 경로
 
@@ -546,12 +546,12 @@ def print_report():
     print("=====================================\n")
 
     #  Print per-ops breakdowns in sequence
-    if ops_raw_records:
-        print("\n\n===== ops Breakdown (per occurrence) =====")
-        print(f"Total occurrences recorded: {len(ops_raw_records)}")
-        for i, raw_record in enumerate(ops_raw_records):
-            record = _generate_record(raw_record)
-            _print_ops_breakdown(record,i)
+    # if ops_raw_records:
+    #     print("\n\n===== ops Breakdown (per occurrence) =====")
+    #     print(f"Total occurrences recorded: {len(ops_raw_records)}")
+    #     for i, raw_record in enumerate(ops_raw_records):
+    #         record = _generate_record(raw_record)
+    #         _print_ops_breakdown(record,i)
 
 
 # ======== Setup / Main ========

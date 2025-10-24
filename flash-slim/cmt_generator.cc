@@ -1,6 +1,5 @@
 #include "cmt_generator.h"
 
-
 // ----------------------
 // absl::FLAGS definition
 // ----------------------
@@ -22,6 +21,8 @@ ABSL_FLAG(std::string, csv_profile_output_path, "", "Path to save the profiling 
 ABSL_FLAG(bool, dump_tensor_details, false, "Whether to dump detailed tensor information for each node.");
 ABSL_FLAG(bool, op_tensor_byte_stats, false, "Whether to append per-operator aggregated tensor bytes (Mmap/Arena) on each operator line.");
 ABSL_FLAG(std::string, model_dump_file_path, "", "Path to save the log file. If empty, no log file is generated.");
+ABSL_FLAG(std::string, output_cmt_path, "weight_chunks_metadata_table.json", "Path to the weight chunk prefetch plan JSON file.");
+ABSL_FLAG(int, profile_steps, 25, "Number of decoding steps to profile. If 0, profiling is disabled. default is 25.");
 
 namespace
 {
@@ -648,251 +649,280 @@ int main(int argc, char *argv[])
     std::unordered_set<int> previously_generated_tokens;
     TfLiteStatus status = kTfLiteOk;
     int stop_token_id = -1;
-
-    //* ============ [Phase] 1. Load Model ============ */
-    std::unique_ptr<tflite::FlatBufferModel> model;
-    model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
-    MINIMAL_CHECK(model != nullptr);
-
-    // Initialize tensor->buffer map from FlatBuffer model
-    TensorToBufferIdMap tensor_buffer_map;
-    tensor_buffer_map.BuildFromFlatBufferModel(model.get());
-
-    //* ============ [Phase] 2. Build Interpreter ============ */
-
-    std::unique_ptr<tflite::Interpreter> interpreter;
-    // Register Ops
-    tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates resolver;
-    tflite::ops::custom::GenAIOpsRegisterer(&resolver); // Register GenAI custom ops
-
-    // Build the interpreter
-    tflite::InterpreterBuilder builder(*model, resolver);
-    builder.SetNumThreads(absl::GetFlag(FLAGS_num_threads));
-    builder(&interpreter);
-    MINIMAL_CHECK(interpreter != nullptr);
-
-    //* ============ [Phase] 2.5. Setup Profiler ============ */
-    // Init Tflite Internal Op-level Profiler
-    std::unique_ptr<tflite::profiling::BufferedProfiler> op_profiler; // Create op_profiler pointer
-
-    // Create profiler if profiling is enabled
-    constexpr int kProfilingBufferHeadrooms = 512;
-    int total_nodes = CountTotalNodes(interpreter.get());
-    if (total_nodes > kProfilingBufferHeadrooms)
     {
-        total_nodes += kProfilingBufferHeadrooms;
-    }
-    op_profiler = std::make_unique<tflite::profiling::BufferedProfiler>(total_nodes, true);
+        //* ============ [Phase] 1. Load Model ============ */
+        std::unique_ptr<tflite::FlatBufferModel> model;
+        model = tflite::FlatBufferModel::BuildFromFile(absl::GetFlag(FLAGS_tflite_model).c_str());
+        MINIMAL_CHECK(model != nullptr);
 
-    // Set profiler to interpreter
-    interpreter->SetProfiler(op_profiler.get());
+        // Initialize tensor->buffer map from FlatBuffer model
+        TensorToBufferIdMap tensor_buffer_map;
+        tensor_buffer_map.BuildFromFlatBufferModel(model.get());
 
-    //* ============ [Phase] 3. Define Weight Cache Provider and Prefetcher ============ */
-    std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
-    auto weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
-    weight_cache_provider->SetController(weight_chunk_controller.get());
-    weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUNTIME);
-    
-    // Json handler for weight chunk info
-    JsonWeightChunkMetaDataWriter writer("weight_chunks_metadata_table.json");
-    writer.WriteModelInfo(absl::GetFlag(FLAGS_tflite_model).c_str());
-    weight_chunk_controller->AttachMetadataWriter(&writer);
+        //* ============ [Phase] 2. Build Interpreter ============ */
+        std::unique_ptr<tflite::Interpreter> interpreter;
+        // Register Ops
+        tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates resolver;
+        tflite::ops::custom::GenAIOpsRegisterer(&resolver); // Register GenAI custom ops
 
-    //* ============ [Phase] 3.5 Apply Delegate ============ */
-    if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
-    {
-        ApplyXNNPACKWithWeightCachingProvider(interpreter.get(), weight_cache_provider.get());
-    }
-    std::cout << std::endl;
+        // Build the interpreter
+        tflite::InterpreterBuilder builder(*model, resolver);
+        builder.SetNumThreads(absl::GetFlag(FLAGS_num_threads));
+        builder(&interpreter);
+        MINIMAL_CHECK(interpreter != nullptr);
 
-    //* ============ [Phase] 4. Load Tokenizer ============ */
-    std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
-    sp_processor = LoadSentencePieceProcessor();
+        //* ============ [Phase] 2.5. Setup Profiler ============ */
+        // Init Tflite Internal Op-level Profiler
+        std::unique_ptr<tflite::profiling::BufferedProfiler> op_profiler; // Create op_profiler pointer
 
-    //* ============ [Phase] 5. Allocate KV Cache ============ */
-    std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
-    kv_cache = AllocateKVCache(interpreter.get());
-    MINIMAL_CHECK(!kv_cache.empty());
-
-    //* ============ [Phase] 6. Prepare Prompt ============ */
-    prompt = absl::GetFlag(FLAGS_prompt);
-    MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
-
-    // Initialize start and stop tokens
-    start_token = absl::GetFlag(FLAGS_start_token);
-    if (!start_token.empty())
-    {
-        prompt_tokens.insert(prompt_tokens.begin(), sp_processor->PieceToId(start_token));
-    }
-
-    stop_token = absl::GetFlag(FLAGS_stop_token);
-    if (!stop_token.empty())
-    {
-        stop_token_id = sp_processor->PieceToId(stop_token);
-    }
-
-    // Initialize previously generated tokens with prompt tokens for repetition penalty
-    if (absl::GetFlag(FLAGS_enable_repetition_penalty))
-    {
-        for (int token : prompt_tokens)
+        // Create profiler if profiling is enabled
+        constexpr int kProfilingBufferHeadrooms = 512;
+        int total_nodes = CountTotalNodes(interpreter.get());
+        if (total_nodes > kProfilingBufferHeadrooms)
         {
-            previously_generated_tokens.insert(token);
+            total_nodes += kProfilingBufferHeadrooms;
         }
+        op_profiler = std::make_unique<tflite::profiling::BufferedProfiler>(total_nodes, true);
+
+        // Set profiler to interpreter
+        interpreter->SetProfiler(op_profiler.get());
+
+        //* ============ [Phase] 3. Define Weight Cache Provider and Prefetcher ============ */
+        std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
+        std::unique_ptr<WeightChunkController> weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
+
+        weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUN_WARMUP);
+
+        // Json handler for weight chunk info
+        JsonWeightChunkMetaDataWriter cmt_writer(absl::GetFlag(FLAGS_output_cmt_path).c_str());
+        cmt_writer.WriteModelInfo(absl::GetFlag(FLAGS_tflite_model).c_str());
+        weight_chunk_controller->AttachMetadataWriter(&cmt_writer);
+
+        //* ============ [Phase] 3.5 Apply Delegate ============ */
+        if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
+        {
+            ApplyXNNPACKWithWeightCachingProvider(interpreter.get(), weight_cache_provider.get());
+        }
+        std::cout << std::endl;
+
+        //* ============ [Phase] 4. Load Tokenizer ============ */
+        std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_processor;
+        sp_processor = LoadSentencePieceProcessor();
+
+        //* ============ [Phase] 5. Allocate KV Cache ============ */
+        std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
+        kv_cache = AllocateKVCache(interpreter.get());
+        MINIMAL_CHECK(!kv_cache.empty());
+
+        //* ============ [Phase] 6. Prepare Prompt ============ */
+        prompt = absl::GetFlag(FLAGS_prompt);
+        MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
+
+        // Initialize start and stop tokens
+        start_token = absl::GetFlag(FLAGS_start_token);
+        if (!start_token.empty())
+        {
+            prompt_tokens.insert(prompt_tokens.begin(), sp_processor->PieceToId(start_token));
+        }
+
+        stop_token = absl::GetFlag(FLAGS_stop_token);
+        if (!stop_token.empty())
+        {
+            stop_token_id = sp_processor->PieceToId(stop_token);
+        }
+
+        // Initialize previously generated tokens with prompt tokens for repetition penalty
+        if (absl::GetFlag(FLAGS_enable_repetition_penalty))
+        {
+            for (int token : prompt_tokens)
+            {
+                previously_generated_tokens.insert(token);
+            }
+        }
+        std::cout << "[INFO] Stop token ID: " << stop_token_id << " for token: " << stop_token << std::endl;
+
+        //* ============ [Phase] 7. Prepare Signature Runners ============ */
+
+        tflite::SignatureRunner *prefill_runner = nullptr;
+        tflite::SignatureRunner *decode_runner = nullptr;
+        std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
+
+        weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
+        prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
+
+        weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
+        decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
+
+        MINIMAL_CHECK(prefill_runner != nullptr || decode_runner != nullptr);
+        std::cout << "[INFO] Prefill Signature: " << prefill_runner->signature_key() << std::endl;
+        std::cout << "[INFO] Decode Signature: " << decode_runner->signature_key() << std::endl;
+
+        //* ============ [Phase] 8. Prepare Input Tensors ============ */
+        TfLiteTensor *prefill_input = nullptr;
+        TfLiteTensor *prefill_input_pos = nullptr;
+        TfLiteTensor *decode_input = nullptr;
+        TfLiteTensor *decode_input_pos = nullptr;
+        TfLiteTensor *kv_cache_k_0 = nullptr;
+        int max_seq_size = 0;
+        int kv_cache_max_size = 0;
+        int prefill_seq_size = 0;
+        int seq_dim_index = 0;
+
+        prefill_input = prefill_runner->input_tensor("tokens");
+        prefill_input_pos = prefill_runner->input_tensor("input_pos");
+        decode_input = decode_runner->input_tensor("tokens");
+        decode_input_pos = decode_runner->input_tensor("input_pos");
+        kv_cache_k_0 = decode_runner->input_tensor("kv_cache_k_0");
+        max_seq_size = prefill_input->dims->data[1];
+
+        // Detect KV cache sequence dimension and set max size accordingly
+        seq_dim_index = DetectKVCacheSequenceDimension(kv_cache_k_0);
+        if (seq_dim_index >= 0 && seq_dim_index < kv_cache_k_0->dims->size)
+        {
+            kv_cache_max_size = kv_cache_k_0->dims->data[seq_dim_index];
+        }
+        else // Fallback to default behavior
+        {
+            kv_cache_max_size = kv_cache_k_0->dims->data[1];
+        }
+
+        prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
+
+        // Zero out the input tensors
+        std::memset(prefill_input->data.i32, 0, prefill_input->bytes);
+        std::memset(prefill_input_pos->data.i32, 0, prefill_input_pos->bytes);
+
+        // Prefill uses all but the last token from the prompt
+        for (int i = 0; i < prefill_seq_size - 1; ++i)
+        {
+            prefill_input->data.i32[i] = prompt_tokens[i];
+            prefill_input_pos->data.i32[i] = i;
+        }
+
+        std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")" << std::endl;
+
+        //* ============================================== Generate Prefetch Plan ========================================================= */
+
+        //     //* ============ [Optional 1] Inspect Model ============ */
+
+        //     std::string prefill_selected_signature_key = prefill_runner->signature_key();
+        //     std::string decode_selected_signature_key = decode_runner->signature_key();
+
+        //     std::ofstream dump_file(absl::GetFlag(FLAGS_model_dump_file_path));
+        //     if (!dump_file.is_open())
+        //     {
+        //         std::cerr << "❌ Failed to open log file: " << absl::GetFlag(FLAGS_model_dump_file_path) << std::endl;
+        //         return 1;
+        //     }
+        //     dump_file << "\n=== After Applying Delegate ===" << std::endl;
+        //     InspectSignatureExecutionPlan(interpreter.get(), prefill_selected_signature_key, tensor_buffer_map, &dump_file);
+        //     dump_file.close();
+
+        //     //* ============ [Optional 2] Dump Weight Cache ============ */
+        //     weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
+        //     weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
+        //     ValidateWeightCacheMappings(interpreter.get(),
+        //         prefill_selected_signature_key,
+        //         tensor_buffer_map,
+        //         weight_cache_provider.get(),
+        //         "weight_cache_validation.log");
+
+        //     //* ============ [Optional 3] Buffer Test ============ */
+        //     std::cout << "Verifying Buffer in weight cache" << std::endl;
+        //     weight_cache_provider->VerifyAllBuffers();
+        //     std::cout << "Verification done" << std::endl;
+
+        //* ============ [Phase] 9. Prefill Phase ============ */
+
+        std::cout << "[INFO] Prefill Phase started" << std::endl;
+        weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
+        MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk); // Invoke the prefill runner
+
+        std::cout << "[INFO] Prefill Phase completed" << std::endl;
+
+        //* ============ [Phase] 10. Decoding Phase ============ */
+        // Determine how many tokens to generate
+        int max_decode_steps = (absl::GetFlag(FLAGS_max_decode_steps) == -1)
+                                   ? kv_cache_max_size
+                                   : absl::GetFlag(FLAGS_max_decode_steps);
+
+        int next_token_id = prompt_tokens[prefill_seq_size - 1];
+        int next_position = prefill_seq_size - 1;
+        int decode_steps = std::min<int>(max_decode_steps, kv_cache_max_size - prefill_seq_size);
+
+        std::cout << "[INFO] Tokens in Prompt: " << prompt_tokens.size() << "\n";
+        std::cout << "[INFO] Tokens to Generate: " << decode_steps << "\n";
+        std::cout << "[INFO] Limits of Tokens to Generate: " << kv_cache_max_size << "\n";
+        std::cout << "\nPrompt:\n"
+                  << prompt
+                  << "\n\nOutput Text for Test:\n"
+                  << std::endl;
+
+        MINIMAL_CHECK(decode_steps > 0);
+
+        weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
+
+        // Decode a single token
+        std::string single_decoded_text;
+
+        // 1) Model Inference
+        decode_input->data.i32[0] = next_token_id;
+        decode_input_pos->data.i32[0] = next_position;
+        MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
+
+        // 2) Token Sampling
+        next_token_id = flash_slim::sampler::temperature_top_k_top_p_sampler(
+            decode_runner->output_tensor("logits"),
+            absl::GetFlag(FLAGS_temperature),
+            absl::GetFlag(FLAGS_top_k),
+            absl::GetFlag(FLAGS_top_p));
+
+        // 3) Token Detokenization
+        std::vector<int> next_token = {next_token_id};
+        MINIMAL_CHECK(sp_processor->Decode(next_token, &single_decoded_text).ok());
+
+        std::cout << single_decoded_text << std::flush;
+
+        std::cout << "\n\n\n";
+        std::cout << "[INFO] Decoded " << decode_steps << " tokens." << std::endl;
+        std::cout << "[INFO] Decoding Phase completed" << std::endl;
+        std::cout << "---------------------------------------------------\n\n";
+        //* ============ [Phase] 11. Profiling Phase ============ */
+
+        std::cout << "---------------------------------------------------\n\n";
+        std::cout << "[INFO] Profiling phase" << std::endl;
+
+        size_t buf_size = cmt_writer.GetMaxAlignedSize();
+        weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUN_PROFILE);
+        weight_chunk_controller->AllocWeightChunkBuffer(buf_size);
+
+        if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
+        {
+            ApplyXNNPACKWithWeightCachingProvider(interpreter.get(), weight_cache_provider.get());
+        }
+        std::cout << std::endl;
+
+        std::cout << "[INFO] Profiling Prefill" << std::endl;
+        weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
+        for (int i = 0; i < absl::GetFlag(FLAGS_profile_steps); ++i)
+        {
+            prefill_runner->Invoke();
+        }
+
+        std::cout << "[INFO] Profiling Decode" << std::endl;
+        weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
+        for (int i = 0; i < absl::GetFlag(FLAGS_profile_steps); ++i)
+        {
+            decode_runner->Invoke();
+        }
+
+        // Release resources in reverse order of allocation
+        cmt_writer.Finalize();
+        weight_cache_provider->CloseDirectIOFileDescriptor();
+        weight_cache_provider->Release();
     }
-    std::cout << "[INFO] Stop token ID: " << stop_token_id << " for token: " << stop_token << std::endl;
-
-    //* ============ [Phase] 7. Prepare Signature Runners ============ */
-
-    tflite::SignatureRunner *prefill_runner = nullptr;
-    tflite::SignatureRunner *decode_runner = nullptr;
-    std::size_t effective_prefill_token_size = (prompt_tokens.size() > 0) ? (prompt_tokens.size() - 1) : 0;
-
-    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
-    prefill_runner = GetPrefillRunner(interpreter.get(), effective_prefill_token_size, kv_cache, nullptr);
-
-    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
-    decode_runner = GetDecodeRunner(interpreter.get(), kv_cache, nullptr);
-
-    MINIMAL_CHECK(prefill_runner != nullptr || decode_runner != nullptr);
-    std::cout << "[INFO] Prefill Signature: " << prefill_runner->signature_key() << std::endl;
-    std::cout << "[INFO] Decode Signature: " << decode_runner->signature_key() << std::endl;
-
-    //* ============ [Phase] 8. Prepare Input Tensors ============ */
-    TfLiteTensor *prefill_input = nullptr;
-    TfLiteTensor *prefill_input_pos = nullptr;
-    TfLiteTensor *decode_input = nullptr;
-    TfLiteTensor *decode_input_pos = nullptr;
-    TfLiteTensor *kv_cache_k_0 = nullptr;
-    int max_seq_size = 0;
-    int kv_cache_max_size = 0;
-    int prefill_seq_size = 0;
-    int seq_dim_index = 0;
-
-    prefill_input = prefill_runner->input_tensor("tokens");
-    prefill_input_pos = prefill_runner->input_tensor("input_pos");
-    decode_input = decode_runner->input_tensor("tokens");
-    decode_input_pos = decode_runner->input_tensor("input_pos");
-    kv_cache_k_0 = decode_runner->input_tensor("kv_cache_k_0");
-    max_seq_size = prefill_input->dims->data[1];
-
-    // Detect KV cache sequence dimension and set max size accordingly
-    seq_dim_index = DetectKVCacheSequenceDimension(kv_cache_k_0);
-    if (seq_dim_index >= 0 && seq_dim_index < kv_cache_k_0->dims->size)
-    {
-        kv_cache_max_size = kv_cache_k_0->dims->data[seq_dim_index];
-    }
-    else // Fallback to default behavior
-    {
-        kv_cache_max_size = kv_cache_k_0->dims->data[1];
-    }
-
-    prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
-
-    // Zero out the input tensors
-    std::memset(prefill_input->data.i32, 0, prefill_input->bytes);
-    std::memset(prefill_input_pos->data.i32, 0, prefill_input_pos->bytes);
-
-    // Prefill uses all but the last token from the prompt
-    for (int i = 0; i < prefill_seq_size - 1; ++i)
-    {
-        prefill_input->data.i32[i] = prompt_tokens[i];
-        prefill_input_pos->data.i32[i] = i;
-    }
-
-    std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")" << std::endl;
-
-    //* ============================================== Generate Prefetch Plan ========================================================= */
-
-    //     //* ============ [Optional 1] Inspect Model ============ */
-
-    //     std::string prefill_selected_signature_key = prefill_runner->signature_key();
-    //     std::string decode_selected_signature_key = decode_runner->signature_key();
-
-    //     std::ofstream dump_file(absl::GetFlag(FLAGS_model_dump_file_path));
-    //     if (!dump_file.is_open())
-    //     {
-    //         std::cerr << "❌ Failed to open log file: " << absl::GetFlag(FLAGS_model_dump_file_path) << std::endl;
-    //         return 1;
-    //     }
-    //     dump_file << "\n=== After Applying Delegate ===" << std::endl;
-    //     InspectSignatureExecutionPlan(interpreter.get(), prefill_selected_signature_key, tensor_buffer_map, &dump_file);
-    //     dump_file.close();
-
-    //     //* ============ [Optional 2] Dump Weight Cache ============ */
-    //     weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
-    //     weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
-    //     ValidateWeightCacheMappings(interpreter.get(),
-    //         prefill_selected_signature_key,
-    //         tensor_buffer_map,
-    //         weight_cache_provider.get(),
-    //         "weight_cache_validation.log");
-
-    //     //* ============ [Optional 3] Buffer Test ============ */
-    //     std::cout << "Verifying Buffer in weight cache" << std::endl;
-    //     weight_cache_provider->VerifyAllBuffers();
-    //     std::cout << "Verification done" << std::endl;
-
-    //* ============ [Phase] 9. Prefill Phase ============ */
-
-    std::cout << "[INFO] Prefill Phase started" << std::endl;
-    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
-    MINIMAL_CHECK(prefill_runner->Invoke() == kTfLiteOk); // Invoke the prefill runner
-
-    std::cout << "[INFO] Prefill Phase completed" << std::endl;
-
     //* ============ [Phase] 10. Decoding Phase ============ */
-    // Determine how many tokens to generate
-    int max_decode_steps = (absl::GetFlag(FLAGS_max_decode_steps) == -1)
-                               ? kv_cache_max_size
-                               : absl::GetFlag(FLAGS_max_decode_steps);
 
-    int next_token_id = prompt_tokens[prefill_seq_size - 1];
-    int next_position = prefill_seq_size - 1;
-    int decode_steps = std::min<int>(max_decode_steps, kv_cache_max_size - prefill_seq_size);
-
-    std::cout << "[INFO] Tokens in Prompt: " << prompt_tokens.size() << "\n";
-    std::cout << "[INFO] Tokens to Generate: " << decode_steps << "\n";
-    std::cout << "[INFO] Limits of Tokens to Generate: " << kv_cache_max_size << "\n";
-    std::cout << "\nPrompt:\n"
-              << prompt
-              << "\n\nOutput Text for Test:\n"
-              << std::endl;
-
-    MINIMAL_CHECK(decode_steps > 0);
-
-    weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
-
-    // Decode a single token
-    std::string single_decoded_text;
-
-    // 1) Model Inference
-    decode_input->data.i32[0] = next_token_id;
-    decode_input_pos->data.i32[0] = next_position;
-    MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
-
-    // 2) Token Sampling
-    next_token_id = flash_slim::sampler::temperature_top_k_top_p_sampler(
-        decode_runner->output_tensor("logits"),
-        absl::GetFlag(FLAGS_temperature),
-        absl::GetFlag(FLAGS_top_k),
-        absl::GetFlag(FLAGS_top_p));
-
-    // 3) Token Detokenization
-    std::vector<int> next_token = {next_token_id};
-    MINIMAL_CHECK(sp_processor->Decode(next_token, &single_decoded_text).ok());
-
-    std::cout << single_decoded_text << std::flush;
-
-    std::cout << "\n\n\n";
-    std::cout << "[INFO] Decoded " << decode_steps << " tokens." << std::endl;
-    std::cout << "[INFO] Decoding Phase completed" << std::endl;
-    std::cout << "---------------------------------------------------\n\n";
-
-    writer.Finalize();
-
-    // Release resources in reverse order of allocation
-    weight_cache_provider->CloseDirectIOFileDescriptor();
-    weight_cache_provider->Release();
 
     return 0;
 }

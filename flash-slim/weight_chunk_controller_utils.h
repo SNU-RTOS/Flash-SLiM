@@ -58,6 +58,8 @@ namespace flash_slim
             // Optional: write model info into metadata (e.g., model path)
             void WriteModelInfo(const std::string &model_path) { model_path_ = model_path; }
 
+            size_t GetMaxAlignedSize() const { return max_aligned_size_; }
+
         private:
             std::string output_path_;
             nlohmann::ordered_json json_root_; // Root JSON object
