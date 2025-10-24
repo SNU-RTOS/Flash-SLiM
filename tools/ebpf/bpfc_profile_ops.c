@@ -481,20 +481,20 @@ TRACEPOINT_PROBE(block, block_io_done)
     return 0;
 }
 
-// /* ---------- sched tracepoints: cpu runtime / cpu wait ---------- */
-// TRACEPOINT_PROBE(sched, sched_stat_runtime)
-// {
-//     u32 tgid = get_tgid();
-//     if (!phase_ts_pid.lookup(&tgid))
-//         return 0;
-//     u64 pid_tgid = get_pid_tgid();
-//     struct sched_stat_t zero = {};
-//     struct sched_stat_t *s = schedstat.lookup_or_try_init(&pid_tgid, &zero);
-//     if (!s)
-//         return 0;
-//     s->runtime_ns += args->runtime;
-//     return 0;
-// }
+/* ---------- sched tracepoints: cpu runtime / cpu wait ---------- */
+TRACEPOINT_PROBE(sched, sched_stat_runtime)
+{
+    u32 tgid = get_tgid();
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
+    u64 pid_tgid = get_pid_tgid();
+    struct sched_stat_t zero = {};
+    struct sched_stat_t *s = schedstat.lookup_or_try_init(&pid_tgid, &zero);
+    if (!s)
+        return 0;
+    s->runtime_ns += args->runtime;
+    return 0;
+}
 
 // TRACEPOINT_PROBE(sched, sched_stat_wait)
 // {

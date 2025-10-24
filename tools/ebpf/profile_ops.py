@@ -62,6 +62,7 @@ class OpsRecord:
     tid: int = 0
     op_index: int = 0
     obj_index: int = 0
+    wall_clock_time_ns: int = 0
     wall_clock_time_us: int = 0
     single_thread_non_io_handle_time_us: int = 0
     single_thread_io_handle_time_us: int = 0
@@ -88,6 +89,7 @@ class OpsRecord:
     total_sys_write_count: int = 0
     avg_sys_read_time_us: int = 0
     avg_sys_write_time_us: int = 0
+    total_cpu_runtime_us: int = 0
     total_block_io_time_us: int = 0
     total_block_io_count: int = 0
     total_block_io_read_bytes: int = 0
@@ -98,6 +100,8 @@ class OpsRecord:
     wall_block_io_time_us: int = 0
     io_concurrency_factor: float = 0.0
     block_io_time_ratio: float = 0.0
+    cpu_parallelism_factor: float = 0.0
+
 
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "OpsRecord":
@@ -233,71 +237,6 @@ def _read_stat_generic(stat_map, pid, fields):
     return total
 
 
-def _read_pfstat_sum_and_clear(pfstat_map, pid):
-    # Sum totals per-TGID (as before) and also accumulate main-thread (tid==tgid).
-    fields = [
-        "major_cnt",
-        "minor_cnt",
-        "minor_retry_cnt",
-        "major_ns",
-        "minor_ns",
-        "minor_retry_ns",
-        "readahead_cnt",
-    ]
-    total = {f: 0 for f in fields}
-    to_delete = []
-
-    # Collect per-tid accumulators so we can pick the smallest tid as "main"
-    per_thread = {}  # tid -> {field: value}
-
-    for k, v in pfstat_map.items():
-        key_u64 = _to_int(k)
-        tgid = (key_u64 >> 32) & 0xFFFFFFFF
-        if tgid != pid:
-            continue
-        tid = key_u64 & 0xFFFFFFFF
-
-        # init per-thread accumulator if missing
-        if tid not in per_thread:
-            per_thread[tid] = {f: 0 for f in fields}
-
-        def _acc_into(dst, obj):
-            for f in fields:
-                dst[f] += int(getattr(obj, f, 0))
-
-        if _is_percpu_leaf(v):
-            for leaf in v:
-                _acc_into(per_thread[tid], leaf)
-        else:
-            _acc_into(per_thread[tid], v)
-
-        to_delete.append(k)
-
-    # sum per-thread accumulators into total
-    for tid_acc in per_thread.values():
-        for f in fields:
-            total[f] += tid_acc[f]
-
-    # determine "base" as the smallest tid seen for this tgid (if any)
-    base = {f: 0 for f in fields}
-    if per_thread:
-        min_tid = min(per_thread.keys())
-        base = per_thread[min_tid].copy()
-
-    for k in to_delete:
-        try:
-            del pfstat_map[k]
-        except Exception:
-            pass
-
-    # Return a single dict compatible with existing callers, with single_thread_* keys added
-    res = total.copy()
-    for f in fields:
-        res["single_thread_" + f] = base[f]
-
-    return res
-
-
 def _read_rwstat_sum_and_clear(rwstat_map, pid):
     return _read_stat_generic(
         rwstat_map,
@@ -311,6 +250,9 @@ def _read_rwstat_sum_and_clear(rwstat_map, pid):
             "write_bytes",
         ],
     )
+
+def _read_sched_sum_and_clear(sched_map, pid):
+    return _read_stat_generic(sched_map, pid, ["runtime_ns", "wait_ns"])
 
 def _read_blockstat_sum_and_clear(blockstat_map, pid):
     return _read_stat_generic(
@@ -330,6 +272,7 @@ def _capture_ops_raw_record(
     # pf_vals = _read_pfstat_sum_and_clear(b["pfstat"], pid)
     # rw_vals = _read_rwstat_sum_and_clear(b["rwstat"], pid)
     blk_vals = _read_blockstat_sum_and_clear(b["blockstat"], pid)
+    sched_vals = _read_sched_sum_and_clear(b["schedstat"], pid)
 
     # 새로 추가: I/O wall time 계산
     io_wall_ns, total_io_ns, count_used = compute_io_wall_and_total(pid, start_ns, end_ns)
@@ -350,6 +293,7 @@ def _capture_ops_raw_record(
         # pf_vals=pf_vals,
         # rw_vals=rw_vals,
         blk_vals=blk_vals,
+        sched_vals=sched_vals,
         io_wall_time_ns=int(io_wall_ns),  # 계산된 IO wall time 설정
     )
 
@@ -412,8 +356,9 @@ def _generate_record(raw_rec: OpsRaw) -> OpsRecord:
     # Base metrics
     wall_clock_time_ns = int(end_ns - start_ns)
     wall_clock_time_us = int(wall_clock_time_ns / 1e3)
+    wall_clock_time_ms = int(wall_clock_time_ns / 1e6)
 
-    # Pagefault metrics
+    # # Pagefault metrics
     # total_major_pf_count = int(pf_vals["major_cnt"])
     # total_minor_pf_count = int(pf_vals["minor_cnt"])
     # total_minor_pf_retry_count = int(pf_vals["minor_retry_cnt"])
@@ -430,12 +375,12 @@ def _generate_record(raw_rec: OpsRaw) -> OpsRecord:
 
     # total_pf_time_ms = int(total_major_pf_time_ms + total_minor_pf_time_ms + total_minor_retry_pf_time_ms)
 
-    # # Use base thread (smallest tid) attribution provided by _read_pfstat_sum_and_clear
+    # Use base thread (smallest tid) attribution provided by _read_pfstat_sum_and_clear
     # single_thread_major_pf_time_ns = int(pf_vals["single_thread_major_ns"])
     # single_thread_minor_pf_time_ns = int(pf_vals["single_thread_minor_ns"])
     # single_thread_minor_retry_pf_time_ns = int(pf_vals["single_thread_minor_retry_ns"])
 
-    # # Wall time for page faults
+    # Wall time for page faults
     # single_thread_major_pf_time_ms = int(single_thread_major_pf_time_ns // 1e6)
     # single_thread_minor_pf_time_ms = int(single_thread_minor_pf_time_ns // 1e6)
     # single_thread_minor_retry_pf_time_ms = int(single_thread_minor_retry_pf_time_ns // 1e6)
@@ -446,7 +391,7 @@ def _generate_record(raw_rec: OpsRaw) -> OpsRecord:
     # avg_minor_pf_time_us = int((total_minor_pf_time_ns // (total_minor_pf_count if total_minor_pf_count else 1)) // 1000)
     # avg_minor_retry_pf_time_us = int((total_minor_retry_pf_time_ns // (total_minor_pf_retry_count if total_minor_pf_retry_count else 1)) // 1000)
 
-    # # Syscall metrics
+    # Syscall metrics
     # total_sys_read_ns = rw_vals["read_ns"]
     # total_sys_write_ns = rw_vals["write_ns"]
     # total_sys_read_count = rw_vals["read_cnt"]
@@ -455,15 +400,17 @@ def _generate_record(raw_rec: OpsRaw) -> OpsRecord:
     # total_sys_read_time_ms = int(total_sys_read_ns // 1e6)
     # total_sys_write_time_ms = int(total_sys_write_ns // 1e6)
 
-    # #TODO: BPFC 코드와 이것과 연동시켜야함, 
-    # single_thread_read_sys_time_ms = 0
-    # single_thread_write_sys_time_ms = 0
+    #TODO: BPFC 코드와 이것과 연동시켜야함, 
+    single_thread_read_sys_time_ms = 0
+    single_thread_write_sys_time_ms = 0
 
     # avg_sys_read_time_us = int((rw_vals["read_ns"] // (total_sys_read_count if total_sys_read_count else 1)) // 1e3)
     # avg_sys_write_time_us = int((rw_vals["write_ns"] // (total_sys_write_count if total_sys_write_count else 1)) // 1e3)
 
     # Block IO
+    total_block_io_time_ns = int(blk_vals["time_ns"])
     total_block_io_time_us = int(blk_vals["time_ns"] / 1e3)
+    total_block_io_time_ms = int(blk_vals["time_ns"] / 1e6)
     total_block_io_count = int(blk_vals["count"])
     total_block_io_read_bytes = int(blk_vals["read_bytes"])
     total_block_io_write_bytes = int(blk_vals["write_bytes"])
@@ -472,16 +419,21 @@ def _generate_record(raw_rec: OpsRaw) -> OpsRecord:
     avg_block_io_read_bytes = int(_safe_div(total_block_io_read_bytes, total_block_io_count))
     avg_block_io_write_bytes = int(_safe_div(total_block_io_write_bytes, total_block_io_count))
 
-    # # CPU
+    # CPU
+    total_cpu_runtime_ns = int(sched_vals["runtime_ns"])
+    total_cpu_runtime_us = int(sched_vals["runtime_ns"] // 1e3)
+    total_cpu_runtime_ms = int(sched_vals["runtime_ns"] // 1e6)
+    total_cpu_waittime_us = int(sched_vals["wait_ns"] // 1e3)
 
-    # # Compute derived
-    # single_thread_io_handle_time_us = single_thread_pf_time_us + single_thread_read_sys_time_us + single_thread_write_sys_time_us
-    # single_thread_non_io_handle_time_us = wall_clock_time_us - single_thread_io_handle_time_us
-
+    # Compute derived
+    # single_thread_io_handle_time_ms = single_thread_pf_time_ms + single_thread_read_sys_time_ms + single_thread_write_sys_time_ms
+    # single_thread_non_io_handle_time_ms = wall_clock_time_ms - single_thread_io_handle_time_ms
+    
     wall_block_io_time_us = int(wall_block_io_time_ns / 1e3)
 
-    io_concurrency_factor = total_block_io_time_us / wall_block_io_time_us if wall_block_io_time_us else 0.0
-    block_io_time_ratio = (wall_block_io_time_us / wall_clock_time_us) * 100 if wall_clock_time_us else 0.0
+    cpu_parallelism_factor = total_cpu_runtime_ns / wall_clock_time_ns if wall_clock_time_ns else 0.0
+    io_concurrency_factor = (total_block_io_time_ns / wall_block_io_time_ns) if wall_block_io_time_ns else 0.0
+    block_io_time_ratio = (wall_block_io_time_ns / wall_clock_time_ns) * 100 if wall_clock_time_ns else 0.0
 
     rec = OpsRecord(
         ops=ops_name,
@@ -489,37 +441,11 @@ def _generate_record(raw_rec: OpsRaw) -> OpsRecord:
         tid=0,
         op_index=op_index,
         obj_index=obj_index,
+        wall_clock_time_ns=wall_clock_time_ns,
         wall_clock_time_us=wall_clock_time_us,
-
-        # single_thread_non_io_handle_time_us=single_thread_non_io_handle_time_us,
-        # single_thread_io_handle_time_us=single_thread_io_handle_time_us,
-        # single_thread_pf_time_us=single_thread_pf_time_us,
-        # single_thread_major_pf_time_us=single_thread_major_pf_time_us,
-        # single_thread_minor_pf_time_us=single_thread_minor_pf_time_us,
-        # single_thread_minor_retry_pf_time_us=single_thread_minor_retry_pf_time_us,
-        # single_thread_read_sys_time_us=single_thread_read_sys_time_us,
-        # single_thread_write_sys_time_us=single_thread_write_sys_time_us,
-
-        # total_pf_time_us=total_pf_time_us,
-        # total_major_pf_time_us=total_major_pf_time_us,
-        # total_minor_pf_time_us=total_minor_pf_time_us,
-        # total_minor_retry_pf_time_us=total_minor_retry_pf_time_us,
-        # total_major_pf_count=total_major_pf_count,
-        # total_minor_pf_count=total_minor_pf_count,
-        # total_minor_pf_retry_count=total_minor_pf_retry_count,
-        # avg_major_pf_time_us=avg_major_pf_time_us,
-        # avg_minor_pf_time_us=avg_minor_pf_time_us,
-        # avg_minor_retry_pf_time_us=avg_minor_retry_pf_time_us,
-        # readahead_count=readahead_count,
-
-        # total_sys_write_time_us=total_sys_write_time_us,
-        # total_sys_write_count=total_sys_write_count,
-        # avg_sys_write_time_us=avg_sys_write_time_us,
-        # total_sys_read_time_us=total_sys_read_time_us,
-        # total_sys_read_count=total_sys_read_count,
-        # avg_sys_read_time_us=avg_sys_read_time_us,
-
-
+            
+        total_cpu_runtime_us=total_cpu_runtime_us,
+        
         total_block_io_time_us=total_block_io_time_us,
         total_block_io_count=total_block_io_count,
         total_block_io_read_bytes=total_block_io_read_bytes,
@@ -529,6 +455,7 @@ def _generate_record(raw_rec: OpsRaw) -> OpsRecord:
         avg_block_io_write_bytes=avg_block_io_write_bytes,
 
         wall_block_io_time_us=wall_block_io_time_us,
+        cpu_parallelism_factor=cpu_parallelism_factor,
         io_concurrency_factor=io_concurrency_factor,
         block_io_time_ratio=block_io_time_ratio,
     )
@@ -543,94 +470,27 @@ def _print_ops_breakdown(rec: OpsRecord,index:int):
     """
 
     print("-------------------------------------------")
-    print(f"[{index}] Operator {rec.ops}[{rec.op_index},{rec.obj_index}]:")
-    print("")
-    print("-- Elapsed Time Analysis (main pid only) --")
-    print(f" Wall Clock Time                            : {rec.wall_clock_time_us} (us)")
-    print("")
-    print("-- Total Time --")
-    print(f" Total CPU Runtime                          : {rec.wall_clock_time_us} (us)")
+    print(f"[{index}] Operator {rec.ops}[{rec.op_index},{rec.obj_index}] elapsed: {rec.wall_clock_time_ns} (ns)")
     print("")
     print("-- I/O Stats --")
     print(f" Total Block I/O Time                       : {rec.total_block_io_time_us} (us)")
     print(f" Total Block I/O Count                      : {rec.total_block_io_count} (cnt)")
     print(f" Total Block I/O Read Bytes                 : {rec.total_block_io_read_bytes} (bytes)")
-    print(f" Total Block I/O Write Bytes                : {rec.total_block_io_write_bytes} (bytes)")
     print(f" Avg Block I/O Time                         : {rec.avg_block_io_time_us} (us)")
     print(f" Avg Block I/O Read Bytes                   : {rec.avg_block_io_read_bytes} (bytes)")
-    print(f" Avg Block I/O Write Bytes                  : {rec.avg_block_io_write_bytes} (bytes)")
-    print(f" Wall I/O Time (Last done - first start)    : {rec.wall_block_io_time_us} (us)")
-    print(f" Merged I/O Stall Time (interval merge)     : {rec.wall_block_io_time_us} (us)")
     print("")
     print("-- Derived Metrics --")
-    cpu_util_ratio = rec.wall_clock_time_us / rec.wall_clock_time_us if rec.wall_clock_time_us else 0.0
-    io_stall_ratio = rec.wall_block_io_time_us / rec.wall_clock_time_us if rec.wall_clock_time_us else 0.0
-    io_parallel_ratio = rec.total_block_io_time_us / rec.wall_block_io_time_us if rec.wall_block_io_time_us else 0.0
-    print(f" CPU Utilization Ratio                      : {cpu_util_ratio:.3f}")
-    print(f" I/O Stall Ratio                            : {io_stall_ratio:.3f}")
-    print(f" I/O Parallelism Ratio                      : {io_parallel_ratio:.3f}")
+    print(f" Total CPU Runtime                          : {rec.total_cpu_runtime_us} (us)")
+    print(f" Total Block IO Time                        : {rec.total_block_io_time_us} (us)")
+    print("")
+    print(f" Wall Clock Time                            : {rec.wall_clock_time_us} (us)")
+    print(f" Wall Block IO Time                         : {rec.wall_block_io_time_us} (us)")
+    print("")
+    print(f" CPU Parallelism Factor                     : {rec.cpu_parallelism_factor:.3f} (CPU cores equivalent) (Total CPU / Wall Clock Time)")
+    print(f" IO Concurrency Factor                      : {rec.io_concurrency_factor:.3f} (Concurrent IO operations) (Total Block IO / Wall Block IO Time)")
+    print(f" IO Time Ratio                              : {rec.block_io_time_ratio:.3f} (%) (Wall IO Time / Wall Clock Time)")
     print("")
     
-    # print("-- Elapsed Time Stats (single thread only, if multi-threaded, it shows the first thread's stats) --")
-    # print(f" Wall Clock Time                            : {rec.wall_clock_time_ms} (ms)")
-    # print(f"    - Non IO Handling Time (Estimated)      : {rec.single_thread_non_io_handle_time_ms} (ms)")
-    # print(f"    - IO Handling Time                      : {rec.single_thread_io_handle_time_ms} (ms)")
-    # print(f"        - Read Syscall                      : {rec.single_thread_read_sys_time_ms} (ms)")
-    # print(f"        - Write Syscall                     : {rec.single_thread_write_sys_time_ms} (ms)")
-    # print(f"        - PageFault                         : {rec.single_thread_pf_time_ms} (ms)")
-    # print(f"            - Major PageFault               : {rec.single_thread_major_pf_time_ms} (ms)")
-    # print(f"            - Minor PageFault (NOPAGE)      : {rec.single_thread_minor_pf_time_ms} (ms)")
-    # print(f"            - Minor PageFault (RETRY)       : {rec.single_thread_minor_retry_pf_time_ms} (ms)")
-    # print("")
-
-    # print("-- IO Handling Stats --")    
-    # print(f"- Syscall")
-    # print(f" Total Read Syscall Handling Time           : {rec.total_sys_read_time_ms} (ms)")
-    # print(f" Total Read Syscall Count                   : {rec.total_sys_read_count} (count)")
-    # print(f" Avg Read Syscall Handling Time             : {rec.avg_sys_read_time_us} (us/count)")
-    # print("")
-    # print(f" Total Write Syscall Handling Time          : {rec.total_sys_write_time_ms} (ms)")
-    # print(f" Total Write Syscall Count                  : {rec.total_sys_write_count} (count)")
-    # print(f" Avg Write Syscall Handling Time            : {rec.avg_sys_write_time_us} (us/count)")
-    # print("")
-    
-    # total_pf_count=rec.total_major_pf_count+rec.total_minor_pf_count+rec.total_minor_pf_retry_count
-    # avg_pf_time_us=rec.avg_major_pf_time_us + rec.avg_minor_pf_time_us + rec.avg_minor_retry_pf_time_us
-    # print(f"- PageFault")
-    # print(f" Total PageFault Time                       : {rec.total_pf_time_ms} (ms)")
-    # print(f"    - Total Major PageFault Time            : {rec.total_major_pf_time_ms} (ms)")
-    # print(f"    - Total Minor PageFault Time (NOPAGE)   : {rec.total_minor_pf_time_ms} (ms)")
-    # print(f"    - Total Minor PageFault Time (RETRY)    : {rec.total_minor_retry_pf_time_ms} (ms)")
-    # print(f" Total PageFault Count                      : {total_pf_count} (count)")
-    # print(f"    - Major Fault Count                     : {rec.total_major_pf_count} (count)")
-    # print(f"    - Minor Fault Count (NOPAGE)            : {rec.total_minor_pf_count} (count)")
-    # print(f"    - Minor Fault Count (RETRY)             : {rec.total_minor_pf_retry_count} (count)")
-    # print(f" Avg PageFault Time                         : {avg_pf_time_us} (us/count)")
-    # print(f"    - Avg Major Fault Handling Time         : {rec.avg_major_pf_time_us} (us/count)")
-    # print(f"    - Avg Minor Fault Handling Time (NOPAGE): {rec.avg_minor_pf_time_us} (us/count)")
-    # print(f"    - Avg Minor Fault Handling Time (RETRY) : {rec.avg_minor_retry_pf_time_us} (us/count)")
-    # print(f" Total ReadAhead Count                      : {rec.readahead_count} (count)")
-    # print("")
-    
-    # print("-- IO Stats --")
-    # print(f" Total Block IO Time                        : {rec.total_block_io_time_us} (us)")
-    # print(f" Total Block IO Count                       : {rec.total_block_io_count} (count)")
-    # print(f" Total Block IO Read Bytes                  : {rec.total_block_io_read_bytes} (bytes)")
-    # print(f" Total Block IO Write Bytes                 : {rec.total_block_io_write_bytes} (bytes)")
-    # print(f" Avg Block IO Time                          : {rec.avg_block_io_time_us} (us/block)")
-    # print(f" Avg Block IO Read Bytes                    : {rec.avg_block_io_read_bytes} (bytes/block)")
-    # print(f" Avg Block IO Write Bytes                   : {rec.avg_block_io_write_bytes} (bytes/block)")
-    # print("")
-
-    # print("-- Derived Metrics --")
-    # print(f" Total Block IO Time                        : {rec.total_block_io_time_ms} (ms)")
-    # print("")
-    # print(f" Wall Clock Time                            : {rec.wall_clock_time_ms} (ms)")
-    # print(f" Wall Block IO Time                         : {rec.wall_block_io_time_ms} (ms)")
-    # print("")
-    # print(f" IO Concurrency Factor                      : {rec.io_concurrency_factor:.3f} (Concurrent IO operations) (Total Block IO / Wall Block IO Time)")
-    # print(f" IO Time Ratio                              : {rec.block_io_time_ratio:.3f} (%) (Wall IO Time / Wall Clock Time)")
-    # print("")
 
 
 def print_report():

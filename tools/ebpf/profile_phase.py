@@ -3,7 +3,9 @@ from bcc import BPF, USDT
 import atexit, signal, sys, re, os
 
 
-binary_path = "bin/text_generator_main"
+# binary_path = "bin/text_generator_main"
+binary_path = "bin/text_generator_main_mmap"
+
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # ======== Config ========
