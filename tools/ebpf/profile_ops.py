@@ -582,8 +582,16 @@ if __name__ == "__main__":
     b["events"].open_ring_buffer(on_ops_event)
     b["intervals"].open_ring_buffer(on_interval_event)
 
-    # Exit hooks
-    atexit.register(print_report)
+    # SIGINT 핸들러: Ctrl+C 시 print_report 호출 후 정상 종료
+    def signal_handler(sig, frame):
+        print_report()
+        sys.stdout.flush()  # 버퍼 플러시
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    # # Exit hooks
+    # atexit.register(print_report)
 
     # Start tracing
     print("Tracing USDT probes and IO intervals... Ctrl-C to stop.")
