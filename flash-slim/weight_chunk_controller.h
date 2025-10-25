@@ -75,8 +75,6 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   tflite::xnnpack::StreamingWeightCacheProvider* provider_ = nullptr;
   std::unique_ptr<WeightChunkPrefetcher> prefetcher_ = nullptr;
   WeightChunkMetaDataWriter* writer_ = nullptr;
-  ProviderMode provider_mode_ = ProviderMode::RUNTIME;
-  PrefetchMode prefetch_mode_ = PrefetchMode::UNINITIALIZED;
   PreInvokeHandler preinvoke_handler_ = &WeightChunkController::HandleDefaultPreInvoke;
   PostInvokeHandler postinvoke_handler_ = &WeightChunkController::HandleDefaultPostInvoke;
 
@@ -84,8 +82,8 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   size_t weight_chunk_buffer_capacity_ = 0;
   std::array<void*, 2> weight_chunk_buffers_{nullptr, nullptr};
   int active_weight_chunk_buffer_index_ = 0;
-  size_t next_chunk_index_ = 0;
-  std::unordered_map<size_t, weight_chunk_info_t> offset_to_chunk_info;
+  size_t chunk_index_ = 0;
+  std::unordered_map<size_t, weight_chunk_info_t> offset_to_chunk_info_;
   std::unordered_map<size_t, std::array<void*, 2>> offset_to_weights_ptr_;
 };
 

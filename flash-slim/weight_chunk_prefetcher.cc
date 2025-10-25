@@ -34,7 +34,7 @@ constexpr size_t kDefaultSubreadBytes = 512 * 1024;
 
 bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
   constexpr size_t kMinBlockSize = 512 * 1024;
-  constexpr size_t kMaxThreads = 4;
+  constexpr size_t kMaxThreads = 1;
 
   if (fd < 0 || buffer == nullptr || size == 0) {
     return false;
@@ -114,8 +114,7 @@ bool WeightChunkPrefetcher::HasPrefetchPlan(PrefetchMode mode) const {
   return idx >= 0 && has_plan_[idx];
 }
 
-const WeightChunkPrefetcher::PrefetchPlan* WeightChunkPrefetcher::GetPrefetchPlan(
-    PrefetchMode mode) const {
+const WeightChunkPrefetcher::PrefetchPlan* WeightChunkPrefetcher::GetPrefetchPlan( PrefetchMode mode) const {
   const int idx = PrefetchModeToIndex(mode);
   if (idx < 0 || !has_plan_[idx]) {
     return nullptr;
@@ -176,7 +175,7 @@ void WeightChunkPrefetcher::BuildIndexToChunksFromPlans() {
   }
 }
 
-std::string WeightChunkPrefetcher::GetPrefetcherModeString() const {
+std::string WeightChunkPrefetcher::GetPrefetchModeString() const {
   switch (prefetch_mode_) {
     case PrefetchMode::PREFILL:
       return "PREFILL";
@@ -188,6 +187,77 @@ std::string WeightChunkPrefetcher::GetPrefetcherModeString() const {
       return "UNKNOWN";
   }
 }
+
+const weight_chunk_info_t* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode mode,
+                                                                 size_t offset) const {
+  const int idx = PrefetchModeToIndex(mode);
+  if (idx < 0 || !has_plan_[idx]) {
+    return nullptr;
+  }
+
+  const auto& plan = prefetch_plans_[idx];
+  const auto it = plan.offset_to_index.find(offset);
+  if (it == plan.offset_to_index.end()) {
+    return nullptr;
+  }
+
+  const size_t index = it->second;
+  if (index >= index_to_chunks_.size()) {
+    return nullptr;
+  }
+
+  const auto& candidate = index_to_chunks_[index];
+  if (candidate.chunk_index == std::numeric_limits<size_t>::max()) {
+    return nullptr;
+  }
+  return &candidate;
+}
+
+std::optional<size_t> WeightChunkPrefetcher::GetNextChunkIndex(PrefetchMode mode,
+                                                            size_t current_chunk_index) const {
+  const int plan_idx = PrefetchModeToIndex(mode);
+  if (plan_idx < 0 || !has_plan_[plan_idx]) {
+    return std::nullopt;
+  }
+
+  const auto& chunks = prefetch_plans_[plan_idx].chunks;
+  if (chunks.empty()) {
+    return std::nullopt;
+  }
+
+  const size_t plan_size = chunks.size();
+  size_t candidate = current_chunk_index + 1;
+  if (candidate >= plan_size) {
+    candidate = 0;
+  }
+
+  for (size_t inspected = 0; inspected < plan_size; ++inspected) {
+    const auto& info = chunks[candidate];
+    if (info.chunk_index != std::numeric_limits<size_t>::max()) {
+      return info.chunk_index;
+    }
+    ++candidate;
+    if (candidate >= plan_size) {
+      candidate = 0;
+    }
+  }
+
+  return std::nullopt;
+}
+
+const weight_chunk_info_t* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chunk_index) const {
+  if (chunk_index >= index_to_chunks_.size()) {
+    return nullptr;
+  }
+
+  const auto& info = index_to_chunks_[chunk_index];
+  if (info.chunk_index == std::numeric_limits<size_t>::max()) {
+    return nullptr;
+  }
+
+  return &info;
+}
+
 
 void WeightChunkPrefetcher::StartWorker() {
   bool expected = false;
@@ -281,31 +351,6 @@ void WeightChunkPrefetcher::StopWorker() {
   }
 }
 
-const weight_chunk_info_t* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode mode,
-                                                                 size_t offset) const {
-  const int idx = PrefetchModeToIndex(mode);
-  if (idx < 0 || !has_plan_[idx]) {
-    return nullptr;
-  }
-
-  const auto& plan = prefetch_plans_[idx];
-  const auto it = plan.offset_to_index.find(offset);
-  if (it == plan.offset_to_index.end()) {
-    return nullptr;
-  }
-
-  const size_t index = it->second;
-  if (index >= index_to_chunks_.size()) {
-    return nullptr;
-  }
-
-  const auto& candidate = index_to_chunks_[index];
-  if (candidate.chunk_index == std::numeric_limits<size_t>::max()) {
-    return nullptr;
-  }
-  return &candidate;
-}
-
 bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
   const weight_chunk_info_t* info = request.chunk_info;
   if (!request.buffer_base || request.direct_io_fd < 0 || !info || request.buffer_index < 0) {
@@ -338,72 +383,30 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
 }
 
 bool WeightChunkPrefetcher::WaitReady(const weight_chunk_info_t* chunk_info) {
+ 
   if (!chunk_info) {
     return false;
   }
 
   auto state = GetChunkIOState(chunk_info->chunk_index);
   std::unique_lock<std::mutex> lock(state->mutex);
-  state->cv.wait(lock, [&]() { return state->ready || !state->in_flight; });
+  state->cv.wait(lock, [&]() { 
+;
+    return state->ready || !state->in_flight; });
   const bool success = state->success;
   state->ready = false;
   state->in_flight = false;
   return success;
 }
 
-std::optional<size_t> WeightChunkPrefetcher::GetNextChunkIndex(PrefetchMode mode,
-                                                            size_t current_chunk_index) const {
-  const int plan_idx = PrefetchModeToIndex(mode);
-  if (plan_idx < 0 || !has_plan_[plan_idx]) {
-    return std::nullopt;
-  }
-
-  const auto& chunks = prefetch_plans_[plan_idx].chunks;
-  if (chunks.empty()) {
-    return std::nullopt;
-  }
-
-  const size_t plan_size = chunks.size();
-  size_t candidate = current_chunk_index + 1;
-  if (candidate >= plan_size) {
-    candidate = 0;
-  }
-
-  for (size_t inspected = 0; inspected < plan_size; ++inspected) {
-    const auto& info = chunks[candidate];
-    if (info.chunk_index != std::numeric_limits<size_t>::max()) {
-      return info.chunk_index;
-    }
-    ++candidate;
-    if (candidate >= plan_size) {
-      candidate = 0;
-    }
-  }
-
-  return std::nullopt;
-}
-
-const weight_chunk_info_t* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chunk_index) const {
-  if (chunk_index >= index_to_chunks_.size()) {
-    return nullptr;
-  }
-
-  const auto& info = index_to_chunks_[chunk_index];
-  if (info.chunk_index == std::numeric_limits<size_t>::max()) {
-    return nullptr;
-  }
-
-  return &info;
-}
-
 void WeightChunkPrefetcher::WorkerLoop() {
-// #if defined(__linux__)
-//   if (io_engine_ && io_engine_->IsReady()) {
-//     printf("[INFO] WeightChunkPrefetcher: using io_uring IO worker loop\n");
-//     RunAsyncWorkerLoop();
-//     return;
-//   }
-// #endif
+#if defined(__linux__)
+  if (io_engine_ && io_engine_->IsReady()) {
+    printf("[INFO] WeightChunkPrefetcher: using io_uring IO worker loop\n");
+    RunAsyncWorkerLoop();
+    return;
+  }
+#endif
   printf("[INFO] WeightChunkPrefetcher: using parallel pread IO worker loop\n");
   RunSyncWorkerLoop();
 }
@@ -556,8 +559,7 @@ void WeightChunkPrefetcher::ApplyWorkerAffinity() {
 #endif
 }
 
-std::shared_ptr<WeightChunkPrefetcher::ChunkIOState> WeightChunkPrefetcher::GetChunkIOState(
-    size_t chunk_index) {
+std::shared_ptr<WeightChunkPrefetcher::ChunkIOState> WeightChunkPrefetcher::GetChunkIOState(size_t chunk_index) {
   std::lock_guard<std::mutex> lock(chunk_state_mutex_);
   auto it = index_to_chunk_states_.find(chunk_index);
   if (it == index_to_chunk_states_.end() || !(it->second)) {

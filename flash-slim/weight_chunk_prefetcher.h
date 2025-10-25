@@ -53,6 +53,7 @@ class WeightChunkPrefetcher {
   WeightChunkPrefetcher() = default;
   ~WeightChunkPrefetcher();
   
+  void ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1, size_t size1);
 
   void SetPrefetchPlan(PrefetchMode mode,
                        std::unordered_map<size_t, size_t>&& offset_to_index,
@@ -62,45 +63,76 @@ class WeightChunkPrefetcher {
 
   const PrefetchPlan* GetPrefetchPlan(PrefetchMode mode) const;
 
-  void BuildIndexToChunksFromPlans();
-
-  const std::vector<weight_chunk_info_t>& GetIndexToChunks() const { return index_to_chunks_; }
-
   void UpdatePrefetcherMode(PrefetchMode mode) { prefetch_mode_ = mode; }
 
-  static inline int PrefetchModeToIndex(PrefetchMode mode) {
+  inline int PrefetchModeToIndex(PrefetchMode mode) const {
         switch (mode) {
         case PrefetchMode::PREFILL:
         return 0;
         case PrefetchMode::DECODE:
         return 1;
+        case PrefetchMode::UNINITIALIZED:
+        return 2;
         default:
         return -1;
     }
   }
 
-  PrefetchMode GetPrefetcherMode() const { return prefetch_mode_; }
+  inline int IndexToPrefetchMode(int index) const {
+        switch (index) {
+        case 0:
+        return static_cast<int>(PrefetchMode::PREFILL);
+        case 1:
+        return static_cast<int>(PrefetchMode::DECODE);
+        case 2:
+        return static_cast<int>(PrefetchMode::UNINITIALIZED);
+        default:
+        return -1;
+    }
+  }
+
+  inline std::string IndexToPrefetchModeString(int index) const {
+        switch (index) {
+        case 0:
+        return "PREFILL";
+        case 1:
+        return "DECODE";
+        case 2:
+        return "UNINITIALIZED";
+        default:
+        return "UNKNOWN";
+    }
+  }
+
+  PrefetchMode GetPrefetchMode() const { return prefetch_mode_; }
+
+  int GetPrefetchModeIndex() const { return PrefetchModeToIndex(prefetch_mode_);}
   
-  std::string GetPrefetcherModeString() const;
+  std::string GetPrefetchModeString() const;
 
+  bool Submit(const PrefetchRequest& request);
+
+  bool WaitReady(const weight_chunk_info_t* chunk_info);
+  
   void StartWorker();
-  void StopWorker();
 
-  void ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1, size_t size1);
+  void StopWorker();
 
   // Configure the worker thread's CPU affinity. Passing an empty `cores`
   // vector clears the affinity preference. The thread will adopt the new
   // affinity upon the next `StartWorker()` call (or immediately if running).
   void SetWorkerThreadAffinity(const std::vector<int>& cores);
+  
+  void BuildIndexToChunksFromPlans();
 
-  
-  bool Submit(const PrefetchRequest& request);
-  bool WaitReady(const weight_chunk_info_t* chunk_info);
-  
+  const std::vector<weight_chunk_info_t>& GetIndexToChunks() const { return index_to_chunks_; }
+
   const weight_chunk_info_t* LookupChunkInfo(PrefetchMode mode, size_t offset) const;
-  std::optional<size_t> GetNextChunkIndex(PrefetchMode mode, size_t current_chunk_index) const;
+
   const weight_chunk_info_t* GetChunkInfoByIndex(size_t chunk_index) const;
 
+  std::optional<size_t> GetNextChunkIndex(PrefetchMode mode, size_t current_chunk_index) const;
+  
  private:
   struct PrefetchJob {
     const weight_chunk_info_t* chunk_info = nullptr;
