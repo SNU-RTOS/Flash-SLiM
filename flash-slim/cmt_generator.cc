@@ -1,5 +1,7 @@
 #include "cmt_generator.h"
 
+
+
 // ----------------------
 // absl::FLAGS definition
 // ----------------------
@@ -690,8 +692,12 @@ int main(int argc, char *argv[])
         //* ============ [Phase] 3. Define Weight Cache Provider and Prefetcher ============ */
         std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
         std::unique_ptr<WeightChunkController> weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
+        std::unique_ptr<WeightChunkPrefetcher> weight_chunk_prefetcher = std::make_unique<WeightChunkPrefetcher>();
+
 
         weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUN_WARMUP);
+        weight_chunk_controller->AttachPrefetcher(std::move(weight_chunk_prefetcher));
+
 
         // Json handler for weight chunk info
         JsonWeightChunkMetaDataWriter cmt_writer(absl::GetFlag(FLAGS_output_cmt_path).c_str());
@@ -801,36 +807,38 @@ int main(int argc, char *argv[])
 
         std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")" << std::endl;
 
+        //* ============================================== Model Dump  ========================================================= */
+
+        //* ============ [Optional 1] Inspect Model ============ */
+
+        std::string prefill_selected_signature_key = prefill_runner->signature_key();
+        std::string decode_selected_signature_key = decode_runner->signature_key();
+
+        std::ofstream dump_file(absl::GetFlag(FLAGS_model_dump_file_path));
+        if (!dump_file.is_open())
+        {
+            std::cerr << "❌ Failed to open log file: " << absl::GetFlag(FLAGS_model_dump_file_path) << std::endl;
+            return 1;
+        }
+        dump_file << "\n=== After Applying Delegate ===" << std::endl;
+        InspectSignatureExecutionPlan(interpreter.get(), prefill_selected_signature_key, tensor_buffer_map, &dump_file);
+        dump_file.close();
+
+        //* ============ [Optional 2] Dump Weight Cache ============ */
+        weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
+        weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
+        ValidateWeightCacheMappings(interpreter.get(),
+                                    prefill_selected_signature_key,
+                                    tensor_buffer_map,
+                                    weight_cache_provider.get(),
+                                    "weight_cache_validation.log");
+
+        //* ============ [Optional 3] Buffer Test ============ */
+        std::cout << "Verifying Buffer in weight cache" << std::endl;
+        weight_cache_provider->VerifyAllBuffers();
+        std::cout << "Verification done" << std::endl;
+
         //* ============================================== Generate Prefetch Plan ========================================================= */
-
-        //     //* ============ [Optional 1] Inspect Model ============ */
-
-        //     std::string prefill_selected_signature_key = prefill_runner->signature_key();
-        //     std::string decode_selected_signature_key = decode_runner->signature_key();
-
-        //     std::ofstream dump_file(absl::GetFlag(FLAGS_model_dump_file_path));
-        //     if (!dump_file.is_open())
-        //     {
-        //         std::cerr << "❌ Failed to open log file: " << absl::GetFlag(FLAGS_model_dump_file_path) << std::endl;
-        //         return 1;
-        //     }
-        //     dump_file << "\n=== After Applying Delegate ===" << std::endl;
-        //     InspectSignatureExecutionPlan(interpreter.get(), prefill_selected_signature_key, tensor_buffer_map, &dump_file);
-        //     dump_file.close();
-
-        //     //* ============ [Optional 2] Dump Weight Cache ============ */
-        //     weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
-        //     weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
-        //     ValidateWeightCacheMappings(interpreter.get(),
-        //         prefill_selected_signature_key,
-        //         tensor_buffer_map,
-        //         weight_cache_provider.get(),
-        //         "weight_cache_validation.log");
-
-        //     //* ============ [Optional 3] Buffer Test ============ */
-        //     std::cout << "Verifying Buffer in weight cache" << std::endl;
-        //     weight_cache_provider->VerifyAllBuffers();
-        //     std::cout << "Verification done" << std::endl;
 
         //* ============ [Phase] 9. Prefill Phase ============ */
 
@@ -892,22 +900,45 @@ int main(int argc, char *argv[])
         std::cout << "---------------------------------------------------\n\n";
         std::cout << "[INFO] Profiling phase" << std::endl;
 
+        // Reset Page Cache before profiling
+        std::cout << "[INFO] Resetting page cache via /proc/sys/vm/drop_caches" << std::endl;
+
+        // Release weight cache provider before dropping caches (unmap model file used before profiling)
+        weight_cache_provider->Release();
+        // Drop caches and wait for a moment
+        flash_slim::util::drop_page_cache();
+        sleep(1);
+        
+        // Print current page cache usage
+        flash_slim::util::print_current_page_cache_kb();
+
+        // Allocate weight chunk buffer for profiling
         size_t buf_size = cmt_writer.GetMaxAlignedSize();
         weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::PRE_RUN_PROFILE);
         weight_chunk_controller->AllocWeightChunkBuffer(buf_size);
-
+        
+        // Re-apply delegate with weight caching provider
         if (!absl::GetFlag(FLAGS_weight_cache_path).empty())
         {
             ApplyXNNPACKWithWeightCachingProvider(interpreter.get(), weight_cache_provider.get());
         }
         std::cout << std::endl;
 
+        // Print current page cache usage
+        flash_slim::util::print_current_page_cache_kb();
+
+        // Start profiling prefill and decode separately
+        // Internally, It uses dummy buffers and only measures pure computation time and io time. 
+        // These measurements are for generate io prefecth plan only.
         std::cout << "[INFO] Profiling Prefill" << std::endl;
         weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::PREFILL);
         for (int i = 0; i < absl::GetFlag(FLAGS_profile_steps); ++i)
         {
             prefill_runner->Invoke();
         }
+
+        flash_slim::util::print_current_page_cache_kb();
+
 
         std::cout << "[INFO] Profiling Decode" << std::endl;
         weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
@@ -916,13 +947,13 @@ int main(int argc, char *argv[])
             decode_runner->Invoke();
         }
 
+        // Print current page cache usage
+        flash_slim::util::print_current_page_cache_kb();
+
         // Release resources in reverse order of allocation
         cmt_writer.Finalize();
-        weight_cache_provider->CloseDirectIOFileDescriptor();
         weight_cache_provider->Release();
     }
-    //* ============ [Phase] 10. Decoding Phase ============ */
-
 
     return 0;
 }
