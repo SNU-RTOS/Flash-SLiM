@@ -17,21 +17,47 @@ limitations under the License.
 #define FLASH_SLIM_UTILS_H_
 
 #include <cstddef>
+#include <iomanip>
+#include <cstddef>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 #include <chrono>
-#include <iomanip>
+#include <map>
 #include <sstream>
+#include <iomanip>
+#include <cerrno>
+#include <thread>
+#include <fstream>
+#include <fcntl.h>
+#include <unistd.h>
 #include <functional>
 #include <thread>
+#include <sys/mman.h>
+#include <sys/stat.h>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+
 #include "tflite/interpreter.h"
+#include "tflite/model_builder.h"
+#include "tflite/schema/schema_generated.h"
 #include "tflite/signature_runner.h"
-#include "tflite/util.h"
+
+
+#if defined(__linux__)
+#include <pthread.h>
+#include <sched.h>
+#include <errno.h>
+#include <string.h>
+#endif
+
 
 // A minimal check macro.
 #ifndef MINIMAL_CHECK
@@ -81,6 +107,11 @@ namespace flash_slim::util
     // If `cores` is empty, the function runs on a plain thread without affinity.
     void run_thread_with_affinity_and_join(const std::function<void()> &fn,
                                            const std::vector<int> &cores);
+
+                                           
+    void print_current_page_cache_kb();
+
+    int drop_page_cache();
 
     
 } // namespace custom::util

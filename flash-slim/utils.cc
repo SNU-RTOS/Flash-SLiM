@@ -15,85 +15,55 @@ limitations under the License.
 
 #include "utils.h"
 
-#include <cstddef>
-#include <cstring>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-#include <chrono>
-#include <map>
-#include <sstream>
-#include <iomanip>
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/memory/memory.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/string_view.h"
-#include "tflite/interpreter.h"
-#include "tflite/model_builder.h"
-#include "tflite/schema/schema_generated.h"
-#include "tflite/signature_runner.h"
-#include <thread>
-#include <functional>
-
-#if defined(__linux__)
-#include <pthread.h>
-#include <sched.h>
-#include <errno.h>
-#include <string.h>
-#endif
 
 namespace flash_slim::util
 {
-    //DEPRECATED
-    // // --------------------------------------------------------------------------
-    // // Helper functions to print tensor details.
-    // // --------------------------------------------------------------------------
-    // const char *TfLiteTypeToString(TfLiteType type)
-    // {
-    //     switch (type)
-    //     {
-    //     case kTfLiteNoType:
-    //         return "NoType";
-    //     case kTfLiteFloat32:
-    //         return "Float32";
-    //     case kTfLiteInt32:
-    //         return "Int32";
-    //     case kTfLiteUInt8:
-    //         return "UInt8";
-    //     case kTfLiteInt64:
-    //         return "Int64";
-    //     case kTfLiteString:
-    //         return "String";
-    //     case kTfLiteBool:
-    //         return "Bool";
-    //     case kTfLiteInt16:
-    //         return "Int16";
-    //     case kTfLiteComplex64:
-    //         return "Complex64";
-    //     case kTfLiteInt8:
-    //         return "Int8";
-    //     case kTfLiteFloat16:
-    //         return "Float16";
-    //     case kTfLiteFloat64:
-    //         return "Float64";
-    //     case kTfLiteComplex128:
-    //         return "Complex128";
-    //     case kTfLiteUInt64:
-    //         return "UInt64";
-    //     case kTfLiteResource:
-    //         return "Resource";
-    //     case kTfLiteVariant:
-    //         return "Variant";
-    //     case kTfLiteUInt32:
-    //         return "UInt32";
-    //     default:
-    //         return "Unknown";
-    //     }
-    // }
+    // DEPRECATED
+    //  // --------------------------------------------------------------------------
+    //  // Helper functions to print tensor details.
+    //  // --------------------------------------------------------------------------
+    //  const char *TfLiteTypeToString(TfLiteType type)
+    //  {
+    //      switch (type)
+    //      {
+    //      case kTfLiteNoType:
+    //          return "NoType";
+    //      case kTfLiteFloat32:
+    //          return "Float32";
+    //      case kTfLiteInt32:
+    //          return "Int32";
+    //      case kTfLiteUInt8:
+    //          return "UInt8";
+    //      case kTfLiteInt64:
+    //          return "Int64";
+    //      case kTfLiteString:
+    //          return "String";
+    //      case kTfLiteBool:
+    //          return "Bool";
+    //      case kTfLiteInt16:
+    //          return "Int16";
+    //      case kTfLiteComplex64:
+    //          return "Complex64";
+    //      case kTfLiteInt8:
+    //          return "Int8";
+    //      case kTfLiteFloat16:
+    //          return "Float16";
+    //      case kTfLiteFloat64:
+    //          return "Float64";
+    //      case kTfLiteComplex128:
+    //          return "Complex128";
+    //      case kTfLiteUInt64:
+    //          return "UInt64";
+    //      case kTfLiteResource:
+    //          return "Resource";
+    //      case kTfLiteVariant:
+    //          return "Variant";
+    //      case kTfLiteUInt32:
+    //          return "UInt32";
+    //      default:
+    //          return "Unknown";
+    //      }
+    //  }
 
     // void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name)
     // {
@@ -311,5 +281,72 @@ namespace flash_slim::util
         // Fallback on non-Linux: just run synchronously on the calling thread.
         fn();
 #endif
+    }
+
+    // --------------------------------------------------------------------------
+    // Utility to get current page cache size from /proc/meminfo (Linux only)
+    // --------------------------------------------------------------------------
+    void print_current_page_cache_kb()
+    {
+        std::ifstream meminfo("/proc/meminfo");
+        if (!meminfo.is_open())
+        {
+            std::cerr << "Failed to open /proc/meminfo\n";
+            return;
+        }
+
+        std::string key, unit;
+        size_t value = 0;
+        bool found = false;
+
+        while (meminfo >> key >> value >> unit)
+        {
+            if (key == "Cached:")
+            {
+                found = true;
+                break;
+            }
+        }
+
+        if (found)
+        {
+            std::cout << "[INFO] Current Page Cache: " << value << " kB" << std::endl;
+        }
+        else
+        {
+            std::cout << "[INFO] Current Page Cache: unknown" << std::endl;
+        }
+    }
+
+    int drop_page_cache()
+    {
+        // 1) sync filesystem buffers
+        ::sync();
+
+        // 2) drop_caches=3 (pagecache + dentries + inodes)
+        const char *path = "/proc/sys/vm/drop_caches";
+        int fd = ::open(path, O_WRONLY);
+        if (fd < 0)
+        {
+            std::cerr << "[ERR] open(" << path << ") failed: "
+                      << std::strerror(errno)
+                      << " (errno=" << errno << ")\n";
+            return 1;
+        }
+
+        const char *val = "3\n";
+        ssize_t n = ::write(fd, val, std::strlen(val));
+        int saved = errno;
+        ::close(fd);
+
+        if (n < 0)
+        {
+            std::cerr << "[ERR] write(" << path << ") failed: "
+                      << std::strerror(saved)
+                      << " (errno=" << saved << ")\n";
+            return 2;
+        }
+
+        return 0;
     }
 } // namespace custom::util

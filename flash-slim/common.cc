@@ -254,37 +254,4 @@ ABSL_DECLARE_FLAG(std::string, sentencepiece_model);
         return total_nodes;
     }
 
-    // --------------------------------------------------------------------------
-    // Utility to get current page cache size from /proc/meminfo (Linux only)
-    // --------------------------------------------------------------------------
-    void PrintCurrentPageCacheKB()
-    {
-        std::ifstream meminfo("/proc/meminfo");
-        if (!meminfo.is_open())
-        {
-            std::cerr << "Failed to open /proc/meminfo\n";
-            return;
-        }
-
-        std::string key, unit;
-        size_t value = 0;
-        bool found = false;
-
-        while (meminfo >> key >> value >> unit)
-        {
-            if (key == "Cached:")
-            {
-                found = true;
-                break;
-            }
-        }
-
-        if (found)
-        {
-            std::cout << "[INFO] Current Page Cache: " << value << " kB" << std::endl;
-        }
-        else
-        {
-            std::cout << "[INFO] Current Page Cache: unknown" << std::endl;
-        }
-    }
+    
