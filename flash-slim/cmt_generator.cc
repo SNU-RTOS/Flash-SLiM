@@ -809,34 +809,34 @@ int main(int argc, char *argv[])
 
         //* ============================================== Model Dump  ========================================================= */
 
-        //* ============ [Optional 1] Inspect Model ============ */
+        // //* ============ [Optional 1] Inspect Model ============ */
 
-        std::string prefill_selected_signature_key = prefill_runner->signature_key();
-        std::string decode_selected_signature_key = decode_runner->signature_key();
+        // std::string prefill_selected_signature_key = prefill_runner->signature_key();
+        // std::string decode_selected_signature_key = decode_runner->signature_key();
 
-        std::ofstream dump_file(absl::GetFlag(FLAGS_model_dump_file_path));
-        if (!dump_file.is_open())
-        {
-            std::cerr << "❌ Failed to open log file: " << absl::GetFlag(FLAGS_model_dump_file_path) << std::endl;
-            return 1;
-        }
-        dump_file << "\n=== After Applying Delegate ===" << std::endl;
-        InspectSignatureExecutionPlan(interpreter.get(), prefill_selected_signature_key, tensor_buffer_map, &dump_file);
-        dump_file.close();
+        // std::ofstream dump_file(absl::GetFlag(FLAGS_model_dump_file_path));
+        // if (!dump_file.is_open())
+        // {
+        //     std::cerr << "❌ Failed to open log file: " << absl::GetFlag(FLAGS_model_dump_file_path) << std::endl;
+        //     return 1;
+        // }
+        // dump_file << "\n=== After Applying Delegate ===" << std::endl;
+        // InspectSignatureExecutionPlan(interpreter.get(), prefill_selected_signature_key, tensor_buffer_map, &dump_file);
+        // dump_file.close();
 
-        //* ============ [Optional 2] Dump Weight Cache ============ */
-        weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
-        weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
-        ValidateWeightCacheMappings(interpreter.get(),
-                                    prefill_selected_signature_key,
-                                    tensor_buffer_map,
-                                    weight_cache_provider.get(),
-                                    "weight_cache_validation.log");
+        // //* ============ [Optional 2] Dump Weight Cache ============ */
+        // weight_cache_provider->DumpWeightCacheStructureToFile("weight_cache_structure.log");
+        // weight_cache_provider->DumpTensorIdentifierMapToFile("weight_cache_tensor_id_map.log");
+        // ValidateWeightCacheMappings(interpreter.get(),
+        //                             prefill_selected_signature_key,
+        //                             tensor_buffer_map,
+        //                             weight_cache_provider.get(),
+        //                             "weight_cache_validation.log");
 
-        //* ============ [Optional 3] Buffer Test ============ */
-        std::cout << "Verifying Buffer in weight cache" << std::endl;
-        weight_cache_provider->VerifyAllBuffers();
-        std::cout << "Verification done" << std::endl;
+        // //* ============ [Optional 3] Buffer Test ============ */
+        // std::cout << "Verifying Buffer in weight cache" << std::endl;
+        // weight_cache_provider->VerifyAllBuffers();
+        // std::cout << "Verification done" << std::endl;
 
         //* ============================================== Generate Prefetch Plan ========================================================= */
 
@@ -936,7 +936,7 @@ int main(int argc, char *argv[])
         {
             prefill_runner->Invoke();
         }
-
+        weight_chunk_controller->ResetBPFProbe();
         flash_slim::util::print_current_page_cache_kb();
 
 
@@ -946,6 +946,7 @@ int main(int argc, char *argv[])
         {
             decode_runner->Invoke();
         }
+        weight_chunk_controller->ResetBPFProbe();
 
         // Print current page cache usage
         flash_slim::util::print_current_page_cache_kb();

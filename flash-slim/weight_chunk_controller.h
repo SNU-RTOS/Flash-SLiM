@@ -38,6 +38,8 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   void ReleaseWeightChunkBuffer();
   void SwitchActiveBufferIndex();
   void UpdateActiveBufferIndex(int index);
+
+  bool ResetBPFProbe();
   
   void* GetActiveWeightChunkBuffer() const override;
   void* GetWeightChunkBufferAddr(int index) const override;
@@ -48,6 +50,7 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   int FetchArgIntImpl() override;
   
   void RecordChunkAccess(size_t offset) override;
+
 
  private:
   using PreInvokeHandler = bool (WeightChunkController::*)(size_t);
@@ -65,7 +68,9 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   bool HandleRuntimePostInvoke();
   bool HandleDefaultPostInvoke();
 
-
+  // Helper to emit BPF probe for chunk completion
+  inline void EmitBPFProbe(size_t offset);
+  
   bool EnsureChunkReady(const weight_chunk_info_t* info, int buffer_index, int fd);
   bool ScheduleNextChunk(const weight_chunk_info_t* current_info, int fd);
   int GetInactiveBufferIndex() const { return 1 - active_weight_chunk_buffer_index_; }
@@ -80,9 +85,11 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
 
   size_t weight_chunk_buffer_requirement_ = 0;
   size_t weight_chunk_buffer_capacity_ = 0;
-  std::array<void*, 2> weight_chunk_buffers_{nullptr, nullptr};
-  int active_weight_chunk_buffer_index_ = 0;
   size_t chunk_index_ = 0;
+  size_t bpf_probe_prev_offset_ = 0;
+  bool bpf_probe_first_call_ = true;
+  int active_weight_chunk_buffer_index_ = 0;
+  std::array<void*, 2> weight_chunk_buffers_{nullptr, nullptr};
   std::unordered_map<size_t, weight_chunk_info_t> offset_to_chunk_info_;
   std::unordered_map<size_t, std::array<void*, 2>> offset_to_weights_ptr_;
 };

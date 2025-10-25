@@ -387,8 +387,7 @@ bool WeightChunkController::HandlePreRunWarmUpPreInvoke(size_t offset) {
     std::cerr << "[WeightChunkController] writer_ is null\n";
     return false;
   }
-//   std::cout << "[WeightChunkController] PreRunWarmUpPreInvoke: Recording chunk info for offset="
-//             << offset << "\n";
+
   auto it = offset_to_chunk_info_.find(offset);
   if (it == offset_to_chunk_info_.end()) {
     RecordChunkAccess(offset);
@@ -399,32 +398,49 @@ bool WeightChunkController::HandlePreRunWarmUpPreInvoke(size_t offset) {
       return false;
     }
   }
-//   std::cout << "[WeightChunkController] PreRunWarmUpPreInvoke: Writing chunk info for offset="
-//             << offset << "\n";
+
   writer_->WriteChunkInfo(it->second, prefetcher_->GetPrefetchMode());
-//   std::cout << "[WeightChunkController] PreRunWarmUpPreInvoke: Written chunk info for offset="
-//             << offset << "\n";
   return true;
+}
+
+inline void WeightChunkController::EmitBPFProbe(size_t offset) {
+  
+  auto it = offset_to_chunk_info_.find(offset);
+  if (it == offset_to_chunk_info_.end()) {
+    std::cerr << "[WeightChunkController] BPF probe: chunk not found for offset=" 
+              << offset << "\n";
+    return;
+  }
+  
+  const weight_chunk_info_t& chunk_info = it->second;
+  
+  DTRACE_PROBE3(text_gen, ops_check, 
+    static_cast<uint64_t>(chunk_info.chunk_index),
+                static_cast<uint64_t>(offset), 
+                const_cast<char*>(prefetcher_->GetPrefetchModeString().c_str()));
+}
+
+bool WeightChunkController::ResetBPFProbe(){
+ EmitBPFProbe(bpf_probe_prev_offset_);
+
+ bpf_probe_prev_offset_ = 0;
+ bpf_probe_first_call_ = true;
+
+ return true;
 }
 
 bool WeightChunkController::HandlePreRunProfilePreInvoke(size_t offset) {
 
-  static bool first_call = true;
-  if (first_call) {
+  if (bpf_probe_first_call_) {
     DTRACE_PROBE(text_gen, ops_start);
-    first_call=false;
+    bpf_probe_first_call_ = false;
   }
   else{
-    auto it = offset_to_chunk_info_.find(offset);
-    weight_chunk_info_t chunk_info = it->second;
-
-    std::string current_mode = prefetcher_->GetPrefetchModeString();
-
-    DTRACE_PROBE3(text_gen, ops_check, (uint64_t)offset, (uint64_t)chunk_info.chunk_index, \
-        (char*)current_mode.c_str());
+    EmitBPFProbe(bpf_probe_prev_offset_);
     DTRACE_PROBE(text_gen, ops_start);
   }
   
+  bpf_probe_prev_offset_ = offset;
   return true;
 }
 
@@ -500,7 +516,6 @@ bool WeightChunkController::HandleDefaultPreInvoke(size_t /*offset*/) {
   return true;
     
 }
-
 
 bool WeightChunkController::HandlePreRunWarmUpPostInvoke() {
     return true;
