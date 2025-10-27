@@ -160,11 +160,30 @@ done
 
 }
 
-
 # =========================================================================== #
-# 5. Core Functions                                                           #
+# 4. Core Functions                                                           #
 # =========================================================================== #
 
+run_bpf_task() {
+    local bpf_log_filename=$1
+    log "Starting BPF profiler in background... (PID: $$)"
+    sudo python3 ./tools/ebpf/profile_ops.py $bpf_log_filename
+}
+
+cleanup_bpf() {
+    local bg_pid=$1
+    log "Cleaning up BPF profiler..."
+    
+    # kill -0 PID: Check if process exists to avoid error messages
+    if [[ -n "$bg_pid" ]] && kill -0 $bg_pid 2>/dev/null; then
+        log "Stopping bpf profiler with run_task_bpf (PID: $bg_pid)..."
+        sudo pkill -INT -f "python3 ./tools/ebpf/profile_ops.py"
+        wait $bg_pid 2>/dev/null 
+        log "BPF profiler has been successfully stopped."
+    else
+        log "No running background process found or already terminated."
+    fi
+}
 
 # Function to parse JSON and extract prompt data
 parse_json_file() {
@@ -206,7 +225,8 @@ run_single_prompt() {
     local REPETITION_PENALTY="$7"
     local ENABLE_REPETITION_PENALTY="$8"
     local CSV_FILE="${LOG_FILE%.log}.csv"
-    local BPF_LOG="${LOG_FILE%.log}_bpf.log"
+    # local BPF_LOG="${LOG_FILE%.log}_bpf.log"
+    local BPF_LOG="bpf_profile_ops_results_${NUM_THREADS}threads.log"
 
     banner "LLM inference start (${TARGET^^})"
     log "Model                           : ${MODEL_NAME}"
@@ -280,12 +300,17 @@ run_single_prompt() {
 
     # Start BPF profiler in the background with proper session management
     banner "--- BPF PROFILER START ---"
+    run_bpf_task "$BPF_LOG" &
+    BG_PID=$! # Get background process PID (run_bpf_task)
+    sleep 3 # Give some time for BPF to initialize
 
     banner "--- C++ Binary Execution START ---"
     banner "Command: ${CMD[*]}"
     sudo "${CMD[@]}"
     banner "--- C++ Binary Execution END ---"
 
+    banner "--- BPF PROFILER END ---"
+    cleanup_bpf "$BG_PID"
 
     if [[ "$LOG_ENABLED" == "true" ]]; then
         log "Log saved to ${LOG_FILE}"
@@ -298,16 +323,12 @@ run_single_prompt() {
     #          "${MODEL_DIR}/${MODEL_NAME}_analysis_report.txt" \
     #          "${MODEL_DIR}/${MODEL_NAME}_analysis_data.json"
 
-    return $cmd_status
 }
 
-
 # =========================================================================== #
-# 6. Main Execution                                                           #
+# 5. Main Execution                                                           #
 # =========================================================================== #
 
-
-# --- Main Execution Logic ---
 main() {
     parse_command_line "$@"
 

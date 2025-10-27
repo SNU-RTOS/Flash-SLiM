@@ -11,6 +11,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # ======== Config ========
 SHOW_SEQUENCE = False  # 시퀀스 테이블이 필요할 때만 True
+PROFILE_OPS_REPORT = 'bpf_ops_profile.log' # default
 
 # ======== eBPF text ========
 # Load EBPF code from external file
@@ -494,68 +495,74 @@ def _print_ops_breakdown(rec: OpsRecord,index:int):
 
 
 def print_report():
-    print("\n===== Ops Report (start–stop) =====")
-
-    if SHOW_SEQUENCE and seq:
-        print("\n-- Sequence (ms) --")
-        for name, ms in seq:
-            print(f"{name:>50s} : {ms:9.3f}")
-
-    if cnt:
-        print("\n-- Summary by Ops --")
+    import sys
+    original_stdout = sys.stdout
+    with open(PROFILE_OPS_REPORT, 'w') as f:
+        sys.stdout = f
+        print("\n===== Ops Report (start–stop) =====")
 
         if SHOW_SEQUENCE and seq:
-            items = list(dict.fromkeys(name for name, _ in seq))  # 등장 순서
-        else:
-            items = sorted(cnt.keys(), key=_naturalsort_key)  # 자연 정렬
+            print("\n-- Sequence (ms) --")
+            for name, ms in seq:
+                print(f"{name:>50s} : {ms:9.3f}")
 
-        print(
-            f"{'Ops':50s}  {'Count':>5s}  {'Avg(ms)':>10s}  {'Min(ms)':>10s}  {'Max(ms)':>10s}  {'Total(ms)':>12s}"
-        )
-        for k in items:
-            avg_ms = (sum_ns[k] / cnt[k]) / 1e6
-            min_ms_v = min_ns[k] / 1e6
-            max_ms_v = max_ns[k] / 1e6
-            tot_ms = sum_ns[k] / 1e6
+        if cnt:
+            print("\n-- Summary by Ops --")
+
+            if SHOW_SEQUENCE and seq:
+                items = list(dict.fromkeys(name for name, _ in seq))  # 등장 순서
+            else:
+                items = sorted(cnt.keys(), key=_naturalsort_key)  # 자연 정렬
+
             print(
-                f"{k:50s}  {cnt[k]:5d}  {avg_ms:10.3f}  {min_ms_v:10.3f}  {max_ms_v:10.3f}  {tot_ms:12.3f}"
+                f"{'Ops':50s}  {'Count':>5s}  {'Avg(ms)':>10s}  {'Min(ms)':>10s}  {'Max(ms)':>10s}  {'Total(ms)':>12s}"
             )
+            for k in items:
+                avg_ms = (sum_ns[k] / cnt[k]) / 1e6
+                min_ms_v = min_ns[k] / 1e6
+                max_ms_v = max_ns[k] / 1e6
+                tot_ms = sum_ns[k] / 1e6
+                print(
+                    f"{k:50s}  {cnt[k]:5d}  {avg_ms:10.3f}  {min_ms_v:10.3f}  {max_ms_v:10.3f}  {tot_ms:12.3f}"
+                )
 
-        # Top-K by Avg(ms) with Ratio & Cum(%)
-        TOPK = 7
-        avg_map = {ops: sum_ns[ops] / cnt[ops] / 1e6 for ops in cnt}
-        sorted_by_avg = sorted(avg_map.items(), key=lambda x: x[1], reverse=True)
-        total_avg_sum = sum(v for _, v in sorted_by_avg)
+            # Top-K by Avg(ms) with Ratio & Cum(%)
+            TOPK = 7
+            avg_map = {ops: sum_ns[ops] / cnt[ops] / 1e6 for ops in cnt}
+            sorted_by_avg = sorted(avg_map.items(), key=lambda x: x[1], reverse=True)
+            total_avg_sum = sum(v for _, v in sorted_by_avg)
 
-        print(f"\n-- Top-{TOPK} Ops by Avg(ms) --")
-        print(f"{'Ops':<50} {'Avg(ms)':>12} {'Ratio(%)':>12} {'Cum(%)':>12}")
+            print(f"\n-- Top-{TOPK} Ops by Avg(ms) --")
+            print(f"{'Ops':<50} {'Avg(ms)':>12} {'Ratio(%)':>12} {'Cum(%)':>12}")
 
-        cum = 0.0
-        for ops, avg in sorted_by_avg[:TOPK]:
-            ratio = 100.0 * avg / total_avg_sum if total_avg_sum > 0 else 0.0
-            cum += ratio
-            print(f"{ops:<50} {avg:12.3f} {ratio:12.1f} {cum:12.1f}")
+            cum = 0.0
+            for ops, avg in sorted_by_avg[:TOPK]:
+                ratio = 100.0 * avg / total_avg_sum if total_avg_sum > 0 else 0.0
+                cum += ratio
+                print(f"{ops:<50} {avg:12.3f} {ratio:12.1f} {cum:12.1f}")
 
-    # Diagnostics
-    if last_start_ns or missing_start:
-        print("\n-- Diagnostics --")
-        if last_start_ns:
-            print(f"in-flight ops without END : {len(last_start_ns)}")
-        if missing_start:
-            print(f"END without prior START      : {missing_start}")
-    print("=====================================\n")
+        # Diagnostics
+        if last_start_ns or missing_start:
+            print("\n-- Diagnostics --")
+            if last_start_ns:
+                print(f"in-flight ops without END : {len(last_start_ns)}")
+            if missing_start:
+                print(f"END without prior START      : {missing_start}")
+        print("=====================================\n")
 
-    #  Print per-ops breakdowns in sequence
-    # if ops_raw_records:
-    #     print("\n\n===== ops Breakdown (per occurrence) =====")
-    #     print(f"Total occurrences recorded: {len(ops_raw_records)}")
-    #     for i, raw_record in enumerate(ops_raw_records):
-    #         record = _generate_record(raw_record)
-    #         _print_ops_breakdown(record,i)
-
+        #  Print per-ops breakdowns in sequence
+        # if ops_raw_records:
+        #     print("\n\n===== ops Breakdown (per occurrence) =====")
+        #     print(f"Total occurrences recorded: {len(ops_raw_records)}")
+        #     for i, raw_record in enumerate(ops_raw_records):
+        #         record = _generate_record(raw_record)
+        #         _print_ops_breakdown(record,i)
+        sys.stdout = original_stdout
 
 # ======== Setup / Main ========
 if __name__ == "__main__":
+    if( args := sys.argv[1:]): 
+        PROFILE_OPS_REPORT = args[0] # Get first argument as report file name
 
     # --- Attach USDT ---
     usdt = USDT(path=binary_path)
