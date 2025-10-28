@@ -69,12 +69,11 @@ namespace flash_slim
 
             nlohmann::ordered_json chunk_json;
             chunk_json["chunk_index"] = chunk_info.chunk_index;
-            chunk_json["aligned_offset"] = chunk_info.aligned_offset;
-            chunk_json["offset_adjust"] = chunk_info.offset_adjust;
-            chunk_json["aligned_size"] = chunk_info.aligned_size;
             chunk_json["origin_offset"] = chunk_info.origin_offset;
             chunk_json["origin_size"] = chunk_info.origin_size;
-            chunk_json["managed_buffer_index"] = chunk_info.managed_buffer_index;
+            chunk_json["aligned_offset"] = chunk_info.aligned_offset;
+            chunk_json["aligned_size"] = chunk_info.aligned_size;
+            chunk_json["offset_adjust"] = chunk_info.offset_adjust;
             chunk_json["weights_id"] = chunk_info.weights_id;
             chunk_json["prefetch_mode"] = static_cast<int>(prefetch_mode);
             chunk_json["prefetch_mode_str"] = PrefetchModeToString(prefetch_mode);
@@ -284,18 +283,16 @@ namespace flash_slim
                     weight_chunk_info_t c{};
                     if (j.contains("chunk_index"))
                         c.chunk_index = static_cast<size_t>(j.at("chunk_index").get<uint64_t>());
+                    if (j.contains("origin_offset"))
+                        c.origin_offset = static_cast<size_t>(j.at("origin_offset").get<uint64_t>());
+                    if (j.contains("origin_size"))
+                        c.origin_size = static_cast<size_t>(j.at("origin_size").get<uint64_t>());
                     if (j.contains("aligned_offset"))
                         c.aligned_offset = static_cast<size_t>(j.at("aligned_offset").get<uint64_t>());
                     if (j.contains("aligned_size"))
                         c.aligned_size = static_cast<size_t>(j.at("aligned_size").get<uint64_t>());
                     if (j.contains("offset_adjust"))
                         c.offset_adjust = static_cast<size_t>(j.at("offset_adjust").get<uint64_t>());
-                    if (j.contains("origin_offset"))
-                        c.origin_offset = static_cast<size_t>(j.at("origin_offset").get<uint64_t>());
-                    if (j.contains("origin_size"))
-                        c.origin_size = static_cast<size_t>(j.at("origin_size").get<uint64_t>());
-                    if (j.contains("managed_buffer_index"))
-                        c.managed_buffer_index = j.at("managed_buffer_index").get<int>();
                     if (j.contains("weights_id"))
                         c.weights_id = static_cast<size_t>(j.at("weights_id").get<uint64_t>());
                     // Note: prefetch_mode field (if present) is ignored; grouping key is authoritative

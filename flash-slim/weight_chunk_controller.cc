@@ -263,7 +263,6 @@ void WeightChunkController::RecordChunkAccess(size_t offset) {
   info.aligned_size = aligned_size;
   info.origin_offset = offset;
   info.origin_size = buffer_size;
-  info.managed_buffer_index = active_weight_chunk_buffer_index_;
   info.weights_id = weights_id >= 0 ? static_cast<size_t>(weights_id) : 0;
 
 

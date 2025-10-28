@@ -144,12 +144,11 @@ void WeightChunkPrefetcher::BuildIndexToChunksFromPlans() {
 
   weight_chunk_info_t tmp_chunk;
   tmp_chunk.chunk_index = SIZE_MAX;
-  tmp_chunk.aligned_offset = 0;
-  tmp_chunk.offset_adjust = 0;
-  tmp_chunk.aligned_size = 0;
   tmp_chunk.origin_offset = 0;
   tmp_chunk.origin_size = 0;
-  tmp_chunk.managed_buffer_index = -1;
+  tmp_chunk.aligned_offset = 0;
+  tmp_chunk.aligned_size = 0;
+  tmp_chunk.offset_adjust = 0;
   tmp_chunk.weights_id = 0;
 
   index_to_chunks_.assign(max_index + 1, tmp_chunk);
