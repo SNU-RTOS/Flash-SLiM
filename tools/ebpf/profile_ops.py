@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 from bcc import BPF, USDT
 import atexit, signal, sys, re, os
+import common
 
-binary_path = "bin/cmt_generator"
+
 # binary_path = "bin/text_generator_main_mmap"
 # binary_path = "bin/text_generator_main"
-# binary_path = "tools/bin/benchmark_model"  # 추적할 바이너리 경로
+# binary_path = "tools/bin/benchmark_model"  # binary path to attach USDTs
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # ======== Config ========
-SHOW_SEQUENCE = False  # 시퀀스 테이블이 필요할 때만 True
-PROFILE_OPS_REPORT = 'bpf_ops_profile.log' # default
+BINARY_PATH = "bin/cmt_generator"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SHOW_SEQUENCE = True  # if True, sorting by occurrence order and show ops sequence(option)
+TOPK = 7  # Top-K ops by avg time
+PROFILE_OPS_REPORT_PATH = 'bpf_ops_profile.log' # default report file name
 
 # ======== eBPF text ========
 # Load EBPF code from external file
-ebpf_path = os.path.join(script_dir, "bpfc_profile_ops.c")
+ebpf_path = os.path.join(SCRIPT_DIR, "bpfc_profile_ops.c")
 with open(ebpf_path, "r") as f:
     BPF_TEXT = f.read()
 
@@ -357,61 +361,10 @@ def _generate_record(raw_rec: OpsRaw) -> OpsRecord:
     # Base metrics
     wall_clock_time_ns = int(end_ns - start_ns)
     wall_clock_time_us = int(wall_clock_time_ns / 1e3)
-    wall_clock_time_ms = int(wall_clock_time_ns / 1e6)
-
-    # # Pagefault metrics
-    # total_major_pf_count = int(pf_vals["major_cnt"])
-    # total_minor_pf_count = int(pf_vals["minor_cnt"])
-    # total_minor_pf_retry_count = int(pf_vals["minor_retry_cnt"])
-
-    # readahead_count = int(pf_vals["readahead_cnt"])
-
-    # total_major_pf_time_ns = int(pf_vals["major_ns"])
-    # total_minor_pf_time_ns = int(pf_vals["minor_ns"])
-    # total_minor_retry_pf_time_ns = int(pf_vals["minor_retry_ns"])
-
-    # total_major_pf_time_ms = int(total_major_pf_time_ns // 1e6)
-    # total_minor_pf_time_ms = int(total_minor_pf_time_ns // 1e6)
-    # total_minor_retry_pf_time_ms = int(total_minor_retry_pf_time_ns // 1e6)
-
-    # total_pf_time_ms = int(total_major_pf_time_ms + total_minor_pf_time_ms + total_minor_retry_pf_time_ms)
-
-    # Use base thread (smallest tid) attribution provided by _read_pfstat_sum_and_clear
-    # single_thread_major_pf_time_ns = int(pf_vals["single_thread_major_ns"])
-    # single_thread_minor_pf_time_ns = int(pf_vals["single_thread_minor_ns"])
-    # single_thread_minor_retry_pf_time_ns = int(pf_vals["single_thread_minor_retry_ns"])
-
-    # Wall time for page faults
-    # single_thread_major_pf_time_ms = int(single_thread_major_pf_time_ns // 1e6)
-    # single_thread_minor_pf_time_ms = int(single_thread_minor_pf_time_ns // 1e6)
-    # single_thread_minor_retry_pf_time_ms = int(single_thread_minor_retry_pf_time_ns // 1e6)
-
-    # single_thread_pf_time_ms = (single_thread_major_pf_time_ms + single_thread_minor_pf_time_ms + single_thread_minor_retry_pf_time_ms)
-
-    # avg_major_pf_time_us = int((total_major_pf_time_ns // (total_major_pf_count if total_major_pf_count else 1)) // 1000)
-    # avg_minor_pf_time_us = int((total_minor_pf_time_ns // (total_minor_pf_count if total_minor_pf_count else 1)) // 1000)
-    # avg_minor_retry_pf_time_us = int((total_minor_retry_pf_time_ns // (total_minor_pf_retry_count if total_minor_pf_retry_count else 1)) // 1000)
-
-    # Syscall metrics
-    # total_sys_read_ns = rw_vals["read_ns"]
-    # total_sys_write_ns = rw_vals["write_ns"]
-    # total_sys_read_count = rw_vals["read_cnt"]
-    # total_sys_write_count = rw_vals["write_cnt"]
-
-    # total_sys_read_time_ms = int(total_sys_read_ns // 1e6)
-    # total_sys_write_time_ms = int(total_sys_write_ns // 1e6)
-
-    #TODO: BPFC 코드와 이것과 연동시켜야함, 
-    single_thread_read_sys_time_ms = 0
-    single_thread_write_sys_time_ms = 0
-
-    # avg_sys_read_time_us = int((rw_vals["read_ns"] // (total_sys_read_count if total_sys_read_count else 1)) // 1e3)
-    # avg_sys_write_time_us = int((rw_vals["write_ns"] // (total_sys_write_count if total_sys_write_count else 1)) // 1e3)
 
     # Block IO
     total_block_io_time_ns = int(blk_vals["time_ns"])
     total_block_io_time_us = int(blk_vals["time_ns"] / 1e3)
-    total_block_io_time_ms = int(blk_vals["time_ns"] / 1e6)
     total_block_io_count = int(blk_vals["count"])
     total_block_io_read_bytes = int(blk_vals["read_bytes"])
     total_block_io_write_bytes = int(blk_vals["write_bytes"])
@@ -423,12 +376,6 @@ def _generate_record(raw_rec: OpsRaw) -> OpsRecord:
     # CPU
     total_cpu_runtime_ns = int(sched_vals["runtime_ns"])
     total_cpu_runtime_us = int(sched_vals["runtime_ns"] // 1e3)
-    total_cpu_runtime_ms = int(sched_vals["runtime_ns"] // 1e6)
-    total_cpu_waittime_us = int(sched_vals["wait_ns"] // 1e3)
-
-    # Compute derived
-    # single_thread_io_handle_time_ms = single_thread_pf_time_ms + single_thread_read_sys_time_ms + single_thread_write_sys_time_ms
-    # single_thread_non_io_handle_time_ms = wall_clock_time_ms - single_thread_io_handle_time_ms
     
     wall_block_io_time_us = int(wall_block_io_time_ns / 1e3)
 
@@ -493,18 +440,13 @@ def _print_ops_breakdown(rec: OpsRecord,index:int):
     print("")
     
 
-
-def print_report():
-    import sys
-    original_stdout = sys.stdout
-    with open(PROFILE_OPS_REPORT, 'w') as f:
-        sys.stdout = f
+def _print_report():
         print("\n===== Ops Report (start–stop) =====")
 
-        if SHOW_SEQUENCE and seq:
-            print("\n-- Sequence (ms) --")
-            for name, ms in seq:
-                print(f"{name:>50s} : {ms:9.3f}")
+        # if SHOW_SEQUENCE and seq:
+        #     print("\n-- Sequence (ms) --")
+        #     for name, ms in seq:
+        #         print(f"{name:>50s} : {ms:9.3f}")
 
         if cnt:
             print("\n-- Summary by Ops --")
@@ -527,7 +469,6 @@ def print_report():
                 )
 
             # Top-K by Avg(ms) with Ratio & Cum(%)
-            TOPK = 7
             avg_map = {ops: sum_ns[ops] / cnt[ops] / 1e6 for ops in cnt}
             sorted_by_avg = sorted(avg_map.items(), key=lambda x: x[1], reverse=True)
             total_avg_sum = sum(v for _, v in sorted_by_avg)
@@ -557,15 +498,18 @@ def print_report():
         #     for i, raw_record in enumerate(ops_raw_records):
         #         record = _generate_record(raw_record)
         #         _print_ops_breakdown(record,i)
-        sys.stdout = original_stdout
+    
+
+
 
 # ======== Setup / Main ========
 if __name__ == "__main__":
     if( args := sys.argv[1:]): 
-        PROFILE_OPS_REPORT = args[0] # Get first argument as report file name
+        BINARY_PATH = args[0]  # Get first argument as target binary
+        PROFILE_OPS_REPORT_PATH = args[1] # Get Second argument as report file name
 
     # --- Attach USDT ---
-    usdt = USDT(path=binary_path)
+    usdt = USDT(path=BINARY_PATH)
     usdt.enable_probe_or_bail("text_gen:ops_start", "trace_ops_start")
     usdt.enable_probe_or_bail("text_gen:ops_check", "trace_ops_check")
 
@@ -591,21 +535,18 @@ if __name__ == "__main__":
 
     # SIGINT 핸들러: Ctrl+C 시 print_report 호출 후 정상 종료
     def signal_handler(sig, frame):
-        print_report()
+        common.print_report(PROFILE_OPS_REPORT_PATH, _print_report)
         sys.stdout.flush()  # 버퍼 플러시
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
     
-    # # Exit hooks
-    # atexit.register(print_report)
 
     # Start tracing
     print("Tracing USDT probes and IO intervals... Ctrl-C to stop.")
     try:
         while True:
             # Poll both: perf (ops events) and ring (I/O intervals)
-            b.ring_buffer_poll(timeout=0)
-            b.ring_buffer_poll(timeout=0)
+            b.ring_buffer_poll(timeout=1)
     except KeyboardInterrupt:
         pass

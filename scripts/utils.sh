@@ -225,3 +225,63 @@ create_symlink_or_fail() {
   ln -sf "$src" "$dst"
 }
 
+# =========================================================================== #
+# 5. Common Helpers                                                           #
+# =========================================================================== #
+
+# Function to parse JSON and extract prompt data
+parse_json_file() {
+    local json_file="$1"
+    
+    log "Detected JSON format. Processing..." >&2
+    
+    # Check if Python3 is available
+    if ! command -v python3 >/dev/null 2>&1; then
+        error "Python3 is required for JSON parsing but not installed. Please install Python3: sudo apt-get install python3"
+    fi
+    
+    # Check if parser script exists
+    local parser_script="./tools/prompt/parse_json_prompt.py"
+    if [[ ! -f "$parser_script" ]]; then
+        error "JSON parser script not found: $parser_script. Please ensure the script exists in the scripts directory."
+    fi
+    
+    # Run the Python parser
+    local parse_result
+    parse_result=$(python3 "$parser_script" "$json_file")
+    local parse_status=$?
+    
+    if [[ $parse_status -ne 0 ]]; then
+        error "Failed to parse JSON file:\n$parse_result"
+    fi
+    
+    echo "$parse_result"
+}
+
+
+run_bpf() {
+    local bpf_python_path=$1
+    local bpf_target_bin_path=$2
+    local bpf_log_filename=$3
+
+    log "Starting BPF profiler in background... (PID: $$)"
+    # Run the BPF profiling script with sudo, arguments: target binary path(arg1) and log filename(arg2)
+    sudo python3 "$bpf_python_path" "$bpf_target_bin_path" "$bpf_log_filename"
+}
+
+cleanup_bpf() {
+    local bpf_python_path=$1
+    local bg_pid=$2
+    log "Cleaning up BPF profiler..."
+    
+    # kill -0 PID: Check if process exists to avoid error messages
+    if [[ -n "$bg_pid" ]] && kill -0 $bg_pid 2>/dev/null; then
+        log "Stopping bpf profiler with run_task_bpf (PID: $bg_pid)..."
+        sudo pkill -INT -f "python3 $bpf_python_path"
+        wait $bg_pid 2>/dev/null 
+        log "BPF profiler has been successfully stopped."
+    else
+        log "No running background process found or already terminated."
+    fi
+}
+

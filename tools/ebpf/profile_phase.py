@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 from bcc import BPF, USDT
 import atexit, signal, sys, re, os
+import common
 
-
-# binary_path = "bin/text_generator_main"
-binary_path = "bin/text_generator_main_mmap"
-
-script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # ======== Config ========
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BINARY_PATH = "bin/text_generator_main"
+
 SHOW_SEQUENCE = False  # 시퀀스 테이블이 필요할 때만 True
+TOPK = 7            # 시퀀스 테이블 최대 항목 수
+PROFILE_PHASE_REPORT_PATH = 'bpf_phase_profile.log' # default report file name
 
 # ======== eBPF text ========
 # Load EBPF code from external file
-ebpf_path = os.path.join(script_dir, "bpfc_profile_phase.c")
+ebpf_path = os.path.join(SCRIPT_DIR, "bpfc_profile_phase.c")
 with open(ebpf_path, "r") as f:
     BPF_TEXT = f.read()
 
@@ -679,7 +680,7 @@ def _print_phase_breakdown(rec: PhaseRecord):
     print("")
 
 
-def print_report():
+def _print_report():
     print("\n===== Phase Report (start–stop) =====")
 
     if SHOW_SEQUENCE and seq:
@@ -708,7 +709,6 @@ def print_report():
             )
 
         # Top-K by Avg(ms) with Ratio & Cum(%)
-        TOPK = 7
         avg_map = {phase: sum_ns[phase] / cnt[phase] / 1e6 for phase in cnt}
         sorted_by_avg = sorted(avg_map.items(), key=lambda x: x[1], reverse=True)
         total_avg_sum = sum(v for _, v in sorted_by_avg)
@@ -741,9 +741,12 @@ def print_report():
 
 # ======== Setup / Main ========
 if __name__ == "__main__":
+    if( args := sys.argv[1:]): 
+        BINARY_PATH = args[0]  # Get first argument as target binary
+        PROFILE_PHASE_REPORT_PATH = args[1] # Get Second argument as report file name
 
     # --- Attach USDT ---
-    usdt = USDT(path=binary_path)
+    usdt = USDT(path=BINARY_PATH)
     usdt.enable_probe_or_bail("text_gen:phase_start", "trace_phase_start")
     usdt.enable_probe_or_bail("text_gen:phase_end", "trace_phase_end")
 
@@ -767,8 +770,14 @@ if __name__ == "__main__":
     b["events"].open_perf_buffer(on_phase_event)
     b["intervals"].open_ring_buffer(on_interval_event)
 
-    # Exit hooks
-    atexit.register(print_report)
+    # SIGINT 핸들러: Ctrl+C 시 print_report 호출 후 정상 종료
+    def signal_handler(sig, frame):
+        common.print_report(PROFILE_PHASE_REPORT_PATH, _print_report)
+        sys.stdout.flush()  # 버퍼 플러시
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    
 
     # Start tracing
     print("Tracing USDT probes and IO intervals... Ctrl-C to stop.")
@@ -776,6 +785,6 @@ if __name__ == "__main__":
         while True:
             # Poll both: perf (phase events) and ring (I/O intervals)
             b.perf_buffer_poll(timeout=50)
-            b.ring_buffer_poll(timeout=0)
+            b.ring_buffer_poll(timeout=1)
     except KeyboardInterrupt:
         pass

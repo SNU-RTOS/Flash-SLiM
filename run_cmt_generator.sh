@@ -64,6 +64,8 @@ CORE_LIST="all"        # Default core list for taskset
 NUM_THREADS=1          # Default number of threads
 PROMPT_FILE="${PROMPT_PATH}/sample_prompt_8_1.json" # Default prompt file
 
+
+
 # --- Logging Settings ---
 # Base directory for logs. The final path will be e.g. <LOG_DIR_BASE>/<model_target_mem>
 LOG_DIR_BASE="benchmark/llm_infer_results"
@@ -164,69 +166,20 @@ done
 # 4. Core Functions                                                           #
 # =========================================================================== #
 
-run_bpf_task() {
-    local bpf_log_filename=$1
-    log "Starting BPF profiler in background... (PID: $$)"
-    sudo python3 ./tools/ebpf/profile_ops.py $bpf_log_filename
-}
-
-cleanup_bpf() {
-    local bg_pid=$1
-    log "Cleaning up BPF profiler..."
-    
-    # kill -0 PID: Check if process exists to avoid error messages
-    if [[ -n "$bg_pid" ]] && kill -0 $bg_pid 2>/dev/null; then
-        log "Stopping bpf profiler with run_task_bpf (PID: $bg_pid)..."
-        sudo pkill -INT -f "python3 ./tools/ebpf/profile_ops.py"
-        wait $bg_pid 2>/dev/null 
-        log "BPF profiler has been successfully stopped."
-    else
-        log "No running background process found or already terminated."
-    fi
-}
-
-# Function to parse JSON and extract prompt data
-parse_json_file() {
-    local json_file="$1"
-    
-    log "Detected JSON format. Processing..." >&2
-    
-    # Check if Python3 is available
-    if ! command -v python3 >/dev/null 2>&1; then
-        error "Python3 is required for JSON parsing but not installed. Please install Python3: sudo apt-get install python3"
-    fi
-    
-    # Check if parser script exists
-    local parser_script="./tools/prompt/parse_json_prompt.py"
-    if [[ ! -f "$parser_script" ]]; then
-        error "JSON parser script not found: $parser_script. Please ensure the script exists in the scripts directory."
-    fi
-    
-    # Run the Python parser
-    local parse_result
-    parse_result=$(python3 "$parser_script" "$json_file")
-    local parse_status=$?
-    
-    if [[ $parse_status -ne 0 ]]; then
-        error "Failed to parse JSON file:\n$parse_result"
-    fi
-    
-    echo "$parse_result"
-}
 
 # Function to run a single prompt
-run_single_prompt() {
+run_with_single_prompt() {
     local TOKENS="$1"
     local PROMPT="$2"  
-    local LOG_FILE="$3"
+    local LOG_FILE_PATH="$3"
     local TEMPERATURE="$4"
     local TOP_K="$5"
     local TOP_P="$6"
     local REPETITION_PENALTY="$7"
     local ENABLE_REPETITION_PENALTY="$8"
-    local CSV_FILE="${LOG_FILE%.log}.csv"
-    # local BPF_LOG="${LOG_FILE%.log}_bpf.log"
-    local BPF_LOG="bpf_profile_ops_results_${NUM_THREADS}threads.log"
+    local CSV_LOG_FILE_PATH="${LOG_FILE_PATH%.log}.csv"
+    local BPF_OPS_PYTHON_PATH="./tools/ebpf/profile_ops.py"
+    local BPF_LOG_FILE_PATH="bpf_profile_ops_results_${NUM_THREADS}threads_prefill_${TOKENS}.log"
 
     banner "LLM inference start (${TARGET^^})"
     log "Model                           : ${MODEL_NAME}"
@@ -241,9 +194,10 @@ run_single_prompt() {
     log "Enable rep. penalty             : ${ENABLE_REPETITION_PENALTY}"
     log "Target Processor                : ${TARGET^^}"
     if [[ "$LOG_ENABLED" == "true" ]]; then
-        log "Log file                        : ${LOG_FILE}"
-        log "Op-level profiling csv results  : ${CSV_FILE}"
-        log "BPF profiling log               : ${BPF_LOG}"
+        log "Log file                        : ${LOG_FILE_PATH}"
+        log "Op-level profiling csv results  : ${CSV_LOG_FILE_PATH}"
+        log "BPF profiling log               : ${BPF_LOG_FILE_PATH}"
+        log "BPF profiling script            : ${BPF_OPS_PYTHON_PATH}"
     fi
 
     clear_caches
@@ -264,7 +218,7 @@ run_single_prompt() {
             --top_k "${TOP_K}"
             --top_p "${TOP_P}"
             --repetition_penalty "${REPETITION_PENALTY}"
-            --csv_profile_output_path "$CSV_FILE"
+            --csv_profile_output_path "$CSV_LOG_FILE_PATH"
             --model_dump_file_path "${MODEL_DIR}/${MODEL_NAME}_dump.log"
             --op_tensor_byte_stats
             --dump_tensor_details
@@ -300,8 +254,8 @@ run_single_prompt() {
 
     # Start BPF profiler in the background with proper session management
     banner "--- BPF PROFILER START ---"
-    run_bpf_task "$BPF_LOG" &
-    BG_PID=$! # Get background process PID (run_bpf_task)
+    run_bpf "$BPF_OPS_PYTHON_PATH" "$BIN" "$BPF_LOG_FILE_PATH" &
+    BG_PID=$! # Get background process PID (run_bpf)
     sleep 3 # Give some time for BPF to initialize
 
     banner "--- C++ Binary Execution START ---"
@@ -310,11 +264,11 @@ run_single_prompt() {
     banner "--- C++ Binary Execution END ---"
 
     banner "--- BPF PROFILER END ---"
-    cleanup_bpf "$BG_PID"
+    cleanup_bpf "$BPF_OPS_PYTHON_PATH" "$BG_PID"
+    log "BPF profiling log saved to ${BPF_LOG_FILE_PATH}"
 
     if [[ "$LOG_ENABLED" == "true" ]]; then
-        log "Log saved to ${LOG_FILE}"
-        log "BPF profiling log saved to ${BPF_LOG}"
+        log "Log saved to ${LOG_FILE_PATH}"
     fi
     
     # Generate analysis report
@@ -388,7 +342,7 @@ main() {
             log_file="${log_dir}/run_${current_tokens}_${prompt_index_display}_${timestamp}.log"
 
             log "Executing LLM Inference"
-            execute_with_log "$log_file" run_single_prompt "$current_tokens" "$current_prompt" "$log_file" \
+            execute_with_log "$log_file" run_with_single_prompt "$current_tokens" "$current_prompt" "$log_file" \
                 "$current_temperature" "$current_top_k" "$current_top_p" \
                 "$current_repetition_penalty" "$current_enable_repetition_penalty" 
                 
