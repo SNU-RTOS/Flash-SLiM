@@ -2,6 +2,7 @@
   "metadata": {
     "version": "1.0",
     "max_aligned_size": 395542528,
+    "weight_chunk_buffer_size": 420749312,
     "model": "/home/ghpark/workspace/research/Flash-SLiM/models/Llama3.2-3B/llama3.2_q8_ekv1024.tflite",
     "chunk_count_by_mode": {
       "DECODE": 141,

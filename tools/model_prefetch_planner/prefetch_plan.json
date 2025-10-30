@@ -2,6 +2,7 @@
   "metadata": {
     "version": "1.0",
     "max_aligned_size": 395542528,
+    "weight_chunk_buffer_size": 420749312,
     "model": "/home/ghpark/workspace/research/Flash-SLiM/models/Llama3.2-3B/llama3.2_q8_ekv1024.tflite",
     "chunk_count_by_mode": {
       "DECODE": 141,
@@ -11,24 +12,10 @@
       "DECODE": 3223977984,
       "PREFILL": 2743214080
     },
-    "weight_chunk_buffer_size": 420749312,
     "prefetch_plan_version": "1.0"
   },
-  "prefetch_plan": {
+  "weight_chunks": {
     "PREFILL": [
-      {
-        "chunk_index": 0,
-        "origin_offset": 3223403520,
-        "origin_size": 15790080,
-        "aligned_offset": 3223400448,
-        "aligned_size": 15794176,
-        "offset_adjust": 3200,
-        "weights_id": 198,
-        "prefetch_mode": 0,
-        "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 42.543,
-        "io_order": 0
-      },
       {
         "chunk_index": 1,
         "origin_offset": 15790080,
@@ -39,8 +26,8 @@
         "weights_id": 197,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.502,
-        "io_order": 1
+        "avg_compute_time": null,
+        "io_order": 0
       },
       {
         "chunk_index": 2,
@@ -52,8 +39,8 @@
         "weights_id": 196,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.889,
-        "io_order": 2
+        "avg_compute_time": null,
+        "io_order": 1
       },
       {
         "chunk_index": 3,
@@ -65,8 +52,8 @@
         "weights_id": 195,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.552,
-        "io_order": 3
+        "avg_compute_time": null,
+        "io_order": 2
       },
       {
         "chunk_index": 4,
@@ -78,8 +65,8 @@
         "weights_id": 194,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.103,
-        "io_order": 4
+        "avg_compute_time": null,
+        "io_order": 3
       },
       {
         "chunk_index": 5,
@@ -91,8 +78,8 @@
         "weights_id": 193,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.877,
-        "io_order": 5
+        "avg_compute_time": null,
+        "io_order": 4
       },
       {
         "chunk_index": 6,
@@ -104,8 +91,8 @@
         "weights_id": 192,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.431,
-        "io_order": 6
+        "avg_compute_time": null,
+        "io_order": 5
       },
       {
         "chunk_index": 7,
@@ -117,8 +104,8 @@
         "weights_id": 191,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.065,
-        "io_order": 7
+        "avg_compute_time": null,
+        "io_order": 6
       },
       {
         "chunk_index": 8,
@@ -130,8 +117,8 @@
         "weights_id": 190,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.666,
-        "io_order": 8
+        "avg_compute_time": null,
+        "io_order": 7
       },
       {
         "chunk_index": 9,
@@ -143,8 +130,8 @@
         "weights_id": 189,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.83,
-        "io_order": 9
+        "avg_compute_time": null,
+        "io_order": 8
       },
       {
         "chunk_index": 10,
@@ -156,8 +143,8 @@
         "weights_id": 188,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.74,
-        "io_order": 10
+        "avg_compute_time": null,
+        "io_order": 9
       },
       {
         "chunk_index": 11,
@@ -169,8 +156,8 @@
         "weights_id": 187,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.435,
-        "io_order": 11
+        "avg_compute_time": null,
+        "io_order": 10
       },
       {
         "chunk_index": 12,
@@ -182,8 +169,8 @@
         "weights_id": 186,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.852,
-        "io_order": 12
+        "avg_compute_time": null,
+        "io_order": 11
       },
       {
         "chunk_index": 13,
@@ -195,8 +182,8 @@
         "weights_id": 185,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.567,
-        "io_order": 13
+        "avg_compute_time": null,
+        "io_order": 12
       },
       {
         "chunk_index": 14,
@@ -208,8 +195,8 @@
         "weights_id": 184,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.786,
-        "io_order": 14
+        "avg_compute_time": null,
+        "io_order": 13
       },
       {
         "chunk_index": 15,
@@ -221,8 +208,8 @@
         "weights_id": 183,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.663,
-        "io_order": 15
+        "avg_compute_time": null,
+        "io_order": 14
       },
       {
         "chunk_index": 16,
@@ -234,8 +221,8 @@
         "weights_id": 182,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.488,
-        "io_order": 16
+        "avg_compute_time": null,
+        "io_order": 15
       },
       {
         "chunk_index": 17,
@@ -247,8 +234,8 @@
         "weights_id": 181,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.911,
-        "io_order": 17
+        "avg_compute_time": null,
+        "io_order": 16
       },
       {
         "chunk_index": 18,
@@ -260,8 +247,8 @@
         "weights_id": 180,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.637,
-        "io_order": 18
+        "avg_compute_time": null,
+        "io_order": 17
       },
       {
         "chunk_index": 19,
@@ -273,8 +260,8 @@
         "weights_id": 179,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.847,
-        "io_order": 19
+        "avg_compute_time": null,
+        "io_order": 18
       },
       {
         "chunk_index": 20,
@@ -286,8 +273,8 @@
         "weights_id": 178,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.678,
-        "io_order": 20
+        "avg_compute_time": null,
+        "io_order": 19
       },
       {
         "chunk_index": 21,
@@ -299,8 +286,8 @@
         "weights_id": 177,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.449,
-        "io_order": 21
+        "avg_compute_time": null,
+        "io_order": 20
       },
       {
         "chunk_index": 22,
@@ -312,8 +299,8 @@
         "weights_id": 176,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.884,
-        "io_order": 22
+        "avg_compute_time": null,
+        "io_order": 21
       },
       {
         "chunk_index": 23,
@@ -325,8 +312,8 @@
         "weights_id": 175,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.584,
-        "io_order": 23
+        "avg_compute_time": null,
+        "io_order": 22
       },
       {
         "chunk_index": 24,
@@ -338,8 +325,8 @@
         "weights_id": 174,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.803,
-        "io_order": 24
+        "avg_compute_time": null,
+        "io_order": 23
       },
       {
         "chunk_index": 25,
@@ -351,8 +338,8 @@
         "weights_id": 173,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.439,
-        "io_order": 25
+        "avg_compute_time": null,
+        "io_order": 24
       },
       {
         "chunk_index": 26,
@@ -364,8 +351,8 @@
         "weights_id": 172,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.365,
-        "io_order": 26
+        "avg_compute_time": null,
+        "io_order": 25
       },
       {
         "chunk_index": 27,
@@ -377,8 +364,8 @@
         "weights_id": 171,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.789,
-        "io_order": 27
+        "avg_compute_time": null,
+        "io_order": 26
       },
       {
         "chunk_index": 28,
@@ -390,8 +377,8 @@
         "weights_id": 170,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.569,
-        "io_order": 28
+        "avg_compute_time": null,
+        "io_order": 27
       },
       {
         "chunk_index": 29,
@@ -403,8 +390,8 @@
         "weights_id": 169,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.016,
-        "io_order": 29
+        "avg_compute_time": null,
+        "io_order": 28
       },
       {
         "chunk_index": 30,
@@ -416,8 +403,8 @@
         "weights_id": 168,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.648,
-        "io_order": 30
+        "avg_compute_time": null,
+        "io_order": 29
       },
       {
         "chunk_index": 31,
@@ -429,8 +416,8 @@
         "weights_id": 167,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.492,
-        "io_order": 31
+        "avg_compute_time": null,
+        "io_order": 30
       },
       {
         "chunk_index": 32,
@@ -442,8 +429,8 @@
         "weights_id": 166,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.929,
-        "io_order": 32
+        "avg_compute_time": null,
+        "io_order": 31
       },
       {
         "chunk_index": 33,
@@ -455,8 +442,8 @@
         "weights_id": 165,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.511,
-        "io_order": 33
+        "avg_compute_time": null,
+        "io_order": 32
       },
       {
         "chunk_index": 34,
@@ -468,8 +455,8 @@
         "weights_id": 164,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.671,
-        "io_order": 34
+        "avg_compute_time": null,
+        "io_order": 33
       },
       {
         "chunk_index": 35,
@@ -481,8 +468,8 @@
         "weights_id": 163,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.629,
-        "io_order": 35
+        "avg_compute_time": null,
+        "io_order": 34
       },
       {
         "chunk_index": 36,
@@ -494,8 +481,8 @@
         "weights_id": 162,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.334,
-        "io_order": 36
+        "avg_compute_time": null,
+        "io_order": 35
       },
       {
         "chunk_index": 37,
@@ -507,8 +494,8 @@
         "weights_id": 161,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.733,
-        "io_order": 37
+        "avg_compute_time": null,
+        "io_order": 36
       },
       {
         "chunk_index": 38,
@@ -520,8 +507,8 @@
         "weights_id": 160,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.567,
-        "io_order": 38
+        "avg_compute_time": null,
+        "io_order": 37
       },
       {
         "chunk_index": 39,
@@ -533,8 +520,8 @@
         "weights_id": 159,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.749,
-        "io_order": 39
+        "avg_compute_time": null,
+        "io_order": 38
       },
       {
         "chunk_index": 40,
@@ -546,8 +533,8 @@
         "weights_id": 158,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.453,
-        "io_order": 40
+        "avg_compute_time": null,
+        "io_order": 39
       },
       {
         "chunk_index": 41,
@@ -559,8 +546,8 @@
         "weights_id": 157,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.404,
-        "io_order": 41
+        "avg_compute_time": null,
+        "io_order": 40
       },
       {
         "chunk_index": 42,
@@ -572,8 +559,8 @@
         "weights_id": 156,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.967,
-        "io_order": 42
+        "avg_compute_time": null,
+        "io_order": 41
       },
       {
         "chunk_index": 43,
@@ -585,8 +572,8 @@
         "weights_id": 155,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.663,
-        "io_order": 43
+        "avg_compute_time": null,
+        "io_order": 42
       },
       {
         "chunk_index": 44,
@@ -598,8 +585,8 @@
         "weights_id": 154,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.962,
-        "io_order": 44
+        "avg_compute_time": null,
+        "io_order": 43
       },
       {
         "chunk_index": 45,
@@ -611,8 +598,8 @@
         "weights_id": 153,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 42.045,
-        "io_order": 45
+        "avg_compute_time": null,
+        "io_order": 44
       },
       {
         "chunk_index": 46,
@@ -624,8 +611,8 @@
         "weights_id": 152,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.668,
-        "io_order": 46
+        "avg_compute_time": null,
+        "io_order": 45
       },
       {
         "chunk_index": 47,
@@ -637,8 +624,8 @@
         "weights_id": 151,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.704,
-        "io_order": 47
+        "avg_compute_time": null,
+        "io_order": 46
       },
       {
         "chunk_index": 48,
@@ -650,8 +637,8 @@
         "weights_id": 150,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.069,
-        "io_order": 48
+        "avg_compute_time": null,
+        "io_order": 47
       },
       {
         "chunk_index": 49,
@@ -663,8 +650,8 @@
         "weights_id": 149,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.249,
-        "io_order": 49
+        "avg_compute_time": null,
+        "io_order": 48
       },
       {
         "chunk_index": 50,
@@ -676,8 +663,8 @@
         "weights_id": 148,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.653,
-        "io_order": 50
+        "avg_compute_time": null,
+        "io_order": 49
       },
       {
         "chunk_index": 51,
@@ -689,8 +676,8 @@
         "weights_id": 147,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.366,
-        "io_order": 51
+        "avg_compute_time": null,
+        "io_order": 50
       },
       {
         "chunk_index": 52,
@@ -702,8 +689,8 @@
         "weights_id": 146,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.701,
-        "io_order": 52
+        "avg_compute_time": null,
+        "io_order": 51
       },
       {
         "chunk_index": 53,
@@ -715,8 +702,8 @@
         "weights_id": 145,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.47,
-        "io_order": 53
+        "avg_compute_time": null,
+        "io_order": 52
       },
       {
         "chunk_index": 54,
@@ -728,8 +715,8 @@
         "weights_id": 144,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.692,
-        "io_order": 54
+        "avg_compute_time": null,
+        "io_order": 53
       },
       {
         "chunk_index": 55,
@@ -741,8 +728,8 @@
         "weights_id": 143,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.575,
-        "io_order": 55
+        "avg_compute_time": null,
+        "io_order": 54
       },
       {
         "chunk_index": 56,
@@ -754,8 +741,8 @@
         "weights_id": 142,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.519,
-        "io_order": 56
+        "avg_compute_time": null,
+        "io_order": 55
       },
       {
         "chunk_index": 57,
@@ -767,8 +754,8 @@
         "weights_id": 141,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.844,
-        "io_order": 57
+        "avg_compute_time": null,
+        "io_order": 56
       },
       {
         "chunk_index": 58,
@@ -780,8 +767,8 @@
         "weights_id": 140,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.597,
-        "io_order": 58
+        "avg_compute_time": null,
+        "io_order": 57
       },
       {
         "chunk_index": 59,
@@ -793,8 +780,8 @@
         "weights_id": 139,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.709,
-        "io_order": 59
+        "avg_compute_time": null,
+        "io_order": 58
       },
       {
         "chunk_index": 60,
@@ -806,8 +793,8 @@
         "weights_id": 138,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.429,
-        "io_order": 60
+        "avg_compute_time": null,
+        "io_order": 59
       },
       {
         "chunk_index": 61,
@@ -819,8 +806,8 @@
         "weights_id": 137,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.416,
-        "io_order": 61
+        "avg_compute_time": null,
+        "io_order": 60
       },
       {
         "chunk_index": 62,
@@ -832,8 +819,8 @@
         "weights_id": 136,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.984,
-        "io_order": 62
+        "avg_compute_time": null,
+        "io_order": 61
       },
       {
         "chunk_index": 63,
@@ -845,8 +832,8 @@
         "weights_id": 135,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.618,
-        "io_order": 63
+        "avg_compute_time": null,
+        "io_order": 62
       },
       {
         "chunk_index": 64,
@@ -858,8 +845,8 @@
         "weights_id": 134,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.511,
-        "io_order": 64
+        "avg_compute_time": null,
+        "io_order": 63
       },
       {
         "chunk_index": 65,
@@ -871,8 +858,8 @@
         "weights_id": 133,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.561,
-        "io_order": 65
+        "avg_compute_time": null,
+        "io_order": 64
       },
       {
         "chunk_index": 66,
@@ -884,8 +871,8 @@
         "weights_id": 132,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.477,
-        "io_order": 66
+        "avg_compute_time": null,
+        "io_order": 65
       },
       {
         "chunk_index": 67,
@@ -897,8 +884,8 @@
         "weights_id": 131,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.993,
-        "io_order": 67
+        "avg_compute_time": null,
+        "io_order": 66
       },
       {
         "chunk_index": 68,
@@ -910,8 +897,8 @@
         "weights_id": 130,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.94,
-        "io_order": 68
+        "avg_compute_time": null,
+        "io_order": 67
       },
       {
         "chunk_index": 69,
@@ -923,8 +910,8 @@
         "weights_id": 129,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.415,
-        "io_order": 69
+        "avg_compute_time": null,
+        "io_order": 68
       },
       {
         "chunk_index": 70,
@@ -936,8 +923,8 @@
         "weights_id": 128,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.576,
-        "io_order": 70
+        "avg_compute_time": null,
+        "io_order": 69
       },
       {
         "chunk_index": 71,
@@ -949,8 +936,8 @@
         "weights_id": 127,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.425,
-        "io_order": 71
+        "avg_compute_time": null,
+        "io_order": 70
       },
       {
         "chunk_index": 72,
@@ -962,8 +949,8 @@
         "weights_id": 126,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.079,
-        "io_order": 72
+        "avg_compute_time": null,
+        "io_order": 71
       },
       {
         "chunk_index": 73,
@@ -975,8 +962,8 @@
         "weights_id": 125,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.63,
-        "io_order": 73
+        "avg_compute_time": null,
+        "io_order": 72
       },
       {
         "chunk_index": 74,
@@ -988,8 +975,8 @@
         "weights_id": 124,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.978,
-        "io_order": 74
+        "avg_compute_time": null,
+        "io_order": 73
       },
       {
         "chunk_index": 75,
@@ -1001,8 +988,8 @@
         "weights_id": 123,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.657,
-        "io_order": 75
+        "avg_compute_time": null,
+        "io_order": 74
       },
       {
         "chunk_index": 76,
@@ -1014,8 +1001,8 @@
         "weights_id": 122,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.411,
-        "io_order": 76
+        "avg_compute_time": null,
+        "io_order": 75
       },
       {
         "chunk_index": 77,
@@ -1027,8 +1014,8 @@
         "weights_id": 121,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.731,
-        "io_order": 77
+        "avg_compute_time": null,
+        "io_order": 76
       },
       {
         "chunk_index": 78,
@@ -1040,8 +1027,8 @@
         "weights_id": 120,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.567,
-        "io_order": 78
+        "avg_compute_time": null,
+        "io_order": 77
       },
       {
         "chunk_index": 79,
@@ -1053,8 +1040,8 @@
         "weights_id": 119,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.841,
-        "io_order": 79
+        "avg_compute_time": null,
+        "io_order": 78
       },
       {
         "chunk_index": 80,
@@ -1066,8 +1053,8 @@
         "weights_id": 118,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.314,
-        "io_order": 80
+        "avg_compute_time": null,
+        "io_order": 79
       },
       {
         "chunk_index": 81,
@@ -1079,8 +1066,8 @@
         "weights_id": 117,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.404,
-        "io_order": 81
+        "avg_compute_time": null,
+        "io_order": 80
       },
       {
         "chunk_index": 82,
@@ -1092,8 +1079,8 @@
         "weights_id": 116,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.969,
-        "io_order": 82
+        "avg_compute_time": null,
+        "io_order": 81
       },
       {
         "chunk_index": 83,
@@ -1105,8 +1092,8 @@
         "weights_id": 115,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.461,
-        "io_order": 83
+        "avg_compute_time": null,
+        "io_order": 82
       },
       {
         "chunk_index": 84,
@@ -1118,8 +1105,8 @@
         "weights_id": 114,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.689,
-        "io_order": 84
+        "avg_compute_time": null,
+        "io_order": 83
       },
       {
         "chunk_index": 85,
@@ -1131,8 +1118,8 @@
         "weights_id": 113,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.626,
-        "io_order": 85
+        "avg_compute_time": null,
+        "io_order": 84
       },
       {
         "chunk_index": 86,
@@ -1144,8 +1131,8 @@
         "weights_id": 112,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.476,
-        "io_order": 86
+        "avg_compute_time": null,
+        "io_order": 85
       },
       {
         "chunk_index": 87,
@@ -1157,8 +1144,8 @@
         "weights_id": 111,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.88,
-        "io_order": 87
+        "avg_compute_time": null,
+        "io_order": 86
       },
       {
         "chunk_index": 88,
@@ -1170,8 +1157,8 @@
         "weights_id": 110,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.6,
-        "io_order": 88
+        "avg_compute_time": null,
+        "io_order": 87
       },
       {
         "chunk_index": 89,
@@ -1183,8 +1170,8 @@
         "weights_id": 109,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.923,
-        "io_order": 89
+        "avg_compute_time": null,
+        "io_order": 88
       },
       {
         "chunk_index": 90,
@@ -1196,8 +1183,8 @@
         "weights_id": 108,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.709,
-        "io_order": 90
+        "avg_compute_time": null,
+        "io_order": 89
       },
       {
         "chunk_index": 91,
@@ -1209,8 +1196,8 @@
         "weights_id": 107,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.425,
-        "io_order": 91
+        "avg_compute_time": null,
+        "io_order": 90
       },
       {
         "chunk_index": 92,
@@ -1222,8 +1209,8 @@
         "weights_id": 106,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.787,
-        "io_order": 92
+        "avg_compute_time": null,
+        "io_order": 91
       },
       {
         "chunk_index": 93,
@@ -1235,8 +1222,8 @@
         "weights_id": 105,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.563,
-        "io_order": 93
+        "avg_compute_time": null,
+        "io_order": 92
       },
       {
         "chunk_index": 94,
@@ -1248,8 +1235,8 @@
         "weights_id": 104,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.662,
-        "io_order": 94
+        "avg_compute_time": null,
+        "io_order": 93
       },
       {
         "chunk_index": 95,
@@ -1261,8 +1248,8 @@
         "weights_id": 103,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.529,
-        "io_order": 95
+        "avg_compute_time": null,
+        "io_order": 94
       },
       {
         "chunk_index": 96,
@@ -1274,8 +1261,8 @@
         "weights_id": 102,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.39,
-        "io_order": 96
+        "avg_compute_time": null,
+        "io_order": 95
       },
       {
         "chunk_index": 97,
@@ -1287,8 +1274,8 @@
         "weights_id": 101,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.85,
-        "io_order": 97
+        "avg_compute_time": null,
+        "io_order": 96
       },
       {
         "chunk_index": 98,
@@ -1300,8 +1287,8 @@
         "weights_id": 100,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.501,
-        "io_order": 98
+        "avg_compute_time": null,
+        "io_order": 97
       },
       {
         "chunk_index": 99,
@@ -1313,8 +1300,8 @@
         "weights_id": 99,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.643,
-        "io_order": 99
+        "avg_compute_time": null,
+        "io_order": 98
       },
       {
         "chunk_index": 100,
@@ -1326,8 +1313,8 @@
         "weights_id": 98,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.501,
-        "io_order": 100
+        "avg_compute_time": null,
+        "io_order": 99
       },
       {
         "chunk_index": 101,
@@ -1339,8 +1326,8 @@
         "weights_id": 97,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.394,
-        "io_order": 101
+        "avg_compute_time": null,
+        "io_order": 100
       },
       {
         "chunk_index": 102,
@@ -1352,8 +1339,8 @@
         "weights_id": 96,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.871,
-        "io_order": 102
+        "avg_compute_time": null,
+        "io_order": 101
       },
       {
         "chunk_index": 103,
@@ -1365,8 +1352,8 @@
         "weights_id": 95,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.787,
-        "io_order": 103
+        "avg_compute_time": null,
+        "io_order": 102
       },
       {
         "chunk_index": 104,
@@ -1378,8 +1365,8 @@
         "weights_id": 94,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.644,
-        "io_order": 104
+        "avg_compute_time": null,
+        "io_order": 103
       },
       {
         "chunk_index": 105,
@@ -1391,8 +1378,8 @@
         "weights_id": 93,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.95,
-        "io_order": 105
+        "avg_compute_time": null,
+        "io_order": 104
       },
       {
         "chunk_index": 106,
@@ -1404,8 +1391,8 @@
         "weights_id": 92,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.715,
-        "io_order": 106
+        "avg_compute_time": null,
+        "io_order": 105
       },
       {
         "chunk_index": 107,
@@ -1417,8 +1404,8 @@
         "weights_id": 91,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.301,
-        "io_order": 107
+        "avg_compute_time": null,
+        "io_order": 106
       },
       {
         "chunk_index": 108,
@@ -1430,8 +1417,8 @@
         "weights_id": 90,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.676,
-        "io_order": 108
+        "avg_compute_time": null,
+        "io_order": 107
       },
       {
         "chunk_index": 109,
@@ -1443,8 +1430,8 @@
         "weights_id": 89,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.047,
-        "io_order": 109
+        "avg_compute_time": null,
+        "io_order": 108
       },
       {
         "chunk_index": 110,
@@ -1456,8 +1443,8 @@
         "weights_id": 88,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.396,
-        "io_order": 110
+        "avg_compute_time": null,
+        "io_order": 109
       },
       {
         "chunk_index": 111,
@@ -1469,8 +1456,8 @@
         "weights_id": 87,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.44,
-        "io_order": 111
+        "avg_compute_time": null,
+        "io_order": 110
       },
       {
         "chunk_index": 112,
@@ -1482,8 +1469,8 @@
         "weights_id": 86,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.841,
-        "io_order": 112
+        "avg_compute_time": null,
+        "io_order": 111
       },
       {
         "chunk_index": 113,
@@ -1495,8 +1482,8 @@
         "weights_id": 85,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.515,
-        "io_order": 113
+        "avg_compute_time": null,
+        "io_order": 112
       },
       {
         "chunk_index": 114,
@@ -1508,8 +1495,8 @@
         "weights_id": 84,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.642,
-        "io_order": 114
+        "avg_compute_time": null,
+        "io_order": 113
       },
       {
         "chunk_index": 115,
@@ -1521,8 +1508,8 @@
         "weights_id": 83,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.163,
-        "io_order": 115
+        "avg_compute_time": null,
+        "io_order": 114
       },
       {
         "chunk_index": 116,
@@ -1534,8 +1521,8 @@
         "weights_id": 82,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.36,
-        "io_order": 116
+        "avg_compute_time": null,
+        "io_order": 115
       },
       {
         "chunk_index": 117,
@@ -1547,8 +1534,8 @@
         "weights_id": 81,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.732,
-        "io_order": 117
+        "avg_compute_time": null,
+        "io_order": 116
       },
       {
         "chunk_index": 118,
@@ -1560,8 +1547,8 @@
         "weights_id": 80,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.334,
-        "io_order": 118
+        "avg_compute_time": null,
+        "io_order": 117
       },
       {
         "chunk_index": 119,
@@ -1573,8 +1560,8 @@
         "weights_id": 79,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.524,
-        "io_order": 119
+        "avg_compute_time": null,
+        "io_order": 118
       },
       {
         "chunk_index": 120,
@@ -1586,8 +1573,8 @@
         "weights_id": 78,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.22,
-        "io_order": 120
+        "avg_compute_time": null,
+        "io_order": 119
       },
       {
         "chunk_index": 121,
@@ -1599,8 +1586,8 @@
         "weights_id": 77,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.584,
-        "io_order": 121
+        "avg_compute_time": null,
+        "io_order": 120
       },
       {
         "chunk_index": 122,
@@ -1612,8 +1599,8 @@
         "weights_id": 76,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.814,
-        "io_order": 122
+        "avg_compute_time": null,
+        "io_order": 121
       },
       {
         "chunk_index": 123,
@@ -1625,8 +1612,8 @@
         "weights_id": 75,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.608,
-        "io_order": 123
+        "avg_compute_time": null,
+        "io_order": 122
       },
       {
         "chunk_index": 124,
@@ -1638,8 +1625,8 @@
         "weights_id": 74,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.832,
-        "io_order": 124
+        "avg_compute_time": null,
+        "io_order": 123
       },
       {
         "chunk_index": 125,
@@ -1651,8 +1638,8 @@
         "weights_id": 73,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 42.039,
-        "io_order": 125
+        "avg_compute_time": null,
+        "io_order": 124
       },
       {
         "chunk_index": 126,
@@ -1664,8 +1651,8 @@
         "weights_id": 72,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.451,
-        "io_order": 126
+        "avg_compute_time": null,
+        "io_order": 125
       },
       {
         "chunk_index": 127,
@@ -1677,8 +1664,8 @@
         "weights_id": 71,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.783,
-        "io_order": 127
+        "avg_compute_time": null,
+        "io_order": 126
       },
       {
         "chunk_index": 128,
@@ -1690,8 +1677,8 @@
         "weights_id": 70,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.57,
-        "io_order": 128
+        "avg_compute_time": null,
+        "io_order": 127
       },
       {
         "chunk_index": 129,
@@ -1703,8 +1690,8 @@
         "weights_id": 69,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.76,
-        "io_order": 129
+        "avg_compute_time": null,
+        "io_order": 128
       },
       {
         "chunk_index": 130,
@@ -1716,8 +1703,8 @@
         "weights_id": 68,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 41.477,
-        "io_order": 130
+        "avg_compute_time": null,
+        "io_order": 129
       },
       {
         "chunk_index": 131,
@@ -1729,8 +1716,8 @@
         "weights_id": 67,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 9.416,
-        "io_order": 131
+        "avg_compute_time": null,
+        "io_order": 130
       },
       {
         "chunk_index": 132,
@@ -1742,8 +1729,8 @@
         "weights_id": 66,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 24.068,
-        "io_order": 132
+        "avg_compute_time": null,
+        "io_order": 131
       },
       {
         "chunk_index": 133,
@@ -1755,8 +1742,8 @@
         "weights_id": 65,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.548,
-        "io_order": 133
+        "avg_compute_time": null,
+        "io_order": 132
       },
       {
         "chunk_index": 134,
@@ -1768,8 +1755,8 @@
         "weights_id": 64,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 23.618,
-        "io_order": 134
+        "avg_compute_time": null,
+        "io_order": 133
       },
       {
         "chunk_index": 135,
@@ -1781,25 +1768,25 @@
         "weights_id": 63,
         "prefetch_mode": 0,
         "prefetch_mode_str": "PREFILL",
-        "avg_compute_time": 17.122,
+        "avg_compute_time": null,
+        "io_order": 134
+      },
+      {
+        "chunk_index": 0,
+        "origin_offset": 3223403520,
+        "origin_size": 15790080,
+        "aligned_offset": 3223400448,
+        "aligned_size": 15794176,
+        "offset_adjust": 3200,
+        "weights_id": 198,
+        "prefetch_mode": 0,
+        "prefetch_mode_str": "PREFILL",
+        "avg_compute_time": null,
         "io_order": 135
       }
     ],
     "DECODE": [
       {
-        "chunk_index": 0,
-        "origin_offset": 3223403520,
-        "origin_size": 15790080,
-        "aligned_offset": 3223400448,
-        "aligned_size": 15794176,
-        "offset_adjust": 3200,
-        "weights_id": 198,
-        "prefetch_mode": 1,
-        "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.243,
-        "io_order": 136
-      },
-      {
         "chunk_index": 1,
         "origin_offset": 15790080,
         "origin_size": 9474048,
@@ -1809,8 +1796,8 @@
         "weights_id": 197,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.189,
-        "io_order": 137
+        "avg_compute_time": null,
+        "io_order": 136
       },
       {
         "chunk_index": 2,
@@ -1822,8 +1809,8 @@
         "weights_id": 196,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.453,
-        "io_order": 138
+        "avg_compute_time": null,
+        "io_order": 137
       },
       {
         "chunk_index": 3,
@@ -1835,8 +1822,8 @@
         "weights_id": 195,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.325,
-        "io_order": 139
+        "avg_compute_time": null,
+        "io_order": 138
       },
       {
         "chunk_index": 4,
@@ -1848,8 +1835,8 @@
         "weights_id": 194,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.277,
-        "io_order": 140
+        "avg_compute_time": null,
+        "io_order": 139
       },
       {
         "chunk_index": 5,
@@ -1861,8 +1848,8 @@
         "weights_id": 193,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.086,
-        "io_order": 141
+        "avg_compute_time": null,
+        "io_order": 140
       },
       {
         "chunk_index": 6,
@@ -1874,8 +1861,8 @@
         "weights_id": 192,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.155,
-        "io_order": 142
+        "avg_compute_time": null,
+        "io_order": 141
       },
       {
         "chunk_index": 7,
@@ -1887,8 +1874,8 @@
         "weights_id": 191,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.347,
-        "io_order": 143
+        "avg_compute_time": null,
+        "io_order": 142
       },
       {
         "chunk_index": 8,
@@ -1900,8 +1887,8 @@
         "weights_id": 190,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.295,
-        "io_order": 144
+        "avg_compute_time": null,
+        "io_order": 143
       },
       {
         "chunk_index": 9,
@@ -1913,8 +1900,8 @@
         "weights_id": 189,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.276,
-        "io_order": 145
+        "avg_compute_time": null,
+        "io_order": 144
       },
       {
         "chunk_index": 10,
@@ -1926,8 +1913,8 @@
         "weights_id": 188,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.109,
-        "io_order": 146
+        "avg_compute_time": null,
+        "io_order": 145
       },
       {
         "chunk_index": 11,
@@ -1939,8 +1926,8 @@
         "weights_id": 187,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.156,
-        "io_order": 147
+        "avg_compute_time": null,
+        "io_order": 146
       },
       {
         "chunk_index": 12,
@@ -1952,8 +1939,8 @@
         "weights_id": 186,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.347,
-        "io_order": 148
+        "avg_compute_time": null,
+        "io_order": 147
       },
       {
         "chunk_index": 13,
@@ -1965,8 +1952,8 @@
         "weights_id": 185,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.297,
-        "io_order": 149
+        "avg_compute_time": null,
+        "io_order": 148
       },
       {
         "chunk_index": 14,
@@ -1978,8 +1965,8 @@
         "weights_id": 184,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.27,
-        "io_order": 150
+        "avg_compute_time": null,
+        "io_order": 149
       },
       {
         "chunk_index": 15,
@@ -1991,8 +1978,8 @@
         "weights_id": 183,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.058,
-        "io_order": 151
+        "avg_compute_time": null,
+        "io_order": 150
       },
       {
         "chunk_index": 16,
@@ -2004,8 +1991,8 @@
         "weights_id": 182,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.152,
-        "io_order": 152
+        "avg_compute_time": null,
+        "io_order": 151
       },
       {
         "chunk_index": 17,
@@ -2017,8 +2004,8 @@
         "weights_id": 181,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.339,
-        "io_order": 153
+        "avg_compute_time": null,
+        "io_order": 152
       },
       {
         "chunk_index": 18,
@@ -2030,8 +2017,8 @@
         "weights_id": 180,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.3,
-        "io_order": 154
+        "avg_compute_time": null,
+        "io_order": 153
       },
       {
         "chunk_index": 19,
@@ -2043,8 +2030,8 @@
         "weights_id": 179,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.275,
-        "io_order": 155
+        "avg_compute_time": null,
+        "io_order": 154
       },
       {
         "chunk_index": 20,
@@ -2056,8 +2043,8 @@
         "weights_id": 178,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.08,
-        "io_order": 156
+        "avg_compute_time": null,
+        "io_order": 155
       },
       {
         "chunk_index": 21,
@@ -2069,8 +2056,8 @@
         "weights_id": 177,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.158,
-        "io_order": 157
+        "avg_compute_time": null,
+        "io_order": 156
       },
       {
         "chunk_index": 22,
@@ -2082,8 +2069,8 @@
         "weights_id": 176,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.343,
-        "io_order": 158
+        "avg_compute_time": null,
+        "io_order": 157
       },
       {
         "chunk_index": 23,
@@ -2095,8 +2082,8 @@
         "weights_id": 175,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.299,
-        "io_order": 159
+        "avg_compute_time": null,
+        "io_order": 158
       },
       {
         "chunk_index": 24,
@@ -2108,8 +2095,8 @@
         "weights_id": 174,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.259,
-        "io_order": 160
+        "avg_compute_time": null,
+        "io_order": 159
       },
       {
         "chunk_index": 25,
@@ -2121,8 +2108,8 @@
         "weights_id": 173,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.072,
-        "io_order": 161
+        "avg_compute_time": null,
+        "io_order": 160
       },
       {
         "chunk_index": 26,
@@ -2134,8 +2121,8 @@
         "weights_id": 172,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.153,
-        "io_order": 162
+        "avg_compute_time": null,
+        "io_order": 161
       },
       {
         "chunk_index": 27,
@@ -2147,8 +2134,8 @@
         "weights_id": 171,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.344,
-        "io_order": 163
+        "avg_compute_time": null,
+        "io_order": 162
       },
       {
         "chunk_index": 28,
@@ -2160,8 +2147,8 @@
         "weights_id": 170,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.292,
-        "io_order": 164
+        "avg_compute_time": null,
+        "io_order": 163
       },
       {
         "chunk_index": 29,
@@ -2173,8 +2160,8 @@
         "weights_id": 169,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.267,
-        "io_order": 165
+        "avg_compute_time": null,
+        "io_order": 164
       },
       {
         "chunk_index": 30,
@@ -2186,8 +2173,8 @@
         "weights_id": 168,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.087,
-        "io_order": 166
+        "avg_compute_time": null,
+        "io_order": 165
       },
       {
         "chunk_index": 31,
@@ -2199,8 +2186,8 @@
         "weights_id": 167,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.151,
-        "io_order": 167
+        "avg_compute_time": null,
+        "io_order": 166
       },
       {
         "chunk_index": 32,
@@ -2212,8 +2199,8 @@
         "weights_id": 166,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.342,
-        "io_order": 168
+        "avg_compute_time": null,
+        "io_order": 167
       },
       {
         "chunk_index": 33,
@@ -2225,8 +2212,8 @@
         "weights_id": 165,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.301,
-        "io_order": 169
+        "avg_compute_time": null,
+        "io_order": 168
       },
       {
         "chunk_index": 34,
@@ -2238,8 +2225,8 @@
         "weights_id": 164,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.291,
-        "io_order": 170
+        "avg_compute_time": null,
+        "io_order": 169
       },
       {
         "chunk_index": 35,
@@ -2251,8 +2238,8 @@
         "weights_id": 163,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.089,
-        "io_order": 171
+        "avg_compute_time": null,
+        "io_order": 170
       },
       {
         "chunk_index": 36,
@@ -2264,8 +2251,8 @@
         "weights_id": 162,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.148,
-        "io_order": 172
+        "avg_compute_time": null,
+        "io_order": 171
       },
       {
         "chunk_index": 37,
@@ -2277,8 +2264,8 @@
         "weights_id": 161,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.342,
-        "io_order": 173
+        "avg_compute_time": null,
+        "io_order": 172
       },
       {
         "chunk_index": 38,
@@ -2290,8 +2277,8 @@
         "weights_id": 160,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.289,
-        "io_order": 174
+        "avg_compute_time": null,
+        "io_order": 173
       },
       {
         "chunk_index": 39,
@@ -2303,8 +2290,8 @@
         "weights_id": 159,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.276,
-        "io_order": 175
+        "avg_compute_time": null,
+        "io_order": 174
       },
       {
         "chunk_index": 40,
@@ -2316,8 +2303,8 @@
         "weights_id": 158,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.068,
-        "io_order": 176
+        "avg_compute_time": null,
+        "io_order": 175
       },
       {
         "chunk_index": 41,
@@ -2329,8 +2316,8 @@
         "weights_id": 157,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.146,
-        "io_order": 177
+        "avg_compute_time": null,
+        "io_order": 176
       },
       {
         "chunk_index": 42,
@@ -2342,8 +2329,8 @@
         "weights_id": 156,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.325,
-        "io_order": 178
+        "avg_compute_time": null,
+        "io_order": 177
       },
       {
         "chunk_index": 43,
@@ -2355,8 +2342,8 @@
         "weights_id": 155,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.298,
-        "io_order": 179
+        "avg_compute_time": null,
+        "io_order": 178
       },
       {
         "chunk_index": 44,
@@ -2368,8 +2355,8 @@
         "weights_id": 154,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.287,
-        "io_order": 180
+        "avg_compute_time": null,
+        "io_order": 179
       },
       {
         "chunk_index": 45,
@@ -2381,8 +2368,8 @@
         "weights_id": 153,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.052,
-        "io_order": 181
+        "avg_compute_time": null,
+        "io_order": 180
       },
       {
         "chunk_index": 46,
@@ -2394,8 +2381,8 @@
         "weights_id": 152,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.15,
-        "io_order": 182
+        "avg_compute_time": null,
+        "io_order": 181
       },
       {
         "chunk_index": 47,
@@ -2407,8 +2394,8 @@
         "weights_id": 151,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.326,
-        "io_order": 183
+        "avg_compute_time": null,
+        "io_order": 182
       },
       {
         "chunk_index": 48,
@@ -2420,8 +2407,8 @@
         "weights_id": 150,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.299,
-        "io_order": 184
+        "avg_compute_time": null,
+        "io_order": 183
       },
       {
         "chunk_index": 49,
@@ -2433,8 +2420,8 @@
         "weights_id": 149,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.267,
-        "io_order": 185
+        "avg_compute_time": null,
+        "io_order": 184
       },
       {
         "chunk_index": 50,
@@ -2446,8 +2433,8 @@
         "weights_id": 148,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.035,
-        "io_order": 186
+        "avg_compute_time": null,
+        "io_order": 185
       },
       {
         "chunk_index": 51,
@@ -2459,8 +2446,8 @@
         "weights_id": 147,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.147,
-        "io_order": 187
+        "avg_compute_time": null,
+        "io_order": 186
       },
       {
         "chunk_index": 52,
@@ -2472,8 +2459,8 @@
         "weights_id": 146,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.334,
-        "io_order": 188
+        "avg_compute_time": null,
+        "io_order": 187
       },
       {
         "chunk_index": 53,
@@ -2485,8 +2472,8 @@
         "weights_id": 145,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.3,
-        "io_order": 189
+        "avg_compute_time": null,
+        "io_order": 188
       },
       {
         "chunk_index": 54,
@@ -2498,8 +2485,8 @@
         "weights_id": 144,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.287,
-        "io_order": 190
+        "avg_compute_time": null,
+        "io_order": 189
       },
       {
         "chunk_index": 55,
@@ -2511,8 +2498,8 @@
         "weights_id": 143,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.055,
-        "io_order": 191
+        "avg_compute_time": null,
+        "io_order": 190
       },
       {
         "chunk_index": 56,
@@ -2524,8 +2511,8 @@
         "weights_id": 142,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.15,
-        "io_order": 192
+        "avg_compute_time": null,
+        "io_order": 191
       },
       {
         "chunk_index": 57,
@@ -2537,8 +2524,8 @@
         "weights_id": 141,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.323,
-        "io_order": 193
+        "avg_compute_time": null,
+        "io_order": 192
       },
       {
         "chunk_index": 58,
@@ -2550,8 +2537,8 @@
         "weights_id": 140,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.281,
-        "io_order": 194
+        "avg_compute_time": null,
+        "io_order": 193
       },
       {
         "chunk_index": 59,
@@ -2563,8 +2550,8 @@
         "weights_id": 139,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.253,
-        "io_order": 195
+        "avg_compute_time": null,
+        "io_order": 194
       },
       {
         "chunk_index": 60,
@@ -2576,8 +2563,8 @@
         "weights_id": 138,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.042,
-        "io_order": 196
+        "avg_compute_time": null,
+        "io_order": 195
       },
       {
         "chunk_index": 61,
@@ -2589,8 +2576,8 @@
         "weights_id": 137,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.15,
-        "io_order": 197
+        "avg_compute_time": null,
+        "io_order": 196
       },
       {
         "chunk_index": 62,
@@ -2602,8 +2589,8 @@
         "weights_id": 136,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.331,
-        "io_order": 198
+        "avg_compute_time": null,
+        "io_order": 197
       },
       {
         "chunk_index": 63,
@@ -2615,8 +2602,8 @@
         "weights_id": 135,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.287,
-        "io_order": 199
+        "avg_compute_time": null,
+        "io_order": 198
       },
       {
         "chunk_index": 64,
@@ -2628,8 +2615,8 @@
         "weights_id": 134,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.257,
-        "io_order": 200
+        "avg_compute_time": null,
+        "io_order": 199
       },
       {
         "chunk_index": 65,
@@ -2641,8 +2628,8 @@
         "weights_id": 133,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.037,
-        "io_order": 201
+        "avg_compute_time": null,
+        "io_order": 200
       },
       {
         "chunk_index": 66,
@@ -2654,8 +2641,8 @@
         "weights_id": 132,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.14,
-        "io_order": 202
+        "avg_compute_time": null,
+        "io_order": 201
       },
       {
         "chunk_index": 67,
@@ -2667,8 +2654,8 @@
         "weights_id": 131,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.317,
-        "io_order": 203
+        "avg_compute_time": null,
+        "io_order": 202
       },
       {
         "chunk_index": 68,
@@ -2680,8 +2667,8 @@
         "weights_id": 130,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.277,
-        "io_order": 204
+        "avg_compute_time": null,
+        "io_order": 203
       },
       {
         "chunk_index": 69,
@@ -2693,8 +2680,8 @@
         "weights_id": 129,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.256,
-        "io_order": 205
+        "avg_compute_time": null,
+        "io_order": 204
       },
       {
         "chunk_index": 70,
@@ -2706,8 +2693,8 @@
         "weights_id": 128,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.034,
-        "io_order": 206
+        "avg_compute_time": null,
+        "io_order": 205
       },
       {
         "chunk_index": 71,
@@ -2719,8 +2706,8 @@
         "weights_id": 127,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.145,
-        "io_order": 207
+        "avg_compute_time": null,
+        "io_order": 206
       },
       {
         "chunk_index": 72,
@@ -2732,8 +2719,8 @@
         "weights_id": 126,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.325,
-        "io_order": 208
+        "avg_compute_time": null,
+        "io_order": 207
       },
       {
         "chunk_index": 73,
@@ -2745,8 +2732,8 @@
         "weights_id": 125,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.297,
-        "io_order": 209
+        "avg_compute_time": null,
+        "io_order": 208
       },
       {
         "chunk_index": 74,
@@ -2758,8 +2745,8 @@
         "weights_id": 124,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.259,
-        "io_order": 210
+        "avg_compute_time": null,
+        "io_order": 209
       },
       {
         "chunk_index": 75,
@@ -2771,8 +2758,8 @@
         "weights_id": 123,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.027,
-        "io_order": 211
+        "avg_compute_time": null,
+        "io_order": 210
       },
       {
         "chunk_index": 76,
@@ -2784,8 +2771,8 @@
         "weights_id": 122,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.142,
-        "io_order": 212
+        "avg_compute_time": null,
+        "io_order": 211
       },
       {
         "chunk_index": 77,
@@ -2797,8 +2784,8 @@
         "weights_id": 121,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.325,
-        "io_order": 213
+        "avg_compute_time": null,
+        "io_order": 212
       },
       {
         "chunk_index": 78,
@@ -2810,8 +2797,8 @@
         "weights_id": 120,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.279,
-        "io_order": 214
+        "avg_compute_time": null,
+        "io_order": 213
       },
       {
         "chunk_index": 79,
@@ -2823,8 +2810,8 @@
         "weights_id": 119,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.254,
-        "io_order": 215
+        "avg_compute_time": null,
+        "io_order": 214
       },
       {
         "chunk_index": 80,
@@ -2836,8 +2823,8 @@
         "weights_id": 118,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.055,
-        "io_order": 216
+        "avg_compute_time": null,
+        "io_order": 215
       },
       {
         "chunk_index": 81,
@@ -2849,8 +2836,8 @@
         "weights_id": 117,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.181,
-        "io_order": 217
+        "avg_compute_time": null,
+        "io_order": 216
       },
       {
         "chunk_index": 82,
@@ -2862,8 +2849,8 @@
         "weights_id": 116,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.358,
-        "io_order": 218
+        "avg_compute_time": null,
+        "io_order": 217
       },
       {
         "chunk_index": 83,
@@ -2875,8 +2862,8 @@
         "weights_id": 115,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.287,
-        "io_order": 219
+        "avg_compute_time": null,
+        "io_order": 218
       },
       {
         "chunk_index": 84,
@@ -2888,8 +2875,8 @@
         "weights_id": 114,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.297,
-        "io_order": 220
+        "avg_compute_time": null,
+        "io_order": 219
       },
       {
         "chunk_index": 85,
@@ -2901,8 +2888,8 @@
         "weights_id": 113,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.072,
-        "io_order": 221
+        "avg_compute_time": null,
+        "io_order": 220
       },
       {
         "chunk_index": 86,
@@ -2914,8 +2901,8 @@
         "weights_id": 112,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.143,
-        "io_order": 222
+        "avg_compute_time": null,
+        "io_order": 221
       },
       {
         "chunk_index": 87,
@@ -2927,8 +2914,8 @@
         "weights_id": 111,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.319,
-        "io_order": 223
+        "avg_compute_time": null,
+        "io_order": 222
       },
       {
         "chunk_index": 88,
@@ -2940,8 +2927,8 @@
         "weights_id": 110,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.285,
-        "io_order": 224
+        "avg_compute_time": null,
+        "io_order": 223
       },
       {
         "chunk_index": 89,
@@ -2953,8 +2940,8 @@
         "weights_id": 109,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.264,
-        "io_order": 225
+        "avg_compute_time": null,
+        "io_order": 224
       },
       {
         "chunk_index": 90,
@@ -2966,8 +2953,8 @@
         "weights_id": 108,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.034,
-        "io_order": 226
+        "avg_compute_time": null,
+        "io_order": 225
       },
       {
         "chunk_index": 91,
@@ -2979,8 +2966,8 @@
         "weights_id": 107,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.15,
-        "io_order": 227
+        "avg_compute_time": null,
+        "io_order": 226
       },
       {
         "chunk_index": 92,
@@ -2992,8 +2979,8 @@
         "weights_id": 106,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.325,
-        "io_order": 228
+        "avg_compute_time": null,
+        "io_order": 227
       },
       {
         "chunk_index": 93,
@@ -3005,8 +2992,8 @@
         "weights_id": 105,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.282,
-        "io_order": 229
+        "avg_compute_time": null,
+        "io_order": 228
       },
       {
         "chunk_index": 94,
@@ -3018,8 +3005,8 @@
         "weights_id": 104,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.259,
-        "io_order": 230
+        "avg_compute_time": null,
+        "io_order": 229
       },
       {
         "chunk_index": 95,
@@ -3031,8 +3018,8 @@
         "weights_id": 103,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.023,
-        "io_order": 231
+        "avg_compute_time": null,
+        "io_order": 230
       },
       {
         "chunk_index": 96,
@@ -3044,8 +3031,8 @@
         "weights_id": 102,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.148,
-        "io_order": 232
+        "avg_compute_time": null,
+        "io_order": 231
       },
       {
         "chunk_index": 97,
@@ -3057,8 +3044,8 @@
         "weights_id": 101,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.345,
-        "io_order": 233
+        "avg_compute_time": null,
+        "io_order": 232
       },
       {
         "chunk_index": 98,
@@ -3070,8 +3057,8 @@
         "weights_id": 100,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.288,
-        "io_order": 234
+        "avg_compute_time": null,
+        "io_order": 233
       },
       {
         "chunk_index": 99,
@@ -3083,8 +3070,8 @@
         "weights_id": 99,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.253,
-        "io_order": 235
+        "avg_compute_time": null,
+        "io_order": 234
       },
       {
         "chunk_index": 100,
@@ -3096,8 +3083,8 @@
         "weights_id": 98,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.034,
-        "io_order": 236
+        "avg_compute_time": null,
+        "io_order": 235
       },
       {
         "chunk_index": 101,
@@ -3109,8 +3096,8 @@
         "weights_id": 97,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.144,
-        "io_order": 237
+        "avg_compute_time": null,
+        "io_order": 236
       },
       {
         "chunk_index": 102,
@@ -3122,8 +3109,8 @@
         "weights_id": 96,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.325,
-        "io_order": 238
+        "avg_compute_time": null,
+        "io_order": 237
       },
       {
         "chunk_index": 103,
@@ -3135,8 +3122,8 @@
         "weights_id": 95,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.286,
-        "io_order": 239
+        "avg_compute_time": null,
+        "io_order": 238
       },
       {
         "chunk_index": 104,
@@ -3148,8 +3135,8 @@
         "weights_id": 94,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.267,
-        "io_order": 240
+        "avg_compute_time": null,
+        "io_order": 239
       },
       {
         "chunk_index": 105,
@@ -3161,8 +3148,8 @@
         "weights_id": 93,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.042,
-        "io_order": 241
+        "avg_compute_time": null,
+        "io_order": 240
       },
       {
         "chunk_index": 106,
@@ -3174,8 +3161,8 @@
         "weights_id": 92,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.147,
-        "io_order": 242
+        "avg_compute_time": null,
+        "io_order": 241
       },
       {
         "chunk_index": 107,
@@ -3187,8 +3174,8 @@
         "weights_id": 91,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.327,
-        "io_order": 243
+        "avg_compute_time": null,
+        "io_order": 242
       },
       {
         "chunk_index": 108,
@@ -3200,8 +3187,8 @@
         "weights_id": 90,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.284,
-        "io_order": 244
+        "avg_compute_time": null,
+        "io_order": 243
       },
       {
         "chunk_index": 109,
@@ -3213,8 +3200,8 @@
         "weights_id": 89,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.252,
-        "io_order": 245
+        "avg_compute_time": null,
+        "io_order": 244
       },
       {
         "chunk_index": 110,
@@ -3226,8 +3213,8 @@
         "weights_id": 88,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.028,
-        "io_order": 246
+        "avg_compute_time": null,
+        "io_order": 245
       },
       {
         "chunk_index": 111,
@@ -3239,8 +3226,8 @@
         "weights_id": 87,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.142,
-        "io_order": 247
+        "avg_compute_time": null,
+        "io_order": 246
       },
       {
         "chunk_index": 112,
@@ -3252,8 +3239,8 @@
         "weights_id": 86,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.324,
-        "io_order": 248
+        "avg_compute_time": null,
+        "io_order": 247
       },
       {
         "chunk_index": 113,
@@ -3265,8 +3252,8 @@
         "weights_id": 85,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.279,
-        "io_order": 249
+        "avg_compute_time": null,
+        "io_order": 248
       },
       {
         "chunk_index": 114,
@@ -3278,8 +3265,8 @@
         "weights_id": 84,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.258,
-        "io_order": 250
+        "avg_compute_time": null,
+        "io_order": 249
       },
       {
         "chunk_index": 115,
@@ -3291,8 +3278,8 @@
         "weights_id": 83,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.03,
-        "io_order": 251
+        "avg_compute_time": null,
+        "io_order": 250
       },
       {
         "chunk_index": 116,
@@ -3304,8 +3291,8 @@
         "weights_id": 82,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.143,
-        "io_order": 252
+        "avg_compute_time": null,
+        "io_order": 251
       },
       {
         "chunk_index": 117,
@@ -3317,8 +3304,8 @@
         "weights_id": 81,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.343,
-        "io_order": 253
+        "avg_compute_time": null,
+        "io_order": 252
       },
       {
         "chunk_index": 118,
@@ -3330,8 +3317,8 @@
         "weights_id": 80,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.288,
-        "io_order": 254
+        "avg_compute_time": null,
+        "io_order": 253
       },
       {
         "chunk_index": 119,
@@ -3343,8 +3330,8 @@
         "weights_id": 79,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.296,
-        "io_order": 255
+        "avg_compute_time": null,
+        "io_order": 254
       },
       {
         "chunk_index": 120,
@@ -3356,8 +3343,8 @@
         "weights_id": 78,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.089,
-        "io_order": 256
+        "avg_compute_time": null,
+        "io_order": 255
       },
       {
         "chunk_index": 121,
@@ -3369,8 +3356,8 @@
         "weights_id": 77,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.148,
-        "io_order": 257
+        "avg_compute_time": null,
+        "io_order": 256
       },
       {
         "chunk_index": 122,
@@ -3382,8 +3369,8 @@
         "weights_id": 76,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.347,
-        "io_order": 258
+        "avg_compute_time": null,
+        "io_order": 257
       },
       {
         "chunk_index": 123,
@@ -3395,8 +3382,8 @@
         "weights_id": 75,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.288,
-        "io_order": 259
+        "avg_compute_time": null,
+        "io_order": 258
       },
       {
         "chunk_index": 124,
@@ -3408,8 +3395,8 @@
         "weights_id": 74,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.256,
-        "io_order": 260
+        "avg_compute_time": null,
+        "io_order": 259
       },
       {
         "chunk_index": 125,
@@ -3421,8 +3408,8 @@
         "weights_id": 73,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.051,
-        "io_order": 261
+        "avg_compute_time": null,
+        "io_order": 260
       },
       {
         "chunk_index": 126,
@@ -3434,8 +3421,8 @@
         "weights_id": 72,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.146,
-        "io_order": 262
+        "avg_compute_time": null,
+        "io_order": 261
       },
       {
         "chunk_index": 127,
@@ -3447,8 +3434,8 @@
         "weights_id": 71,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.329,
-        "io_order": 263
+        "avg_compute_time": null,
+        "io_order": 262
       },
       {
         "chunk_index": 128,
@@ -3460,8 +3447,8 @@
         "weights_id": 70,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.28,
-        "io_order": 264
+        "avg_compute_time": null,
+        "io_order": 263
       },
       {
         "chunk_index": 129,
@@ -3473,8 +3460,8 @@
         "weights_id": 69,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.256,
-        "io_order": 265
+        "avg_compute_time": null,
+        "io_order": 264
       },
       {
         "chunk_index": 130,
@@ -3486,8 +3473,8 @@
         "weights_id": 68,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.034,
-        "io_order": 266
+        "avg_compute_time": null,
+        "io_order": 265
       },
       {
         "chunk_index": 131,
@@ -3499,8 +3486,8 @@
         "weights_id": 67,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.144,
-        "io_order": 267
+        "avg_compute_time": null,
+        "io_order": 266
       },
       {
         "chunk_index": 132,
@@ -3512,8 +3499,8 @@
         "weights_id": 66,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.316,
-        "io_order": 268
+        "avg_compute_time": null,
+        "io_order": 267
       },
       {
         "chunk_index": 133,
@@ -3525,8 +3512,8 @@
         "weights_id": 65,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.277,
-        "io_order": 269
+        "avg_compute_time": null,
+        "io_order": 268
       },
       {
         "chunk_index": 134,
@@ -3538,8 +3525,8 @@
         "weights_id": 64,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.257,
-        "io_order": 270
+        "avg_compute_time": null,
+        "io_order": 269
       },
       {
         "chunk_index": 135,
@@ -3551,8 +3538,8 @@
         "weights_id": 63,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 1.038,
-        "io_order": 271
+        "avg_compute_time": null,
+        "io_order": 270
       },
       {
         "chunk_index": 136,
@@ -3564,8 +3551,8 @@
         "weights_id": 62,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.148,
-        "io_order": 272
+        "avg_compute_time": null,
+        "io_order": 271
       },
       {
         "chunk_index": 137,
@@ -3577,8 +3564,8 @@
         "weights_id": 61,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.324,
-        "io_order": 273
+        "avg_compute_time": null,
+        "io_order": 272
       },
       {
         "chunk_index": 138,
@@ -3590,8 +3577,8 @@
         "weights_id": 60,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.283,
-        "io_order": 274
+        "avg_compute_time": null,
+        "io_order": 273
       },
       {
         "chunk_index": 139,
@@ -3603,8 +3590,8 @@
         "weights_id": 59,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 0.251,
-        "io_order": 275
+        "avg_compute_time": null,
+        "io_order": 274
       },
       {
         "chunk_index": 140,
@@ -3616,7 +3603,20 @@
         "weights_id": 284,
         "prefetch_mode": 1,
         "prefetch_mode_str": "DECODE",
-        "avg_compute_time": 8.208,
+        "avg_compute_time": null,
+        "io_order": 275
+      },
+      {
+        "chunk_index": 0,
+        "origin_offset": 3223403520,
+        "origin_size": 15790080,
+        "aligned_offset": 3223400448,
+        "aligned_size": 15794176,
+        "offset_adjust": 3200,
+        "weights_id": 198,
+        "prefetch_mode": 1,
+        "prefetch_mode_str": "DECODE",
+        "avg_compute_time": null,
         "io_order": 276
       }
     ]
