@@ -23,7 +23,7 @@ ABSL_FLAG(float, top_p, 0.9f, "Top-p (nucleus) sampling parameter. Only consider
 ABSL_FLAG(float, repetition_penalty, 1.2f, "Repetition penalty for sampling. Higher values reduce repetition. Defaults to 1.2.");
 ABSL_FLAG(bool, enable_repetition_penalty, false, "Enable repetition penalty. Defaults to false.");
 ABSL_FLAG(std::string, csv_profile_output_path, "", "Path to save the profiling results in CSV format. If empty, no CSV output is generated.");
-ABSL_FLAG(std::string, prefetch_plan_path, "weight_chunks_metadata_table.json", "Path to the weight chunk prefetch plan JSON file.");
+ABSL_FLAG(std::string, prefetch_plan_path, "prefetch_plan.json", "Path to the weight chunk prefetch plan JSON file.");
 // TODO : add io_engine selection logic
 ABSL_FLAG(std::string, io_engine, "io_uring", "IO engine to use for weight chunk prefetching. Options: 'io_uring', 'pread'.");
 

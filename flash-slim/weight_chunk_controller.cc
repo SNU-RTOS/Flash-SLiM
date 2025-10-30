@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <vector>
@@ -110,10 +111,22 @@ bool WeightChunkController::LoadPrefetchPlan(const std::string& path) {
     return false;
   }
 
-  weight_chunk_buffer_requirement_ = loader.max_aligned_size();
+  const uint64_t plan_buffer_span = loader.weight_chunk_buffer_size();
+  weight_chunk_buffer_requirement_ = plan_buffer_span;
+  if (weight_chunk_buffer_requirement_ == 0) {
+    weight_chunk_buffer_requirement_ = loader.max_aligned_size();
+  }
+
+  // weight_chunk_buffer_requirement_ used to rely on max_aligned_size, which forced the classic
+  // ping-pong allocation of two equally sized buffers. We now size the single span by the maximum
+  // sum of two consecutive chunks instead, so the old double-buffer allocation is kept here as a
+  // comment for reference only.
+  // weight_chunk_buffer_requirement_ = loader.max_aligned_size();
 
   std::cout << "[INFO] Allocating weight cache buffer of size "
             << weight_chunk_buffer_requirement_ << " bytes.\n";
+  std::cout << "[INFO] weight_chunk_buffer_size (max consecutive pair sum): "
+            << (plan_buffer_span ? plan_buffer_span : weight_chunk_buffer_requirement_) << " bytes.\n";
   std::cout << "[INFO] Loaded prefetch plan for model: " << loader.model()
             << ", planner version: " << loader.version() << "\n";
 
@@ -157,12 +170,15 @@ void WeightChunkController::AllocWeightChunkBuffer(size_t size) {
   const size_t aligned_size = AlignTo(size, alignment);
 
   if (weight_chunk_buffer_capacity_ >= aligned_size &&
-      weight_chunk_buffers_[0] && weight_chunk_buffers_[1]) {
+      weight_chunk_buffer_base_) {
     weight_chunk_buffer_requirement_ = size;
+    ResetBufferSlots();
     UpdateActiveBufferIndex(0);
+    weight_chunk_buffers_[0] = weight_chunk_buffer_base_;
+    weight_chunk_buffers_[1] = weight_chunk_buffer_base_;
     if (prefetcher_) {
-      prefetcher_->ConfigureIOBuffers(weight_chunk_buffers_[0], weight_chunk_buffer_capacity_,
-                                      weight_chunk_buffers_[1], weight_chunk_buffer_capacity_);
+      prefetcher_->ConfigureIOBuffers(weight_chunk_buffer_base_, weight_chunk_buffer_capacity_,
+                                      weight_chunk_buffer_base_, weight_chunk_buffer_capacity_);
       prefetcher_->StartWorker();
     }
     return;
@@ -173,42 +189,59 @@ void WeightChunkController::AllocWeightChunkBuffer(size_t size) {
   }
   ReleaseWeightChunkBuffer();
 
+  void* buffer = nullptr;
+  if (posix_memalign(&buffer, alignment, aligned_size) != 0) {
+    std::perror("WeightChunkController::AllocWeightChunkBuffer posix_memalign");
+    weight_chunk_buffer_requirement_ = 0;
+    weight_chunk_buffer_capacity_ = 0;
+    return;
+  }
+  std::memset(buffer, 0, aligned_size);
+  weight_chunk_buffer_base_ = buffer;
+  weight_chunk_buffers_[0] = buffer;
+  weight_chunk_buffers_[1] = buffer;
+
+  // Legacy double-buffer allocation (based on max_aligned_size ping-pong) is intentionally kept
+  // here as a comment to capture the previous design. Under the new sliding window scheme we reuse
+  // a single contiguous span and only move logical offsets for the two slots.
+  /*
   bool allocation_failed = false;
   for (int i = 0; i < 2; ++i) {
-    void* buffer = nullptr;
-    if (posix_memalign(&buffer, alignment, aligned_size) != 0) {
+    void* legacy_buffer = nullptr;
+    if (posix_memalign(&legacy_buffer, alignment, aligned_size) != 0) {
       std::perror("WeightChunkController::AllocWeightChunkBuffer posix_memalign");
       allocation_failed = true;
       break;
     }
-    std::memset(buffer, 0, aligned_size);
-    weight_chunk_buffers_[i] = buffer;
+    std::memset(legacy_buffer, 0, aligned_size);
+    weight_chunk_buffers_[i] = legacy_buffer;
   }
-
   if (allocation_failed) {
     ReleaseWeightChunkBuffer();
     weight_chunk_buffer_requirement_ = 0;
     weight_chunk_buffer_capacity_ = 0;
     return;
   }
+  */
 
   weight_chunk_buffer_requirement_ = size;
   weight_chunk_buffer_capacity_ = aligned_size;
+  ResetBufferSlots();
   UpdateActiveBufferIndex(0);
   if (prefetcher_) {
-    prefetcher_->ConfigureIOBuffers(weight_chunk_buffers_[0], weight_chunk_buffer_capacity_,
-                                    weight_chunk_buffers_[1], weight_chunk_buffer_capacity_);
+    prefetcher_->ConfigureIOBuffers(weight_chunk_buffer_base_, weight_chunk_buffer_capacity_,
+                                    weight_chunk_buffer_base_, weight_chunk_buffer_capacity_);
     prefetcher_->StartWorker();
   }
 }
 
 void WeightChunkController::ReleaseWeightChunkBuffer() {
-  for (auto& buffer : weight_chunk_buffers_) {
-    if (buffer) {
-      std::free(buffer);
-      buffer = nullptr;
-    }
+  if (weight_chunk_buffer_base_) {
+    std::free(weight_chunk_buffer_base_);
+    weight_chunk_buffer_base_ = nullptr;
   }
+  weight_chunk_buffers_.fill(nullptr);
+  ResetBufferSlots();
   if (prefetcher_) {
     prefetcher_->ConfigureIOBuffers(nullptr, 0, nullptr, 0);
   }
@@ -230,7 +263,20 @@ void* WeightChunkController::GetWeightChunkBufferAddr(int index) const {
   if (index < 0 || index >= static_cast<int>(weight_chunk_buffers_.size())) {
     return nullptr;
   }
-  return weight_chunk_buffers_.at(index);
+  if (!weight_chunk_buffer_base_) {
+    return nullptr;
+  }
+  void* base = weight_chunk_buffers_.at(index);
+  if (!base) {
+    return nullptr;
+  }
+  const size_t offset = buffer_offsets_.at(index);
+  if (weight_chunk_buffer_capacity_ > 0 &&
+      offset >= weight_chunk_buffer_capacity_) {
+    return nullptr;
+  }
+  auto* byte_base = static_cast<uint8_t*>(base);
+  return byte_base + offset;
 }
 
 void* WeightChunkController::GetActiveWeightChunkBuffer() const {
@@ -331,11 +377,23 @@ bool WeightChunkController::ScheduleNextChunk(const weight_chunk_info_t* current
     return false;
   }
 
+  const size_t target_offset = ComputeInactiveSlotOffset(next_info->aligned_size);
+  if (target_offset == std::numeric_limits<size_t>::max()) {
+    std::cerr << "[WeightChunkController] Next chunk (index=" << *next_index
+              << ") does not fit into the configured buffer span. aligned_size="
+              << next_info->aligned_size << ", span=" << weight_chunk_buffer_capacity_ << "\n";
+    return false;
+  }
+
   const int buffer_index = GetInactiveBufferIndex();
+  buffer_offsets_[buffer_index] = target_offset;
+  buffer_sizes_[buffer_index] = next_info->aligned_size;
   void* buffer_base = GetWeightChunkBufferAddr(buffer_index);
   if (!buffer_base) {
     std::cerr << "[WeightChunkController] Invalid inactive buffer index " << buffer_index
               << "\n";
+    buffer_sizes_[buffer_index] = 0;
+    buffer_offsets_[buffer_index] = 0;
     return false;
   }
 
@@ -349,10 +407,46 @@ bool WeightChunkController::ScheduleNextChunk(const weight_chunk_info_t* current
   if (!prefetcher_->Submit(request)) {
     std::cerr << "[WeightChunkController] Next Chunk submit failed for next chunk_index="
               << next_info->chunk_index << "\n";
+    buffer_sizes_[buffer_index] = 0;
+    buffer_offsets_[buffer_index] = 0;
     return false;
   }
 
   return true;
+}
+
+size_t WeightChunkController::ComputeInactiveSlotOffset(size_t next_aligned_size) const {
+  if (weight_chunk_buffer_capacity_ == 0 ||
+      next_aligned_size > weight_chunk_buffer_capacity_) {
+    return std::numeric_limits<size_t>::max();
+  }
+
+  const int active_index = active_weight_chunk_buffer_index_;
+  const size_t active_offset = buffer_offsets_.at(active_index);
+  const size_t active_size = buffer_sizes_.at(active_index);
+
+  if (active_size == 0) {
+    // First chunk or state reset; place at the beginning.
+    return 0;
+  }
+
+  if (active_offset == 0) {
+    if (active_size + next_aligned_size > weight_chunk_buffer_capacity_) {
+      return std::numeric_limits<size_t>::max();
+    }
+    return weight_chunk_buffer_capacity_ - next_aligned_size;
+  }
+
+  if (active_size + next_aligned_size > weight_chunk_buffer_capacity_) {
+    return std::numeric_limits<size_t>::max();
+  }
+
+  return 0;
+}
+
+void WeightChunkController::ResetBufferSlots() {
+  buffer_offsets_.fill(0);
+  buffer_sizes_.fill(0);
 }
 
 void WeightChunkController::UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info) {
@@ -402,7 +496,7 @@ bool WeightChunkController::HandlePreRunWarmUpPreInvoke(size_t offset) {
   return true;
 }
 
-inline void WeightChunkController::EmitBPFProbe(size_t offset) {
+void WeightChunkController::EmitBPFProbe(size_t offset) {
   
   auto it = offset_to_chunk_info_.find(offset);
   if (it == offset_to_chunk_info_.end()) {
@@ -412,11 +506,12 @@ inline void WeightChunkController::EmitBPFProbe(size_t offset) {
   }
   
   const weight_chunk_info_t& chunk_info = it->second;
-  
+  const char* prefetch_mode_str = prefetcher_->GetPrefetchModeString().c_str();
+
   DTRACE_PROBE3(text_gen, ops_check, 
     static_cast<uint64_t>(chunk_info.chunk_index),
                 static_cast<uint64_t>(offset), 
-                const_cast<char*>(prefetcher_->GetPrefetchModeString().c_str()));
+                const_cast<char*>(prefetch_mode_str));
 }
 
 bool WeightChunkController::ResetBPFProbe(){
@@ -459,6 +554,14 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     return false;
   }
 
+  if (current_chunk_info->aligned_size > weight_chunk_buffer_capacity_) {
+    std::cerr << "[WeightChunkController] Chunk aligned_size=" << current_chunk_info->aligned_size
+              << " exceeds allocated buffer span=" << weight_chunk_buffer_capacity_ << "\n";
+    return false;
+  }
+
+  const int active_index = active_weight_chunk_buffer_index_;
+
 //   std::cout << "[WeightChunkController] RuntimePreInvoke: Ensuring chunk_index="
 //             << current_chunk_info->chunk_index << " for offset=" << offset << "\n";
 
@@ -471,6 +574,8 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
   static bool first_prefetch = true;
 
   if (first_prefetch) { // Synchronously submit prefetch request and wait only for the first call
+    buffer_offsets_[active_index] = 0;
+    buffer_sizes_[active_index] = current_chunk_info->aligned_size;
     void* buffer_base = GetWeightChunkBufferAddr(active_weight_chunk_buffer_index_);
     if (!buffer_base) {
         std::cerr << "[WeightChunkController] Invalid buffer index " << active_weight_chunk_buffer_index_ << "\n";
@@ -488,6 +593,8 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
         return false;
     }
     first_prefetch = false;
+  } else {
+    buffer_sizes_[active_index] = current_chunk_info->aligned_size;
   }
     
   // WaitReady returns immediately if already ready

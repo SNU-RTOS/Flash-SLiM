@@ -65,8 +65,10 @@ namespace flash_slim
             nlohmann::ordered_json json_root_; // Root JSON object
             bool finalized_;
             size_t max_aligned_size_;
+            size_t weight_chunk_buffer_size_;
             std::map<std::string, size_t> per_mode_counts_;
             std::map<std::string, size_t> per_mode_total_aligned_size_;
+            std::map<std::string, size_t> last_chunk_aligned_size_;
             std::string model_path_;
         };
 
@@ -84,6 +86,7 @@ namespace flash_slim
             const std::string &version() const { return version_; }
             const std::string &model() const { return model_path_; }
             uint64_t max_aligned_size() const { return max_aligned_size_; }
+            uint64_t weight_chunk_buffer_size() const { return weight_chunk_buffer_size_; }
 
             // 모드 목록("PREFILL", "DECODE", ...)
             std::vector<std::string> modes() const;
@@ -120,6 +123,7 @@ namespace flash_slim
             nlohmann::ordered_json root_;
             std::string model_path_;
             uint64_t max_aligned_size_ = 0;
+            uint64_t weight_chunk_buffer_size_ = 0;
             std::map<std::string, size_t> count_by_mode_;
             std::map<std::string, uint64_t> size_by_mode_;
             std::map<std::string, std::vector<weight_chunk_info_t>> groups_;

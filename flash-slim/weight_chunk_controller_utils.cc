@@ -8,6 +8,7 @@
 // for weight chunks during model execution.
 
 #include "weight_chunk_controller_utils.h"
+#include <algorithm>
 #include <iostream>
 
 namespace flash_slim
@@ -20,7 +21,8 @@ namespace flash_slim
             : output_path_(output_path),
               json_root_(nlohmann::ordered_json::object()),
               finalized_(false),
-              max_aligned_size_(0)
+              max_aligned_size_(0),
+              weight_chunk_buffer_size_(0)
         {
             // Initialize containers
             json_root_["weight_chunks"] = nlohmann::ordered_json::object();
@@ -83,7 +85,6 @@ namespace flash_slim
             {
                 max_aligned_size_ = chunk_info.aligned_size;
             }
-
             // Group by prefetch mode
             const std::string mode_key = PrefetchModeToString(prefetch_mode);
             if (!json_root_["weight_chunks"].contains(mode_key))
@@ -91,6 +92,17 @@ namespace flash_slim
                 json_root_["weight_chunks"][mode_key] = nlohmann::ordered_json::array();
             }
             json_root_["weight_chunks"][mode_key].push_back(chunk_json);
+
+            weight_chunk_buffer_size_ =
+                std::max(weight_chunk_buffer_size_,
+                         static_cast<size_t>(chunk_info.aligned_size));
+            auto &last_aligned = last_chunk_aligned_size_[mode_key];
+            if (last_aligned > 0)
+            {
+                weight_chunk_buffer_size_ =
+                    std::max(weight_chunk_buffer_size_, last_aligned + chunk_info.aligned_size);
+            }
+            last_aligned = chunk_info.aligned_size;
 
             // Counters
             per_mode_counts_[mode_key] += 1;
@@ -116,6 +128,7 @@ namespace flash_slim
             nlohmann::ordered_json meta;
             meta["version"] = "1.0";
             meta["max_aligned_size"] = max_aligned_size_;
+            meta["weight_chunk_buffer_size"] = weight_chunk_buffer_size_;
             if (!model_path_.empty())
             {
                 meta["model"] = model_path_;
@@ -185,6 +198,7 @@ namespace flash_slim
             version_.clear();
             model_path_.clear();
             max_aligned_size_ = 0;
+            weight_chunk_buffer_size_ = 0;
             count_by_mode_.clear();
             size_by_mode_.clear();
             groups_.clear();
@@ -243,6 +257,10 @@ namespace flash_slim
             {
                 // 다양한 정수형을 수용
                 max_aligned_size_ = meta.at("max_aligned_size").get<uint64_t>();
+            }
+            if (meta.contains("weight_chunk_buffer_size"))
+            {
+                weight_chunk_buffer_size_ = meta.at("weight_chunk_buffer_size").get<uint64_t>();
             }
 
             // 모드별 카운트/사이즈(옵션)
@@ -309,6 +327,65 @@ namespace flash_slim
                 }
             }
 
+            // If metadata did not provide weight_chunk_buffer_size, derive it from the chunks.
+            if (weight_chunk_buffer_size_ == 0)
+            {
+                for (const auto &kv : groups_)
+                {
+                    const auto &vec = kv.second;
+                    if (vec.empty())
+                    {
+                        continue;
+                    }
+                    // Track the largest aligned size (single chunk) to cover degenerate cases.
+                    size_t mode_max = 0;
+                    for (const auto &chunk : vec)
+                    {
+                        mode_max = std::max(mode_max, chunk.aligned_size);
+                    }
+                    size_t mode_pair_max = mode_max;
+                    for (size_t i = 0; i + 1 < vec.size(); ++i)
+                    {
+                        const size_t pair_sum = vec[i].aligned_size + vec[i + 1].aligned_size;
+                        mode_pair_max = std::max(mode_pair_max, pair_sum);
+                    }
+                    weight_chunk_buffer_size_ = std::max<uint64_t>(weight_chunk_buffer_size_, mode_pair_max);
+                }
+            }
+            else
+            {
+                // Even if the metadata includes the value, confirm it is at least as large as any observed pair.
+                uint64_t derived_max = 0;
+                for (const auto &kv : groups_)
+                {
+                    const auto &vec = kv.second;
+                    if (vec.empty())
+                    {
+                        continue;
+                    }
+                    size_t mode_max = 0;
+                    for (const auto &chunk : vec)
+                    {
+                        mode_max = std::max(mode_max, chunk.aligned_size);
+                    }
+                    size_t mode_pair_max = mode_max;
+                    for (size_t i = 0; i + 1 < vec.size(); ++i)
+                    {
+                        const size_t pair_sum = vec[i].aligned_size + vec[i + 1].aligned_size;
+                        mode_pair_max = std::max(mode_pair_max, pair_sum);
+                    }
+                    derived_max = std::max<uint64_t>(derived_max, mode_pair_max);
+                }
+                if (derived_max > weight_chunk_buffer_size_)
+                {
+                    std::cerr << "[JsonPrefetchPlanLoader] Warning: weight_chunk_buffer_size from metadata ("
+                              << weight_chunk_buffer_size_
+                              << ") is smaller than derived maximum pair sum (" << derived_max
+                              << "). Using derived value.\n";
+                    weight_chunk_buffer_size_ = derived_max;
+                }
+            }
+
             return true;
         }
 
@@ -335,6 +412,7 @@ namespace flash_slim
             if (!model_path_.empty())
                 os << "  model: " << model_path_ << std::endl;
             os << "  max_aligned_size: " << max_aligned_size_ << std::endl;
+            os << "  weight_chunk_buffer_size: " << weight_chunk_buffer_size_ << std::endl;
 
             os << "  chunk_count_by_mode:" << std::endl;
             for (const auto &kv : count_by_mode_)
