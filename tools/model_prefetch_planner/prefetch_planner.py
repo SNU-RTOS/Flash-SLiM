@@ -64,7 +64,7 @@ class PrefetchPlan:
         metadata_snapshot["prefetch_plan_version"] = self.version
         return {
             "metadata": metadata_snapshot,
-            "prefetch_plan": {
+            "weight_chunks": {
                 mode: [entry.to_dict() for entry in entries]
                 for mode, entries in self.plan_entries.items()
             }
@@ -87,6 +87,7 @@ class PrefetchPlanner:
             cmt_data = json.load(f)
         self.metadata = cmt_data.get("metadata", {})
         raw_chunks = cmt_data.get("weight_chunks", {})
+        max_pair_sum = 0
         for mode, chunks in raw_chunks.items():
             dataclass_chunks: List[WeightChunkInfo] = []
             raw_chunk_snapshots: List[Dict[str, Any]] = []
@@ -97,8 +98,19 @@ class PrefetchPlanner:
                 dataclass_chunks.append(WeightChunkInfo(**chunk_payload))
                 lookup_key = (mode, chunk["chunk_index"], chunk["origin_offset"])
                 self.chunk_lookup[lookup_key] = chunk_copy
+            if dataclass_chunks:
+                # Track the largest sum of aligned_size across consecutive chunk pairs
+                chunk_pair_sum = max(
+                    (
+                        first.aligned_size + second.aligned_size
+                        for first, second in zip(dataclass_chunks, dataclass_chunks[1:])
+                    ),
+                    default=dataclass_chunks[0].aligned_size,
+                )
+                max_pair_sum = max(max_pair_sum, chunk_pair_sum)
             self.weight_chunks[mode] = dataclass_chunks
             self.raw_weight_chunks[mode] = raw_chunk_snapshots
+        self.metadata["weight_chunk_buffer_size"] = max_pair_sum
         print(f"[PrefetchPlanner] Loaded {sum(len(v) for v in self.weight_chunks.values())} chunks")
 
     def load_profile_logs(self, pattern: str = "bpf_profile_ops_results_*"):
@@ -148,7 +160,9 @@ class PrefetchPlanner:
         # In the real implementation, partitioning may depend on aligned_size thresholds or operators
         partitions = {}
         for mode, chunks in self.weight_chunks.items():
-            partitions[mode] = sorted(chunks, key=lambda x: x.aligned_offset)
+            # Sort by chunk_index to preserve logical chunk ordering (chunk_index 0 first)
+            # Previously this sorted by aligned_offset which could place chunk_index 0 at the end.
+            partitions[mode] = sorted(chunks, key=lambda x: x.chunk_index)
         return partitions
 
     def generate_prefetch_plan(self, partitions: Dict[str, List[WeightChunkInfo]]):
