@@ -242,6 +242,10 @@ run_with_single_prompt() {
         log "Log file                        : ${LOG_FILE}"
         log "Op-level profiling csv results  : ${CSV_FILE}"
     fi
+    if [[ "$BPF_PHASE_LOGGING" == "true" ]]; then
+        log "BPF phase profiling script      : ${BPF_PHASE_PYTHON_PATH}"
+        log "BPF phase profiling log file    : ${BPF_LOG_FILE_PATH}"
+    fi
 
     clear_caches
 
