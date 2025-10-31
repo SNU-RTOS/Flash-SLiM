@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, Protocol, Sequence
+from typing import Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Tuple
 
 from .__planner_data_structures__ import PrefetchPlan, PrefetchPlanEntry, WeightChunkInfo
 from .strategy_base import ChunkKey, PlanningContext, PlanningStrategy
@@ -28,11 +28,12 @@ class RechunkPlanningStrategy(PlanningStrategy):
             # compute logical groups, but do NOT mutate original chunk_index values.
             # We will emit one PrefetchPlanEntry per original o-chunk, preserving chunk_index,
             # and encode re-chunking in the entry's io_order (group-triggered prefetch order).
-            logical_groups = self._rechunk_mode(mode, ordered_chunks, context)
+            logical_groups, group_io_times = self._rechunk_mode(mode, ordered_chunks, context)
             plan.plan_entries[mode] = []
             # For group k, we intend to prefetch that group's chunks during execution of group k-1.
             # So we set io_order for chunks in group k to max(0, k-1).
             for group_idx, group in enumerate(logical_groups):
+                group_io_time = group_io_times[group_idx] if group_idx < len(group_io_times) else None
                 # encode logical re-chunk group id into io_order so groups are
                 # distinguishable in the plan. Previously this used a shifted
                 # mapping (max(0, k-1)) to indicate prefetch timing; for
@@ -55,6 +56,9 @@ class RechunkPlanningStrategy(PlanningStrategy):
                             "prefetch_mode_str": chunk.prefetch_mode_str,
                         }
 
+                    if group_io_time is not None:
+                        chunk_payload["estimated_io_time_ms"] = group_io_time
+
                     # compute per-chunk avg_compute_time
                     key = (mode, chunk.chunk_index, chunk.origin_offset)
                     compute_ms = context.profile_stats.get(key, self.default_compute_ms)
@@ -64,6 +68,7 @@ class RechunkPlanningStrategy(PlanningStrategy):
                         chunk_data=dict(chunk_payload),
                         io_order=prefetch_io_order,
                         avg_compute_time=compute_ms,
+                        estimated_io_time_ms=group_io_time,
                     )
                     plan.plan_entries[mode].append(entry)
         return plan
@@ -96,13 +101,14 @@ class RechunkPlanningStrategy(PlanningStrategy):
         mode: str,
         chunks: Sequence[WeightChunkInfo],
         context: PlanningContext,
-    ) -> List[List[WeightChunkInfo]]:
+    ) -> Tuple[List[List[WeightChunkInfo]], List[float]]:
         
         if not chunks:
-            return []
+            return [], []
 
         # List of grouped (rechunked) chunks to return
         committed_chunk_groups: List[List[WeightChunkInfo]] = []
+        committed_group_io_times: List[float] = []
         
         # Start with the first chunk as the initial using_chunks
         index = 0
@@ -137,8 +143,18 @@ class RechunkPlanningStrategy(PlanningStrategy):
 
                 # Get the next candidate chunk size
                 next_candidate_chunk_size = chunks[index + 1].aligned_size if (index + 1) < len(chunks) else 0
+                
+                ### Invariant 2. Check io time hiding condition (group compute_time > group io_time) ###
+                io_estimate_ms = self._estimate_prefetch_io_time(
+                    mode,
+                    compute_chunk_group,
+                    prefetch_chunk_group,
+                    candidate_chunk,
+                )
+                if io_estimate_ms is not None and compute_chunk_group_elapsed_ms < io_estimate_ms:
+                    break
 
-                ### Invariant 2. Check peak memory usage ###
+                ### Invariant 3. Check peak memory usage ###
                 # Evaluate projected peak buffer usage (size) if we include the candidate.
                 #
                 # Why we include the "next head" here:
@@ -177,6 +193,7 @@ class RechunkPlanningStrategy(PlanningStrategy):
             # start a new group with the next chunk to avoid infinite loop.
             if not prefetch_chunk_group:
                 committed_chunk_groups.append(compute_chunk_group)
+                committed_group_io_times.append(self._estimate_group_io_time(mode, compute_chunk_group))
                 if index >= len(chunks):
                     compute_chunk_group = []
                     break
@@ -187,13 +204,47 @@ class RechunkPlanningStrategy(PlanningStrategy):
             # Completed the current loading chunk; commits the current using chunk to plan and
             # start a new using chunk from the loading chunk.
             committed_chunk_groups.append(compute_chunk_group)
+            committed_group_io_times.append(self._estimate_group_io_time(mode, compute_chunk_group))
             compute_chunk_group = prefetch_chunk_group
             # Rechunk loop to evaluate a fresh loading chunk.
 
         if compute_chunk_group:
             committed_chunk_groups.append(compute_chunk_group)
+            committed_group_io_times.append(self._estimate_group_io_time(mode, compute_chunk_group))
 
-        return committed_chunk_groups
+        return committed_chunk_groups, committed_group_io_times
+
+
+    def _estimate_prefetch_io_time(
+        self,
+        mode: str,
+        compute_chunk_group: List[WeightChunkInfo],
+        prefetch_chunk_group: List[WeightChunkInfo],
+        candidate_chunk: WeightChunkInfo,
+    ) -> Optional[float]:
+        existing = prefetch_chunk_group if prefetch_chunk_group else compute_chunk_group
+        if not existing:
+            return None
+        gap_bytes = _compute_gap_bytes(existing, candidate_chunk)
+        try:
+            chunks_for_estimate = list(prefetch_chunk_group)
+            chunks_for_estimate.append(candidate_chunk)
+            estimate = self.io_estimator.estimate(mode, chunks_for_estimate, gap_bytes=gap_bytes)
+        except Exception:
+            return None
+        return float(estimate)
+
+    def _estimate_group_io_time(
+        self,
+        mode: str,
+        chunk_group: List[WeightChunkInfo],
+    ) -> float:
+        if not chunk_group:
+            return 0.0
+        try:
+            return float(self.io_estimator.estimate(mode, chunk_group, gap_bytes=0))
+        except Exception:
+            return 0.0
 
 
     

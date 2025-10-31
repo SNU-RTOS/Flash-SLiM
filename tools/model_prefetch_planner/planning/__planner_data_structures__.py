@@ -27,6 +27,7 @@ class PrefetchPlanEntry:
     chunk_data: Dict[str, Any]
     io_order: int
     avg_compute_time: Optional[float] = None
+    estimated_io_time_ms: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         ordered_entry = OrderedDict()
@@ -34,6 +35,7 @@ class PrefetchPlanEntry:
             ordered_entry[key] = value
         ordered_entry["avg_compute_time"] = self.avg_compute_time
         ordered_entry["io_order"] = self.io_order
+        ordered_entry["estimated_io_time_ms"] = self.estimated_io_time_ms
         return ordered_entry
 
     @property
@@ -72,6 +74,7 @@ class PrefetchPlan:
                         "chunk_indices": [],
                         "start_origin_offset": None,
                         "total_avg_compute_time": 0.0,
+                        "estimated_io_time_ms": None,
                     },
                 )
                 grp["chunk_count"] += 1
@@ -109,6 +112,13 @@ class PrefetchPlan:
                     pass
 
                 grp["chunk_indices"].append(ed.get("chunk_index"))
+
+                io_time = ed.get("estimated_io_time_ms")
+                if io_time is not None:
+                    try:
+                        grp["estimated_io_time_ms"] = float(io_time)
+                    except Exception:
+                        pass
 
             # convert group keys to strings for JSON-friendly stable ordering
             prefetch_summary[mode] = {str(k): v for k, v in sorted(groups.items())}

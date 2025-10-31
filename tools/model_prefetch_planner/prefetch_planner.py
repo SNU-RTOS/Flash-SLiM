@@ -18,7 +18,7 @@ from collections import defaultdict
 from typing import Dict, List,  Tuple
 
 from planning.__planner_data_structures__ import PrefetchPlan, WeightChunkInfo
-from planning.io_estimator import IoTimeEstimator, BandwidthIoTimeEstimator
+from planning.io_estimator import IoTimeEstimator, BandwidthIoTimeEstimator, DirectIoTimeEstimator
 from planning.stratgey_rechunk import RechunkPlanningStrategy
 from planning.strategy_simple import SimplePlanningStrategy
 from planning.strategy_base import ChunkKey, PlanningContext, PlanningStrategy
@@ -159,12 +159,13 @@ def create_strategy(args: argparse.Namespace, planner: PrefetchPlanner) -> Plann
     
     if strategy_id == "rechunk":
         buffer_size = _resolve_buffer_size(planner)
-        
+
         if buffer_size <= 0:
             raise ValueError("Re-chunk strategy requires a positive max_buffer_size in metadata")
-        
-        io_estimator = BandwidthIoTimeEstimator(bandwidth_bytes_per_sec=1e9)
-        
+
+        fallback_estimator = BandwidthIoTimeEstimator(bandwidth_bytes_per_sec=1e9)
+        io_estimator = DirectIoTimeEstimator(fallback=fallback_estimator)
+
         return RechunkPlanningStrategy(
             max_buffer_size=buffer_size,
             io_estimator=io_estimator,
