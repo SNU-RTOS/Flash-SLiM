@@ -15,13 +15,14 @@ import os
 import re
 import statistics
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List,  Tuple
 
 from planning.__planner_data_structures__ import PrefetchPlan, WeightChunkInfo
 from planning.io_estimator import IoTimeEstimator, BandwidthIoTimeEstimator
 from planning.stratgey_rechunk import RechunkPlanningStrategy
 from planning.strategy_simple import SimplePlanningStrategy
 from planning.strategy_base import ChunkKey, PlanningContext, PlanningStrategy
+from planning.common import _coerce_to_float, _coerce_to_int
 
 
 class PrefetchPlanner:
@@ -137,45 +138,6 @@ class PrefetchPlanner:
         print(f"[PrefetchPlanner] Prefetch plan saved to {output_path}")
 
 
-def _coerce_to_float(value: Optional[object], default: float) -> float:
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return default
-    return default
-
-
-def _coerce_to_int(value: Optional[object], default: int) -> int:
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(value.strip())
-        except ValueError:
-            return default
-    return default
-    
-    
-def _build_io_estimator(planner: PrefetchPlanner) -> IoTimeEstimator:
-    bandwidth = max(
-        _coerce_to_float(planner.metadata.get("io_bandwidth_bytes_per_s"), 1_000_000_000.0),
-        1.0,
-    )
-    base_estimator = BandwidthIoTimeEstimator(
-        bandwidth_bytes_per_sec=bandwidth,
-        fixed_overhead_ms=max(
-            _coerce_to_float(planner.metadata.get("io_fixed_overhead_ms"), 0.0),
-            0.0,
-        ),
-    )
-    return base_estimator
-
-
 def _resolve_buffer_size(planner: PrefetchPlanner) -> int:
     # Support multiple possible metadata keys (legacy and current)
     key = "weight_chunk_buffer_size"
@@ -191,18 +153,24 @@ def _resolve_default_compute_ms(planner: PrefetchPlanner) -> float:
 
 def create_strategy(args: argparse.Namespace, planner: PrefetchPlanner) -> PlanningStrategy:
     strategy_id = args.strategy.lower()
+    
     if strategy_id == "simple":
         return SimplePlanningStrategy()
+    
     if strategy_id == "rechunk":
         buffer_size = _resolve_buffer_size(planner)
+        
         if buffer_size <= 0:
             raise ValueError("Re-chunk strategy requires a positive max_buffer_size in metadata")
-        io_estimator = _build_io_estimator(planner)
+        
+        io_estimator = BandwidthIoTimeEstimator(bandwidth_bytes_per_sec=1e9)
+        
         return RechunkPlanningStrategy(
             max_buffer_size=buffer_size,
             io_estimator=io_estimator,
             default_compute_ms=_resolve_default_compute_ms(planner),
         )
+        
     raise ValueError(f"Unknown planning strategy: {args.strategy}")
 
 

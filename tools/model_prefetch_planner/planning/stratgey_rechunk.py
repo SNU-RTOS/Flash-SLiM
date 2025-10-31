@@ -9,7 +9,7 @@ from .__planner_data_structures__ import PrefetchPlan, PrefetchPlanEntry, Weight
 from .strategy_base import ChunkKey, PlanningContext, PlanningStrategy
 from .io_estimator import IoTimeEstimator
 
-from .common import _sort_chunks, _print_chunk_list, _compute_gap_bytes, _sum_aligned_size
+from .common import sort_chunk_list, print_chunk_list, _compute_gap_bytes, sum_chunk_aligned_size, sum_chunk_compute_time
 
 
 
@@ -24,7 +24,7 @@ class RechunkPlanningStrategy(PlanningStrategy):
         plan = PrefetchPlan(metadata=dict(context.metadata))
         io_order = 0
         for mode, chunks in context.weight_chunks.items():
-            ordered_chunks = _sort_chunks(chunks)
+            ordered_chunks = sort_chunk_list(chunks)
             # compute logical groups, but do NOT mutate original chunk_index values.
             # We will emit one PrefetchPlanEntry per original o-chunk, preserving chunk_index,
             # and encode re-chunking in the entry's io_order (group-triggered prefetch order).
@@ -76,69 +76,89 @@ class RechunkPlanningStrategy(PlanningStrategy):
     ) -> List[List[WeightChunkInfo]]:
         if not chunks:
             return []
-
         result: List[List[WeightChunkInfo]] = []
         index = 0
-        using: List[WeightChunkInfo] = [chunks[index]]
+        using_chunks: List[WeightChunkInfo] = [chunks[index]]
+
         index += 1
 
         while index < len(chunks):
-            loading: List[WeightChunkInfo] = []
-            loading_size = 0
-            using_compute_ms = self._sum_compute_time(mode, using, context.profile_stats)
-            using_size = _sum_aligned_size(using)
+            loading_chunks: List[WeightChunkInfo] = []
+
+            using_chunks_size = sum_chunk_aligned_size(using_chunks)
+            loading_chunks_size = 0
+            candidate_chunk_size = 0
+            next_head_chunk_size = 0
+
+            using_compute_ms = sum_chunk_compute_time(mode, using_chunks, context.profile_stats)
 
             while index < len(chunks):
-                candidate = chunks[index]
+                # Get the candidate chunk
+                candidate_chunk = chunks[index]
+
                 # enforce contiguity invariant: candidate must be contiguous in origin space
-                last_chunk = loading[-1] if loading else using[-1]
+                last_chunk = loading_chunks[-1] if loading_chunks else using_chunks[-1]
                 expected_origin = last_chunk.origin_offset + last_chunk.origin_size
-                if candidate.origin_offset != expected_origin:
-                    # not contiguous in origin; stop adding to this loading window so that
-                    # the candidate will begin a new logical group
+                if candidate_chunk.origin_offset != expected_origin:
+                    # not contiguous in origin; stop adding to this loading set so that the candidate will begin a new logical chunk-group
                     break
 
-                candidate_size = candidate.aligned_size
-                next_head_size = chunks[index + 1].aligned_size if (index + 1) < len(chunks) else 0
-                mem_after = using_size + loading_size + candidate_size + next_head_size
-                if mem_after > self.max_buffer_size:
+                # Evaluate memory usage if we add the candidate chunk
+                candidate_chunk_size = candidate_chunk.aligned_size
+
+                # Get the next chunk size
+                next_head_chunk_size = chunks[index + 1].aligned_size if (index + 1) < len(chunks) else 0
+
+                # Evaluate projected peak buffer usage (size) if we include the candidate.
+                #
+                # Why we include the "next head" here:
+                # The strategy implements an explicit compute⇄I/O overlap model: while the
+                # runtime performs computation on the current `using` chunks, we issue
+                # prefetch I/O for the next io_order (the next logical I/O chunk-group). That
+                # means the planner must reserve buffer space not only for the chunks
+                # we're currently loading but also for the immediate next group's chunk
+                # that we intend to prefetch during the compute phase. Including the
+                # next head in this projected peak calculation ensures we are conservative
+                # and avoid buffer exhaustion when the prefetch for the next io_order
+                # is issued.
+                #
+                # The variable name `prefetch_reserved_buffer_bytes` reflects that this
+                # value is a reservation for prefetching (a future/peak estimate,
+                # not the instantaneous usage). We include the next-head so that the
+                # planner reserves space to prefetch the next io_order's chunk while
+                # the current `using` chunks are being computed.
+                prefetch_reserved_buffer_size = (
+                    using_chunks_size + loading_chunks_size + candidate_chunk_size + next_head_chunk_size
+                )
+                if prefetch_reserved_buffer_size > self.max_buffer_size:
+                    # Exceeded memory limit; stop adding to this loading set so that
+                    # the candidate will begin a new logical chunk-group
                     break
 
                 # Only enforce the memory invariant. I/O-time-based checks removed to simplify
                 # the algorithm per request — accept candidate if memory allows.
-                loading.append(candidate)
-                loading_size += candidate_size
+                loading_chunks.append(candidate_chunk)
+                loading_chunks_size += candidate_chunk_size
                 index += 1
 
-            if not loading:
-                result.append(using)
+            if not loading_chunks:
+                result.append(using_chunks)
                 if index >= len(chunks):
-                    using = []
+                    using_chunks = []
                     break
-                using = [chunks[index]]
+                using_chunks = [chunks[index]]
                 index += 1
                 continue
 
-            result.append(using)
-            using = loading
-            # Reset loop to evaluate a fresh loading window.
+            result.append(using_chunks)
+            using_chunks = loading_chunks
+            # Reset loop to evaluate a fresh loading set.
 
-        if using:
-            result.append(using)
+        if using_chunks:
+            result.append(using_chunks)
 
         return result
 
-    def _sum_compute_time(
-        self,
-        mode: str,
-        chunks: Iterable[WeightChunkInfo],
-        profile_stats: Mapping[ChunkKey, float],
-    ) -> float:
-        total = 0.0
-        for chunk in chunks:
-            key = (mode, chunk.chunk_index, chunk.origin_offset)
-            total += profile_stats.get(key, self.default_compute_ms)
-        return total
 
     
     def _validate_chunks(self, context: PlanningContext) -> None:

@@ -2,7 +2,7 @@ from planning.__planner_data_structures__ import WeightChunkInfo
 from planning.strategy_base import PlanningContext
 from planning.stratgey_rechunk import RechunkPlanningStrategy
 from planning.io_estimator import BandwidthIoTimeEstimator
-from planning.common import _sort_chunks, _print_chunk_list, _compute_gap_bytes, _sum_aligned_size
+from planning.common import sort_chunk_list, print_chunk_list, _compute_gap_bytes, sum_chunk_aligned_size
 
 # Construct two non-contiguous chunks (as in your example)
 chunk0 = WeightChunkInfo(

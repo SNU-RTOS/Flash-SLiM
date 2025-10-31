@@ -6,7 +6,7 @@ from typing import Dict, List, Mapping
 
 from .__planner_data_structures__ import PrefetchPlan, PrefetchPlanEntry, WeightChunkInfo
 from .strategy_base import ChunkKey, PlanningContext, PlanningStrategy
-from .common import _sort_chunks, _print_chunk_list
+from .common import sort_chunk_list, print_chunk_list
 
 
 
@@ -38,7 +38,7 @@ class SimplePlanningStrategy(PlanningStrategy):
         plan = PrefetchPlan(metadata=dict(context.metadata))
         io_order = 0
         for mode, chunks in context.weight_chunks.items():
-            ordered_chunks = _sort_chunks(chunks)
+            ordered_chunks = sort_chunk_list(chunks)
             plan.plan_entries[mode] = []
             for chunk in ordered_chunks:
                 chunk_payload = _materialize_chunk_payload(context.chunk_lookup, mode, chunk)
