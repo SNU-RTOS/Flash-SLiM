@@ -6,10 +6,8 @@ from typing import Dict, List, Mapping
 
 from .__planner_data_structures__ import PrefetchPlan, PrefetchPlanEntry, WeightChunkInfo
 from .strategy_base import ChunkKey, PlanningContext, PlanningStrategy
+from .common import _sort_chunks, _print_chunk_list
 
-
-def _sort_chunks(chunks: List[WeightChunkInfo]) -> List[WeightChunkInfo]:
-    return sorted(chunks, key=lambda c: (c.aligned_offset, c.chunk_index))
 
 
 def _materialize_chunk_payload(

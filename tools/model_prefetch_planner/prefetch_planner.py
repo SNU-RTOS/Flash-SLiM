@@ -249,6 +249,7 @@ def main() -> None:
     strategy = create_strategy(args, planner)
 
     # Build prefetch plan
+    print("[PrefetchPlanner] Building prefetch plan...")
     plan = strategy.build(context)
     planner.integrate_profiling_data(plan)
     planner.save_prefetch_plan(plan, args.output)

@@ -9,21 +9,9 @@ from .__planner_data_structures__ import PrefetchPlan, PrefetchPlanEntry, Weight
 from .strategy_base import ChunkKey, PlanningContext, PlanningStrategy
 from .io_estimator import IoTimeEstimator
 
-
-def _compute_gap_bytes(existing: Sequence[WeightChunkInfo], candidate: WeightChunkInfo) -> int:
-    last = existing[-1]
-    end_offset = last.aligned_offset + last.aligned_size
-    if candidate.aligned_offset <= end_offset:
-        return 0
-    return candidate.aligned_offset - end_offset
+from .common import _sort_chunks, _print_chunk_list, _compute_gap_bytes, _sum_aligned_size
 
 
-def _sort_chunks(chunks: Sequence[WeightChunkInfo]) -> List[WeightChunkInfo]:
-    return sorted(chunks, key=lambda c: (c.aligned_offset, c.chunk_index))
-
-
-def _sum_aligned_size(chunks: Iterable[WeightChunkInfo]) -> int:
-    return sum(chunk.aligned_size for chunk in chunks)
 
 @dataclass
 class RechunkPlanningStrategy(PlanningStrategy):
@@ -37,21 +25,47 @@ class RechunkPlanningStrategy(PlanningStrategy):
         io_order = 0
         for mode, chunks in context.weight_chunks.items():
             ordered_chunks = _sort_chunks(chunks)
+            # compute logical groups, but do NOT mutate original chunk_index values.
+            # We will emit one PrefetchPlanEntry per original o-chunk, preserving chunk_index,
+            # and encode re-chunking in the entry's io_order (group-triggered prefetch order).
             logical_groups = self._rechunk_mode(mode, ordered_chunks, context)
             plan.plan_entries[mode] = []
-            for logical_index, group in enumerate(logical_groups):
-                chunk_payload = self._materialize_group_payload(
-                    mode, logical_index, group, context.chunk_lookup
-                )
-                compute_ms = self._sum_compute_time(mode, group, context.profile_stats)
-                entry = PrefetchPlanEntry(
-                    mode=mode,
-                    chunk_data=chunk_payload,
-                    io_order=io_order,
-                    avg_compute_time=compute_ms,
-                )
-                plan.plan_entries[mode].append(entry)
-                io_order += 1
+            # For group k, we intend to prefetch that group's chunks during execution of group k-1.
+            # So we set io_order for chunks in group k to max(0, k-1).
+            for group_idx, group in enumerate(logical_groups):
+                # encode logical re-chunk group id into io_order so groups are
+                # distinguishable in the plan. Previously this used a shifted
+                # mapping (max(0, k-1)) to indicate prefetch timing; for
+                # clarity we now emit the logical group index directly.
+                prefetch_io_order = group_idx
+                for chunk in group:
+                    # materialize per-chunk payload from lookup if present, else reconstruct
+                    lookup_key = (mode, chunk.chunk_index, chunk.origin_offset)
+                    chunk_payload = context.chunk_lookup.get(lookup_key)
+                    if chunk_payload is None:
+                        chunk_payload = {
+                            "chunk_index": chunk.chunk_index,
+                            "aligned_offset": chunk.aligned_offset,
+                            "offset_adjust": chunk.offset_adjust,
+                            "aligned_size": chunk.aligned_size,
+                            "origin_offset": chunk.origin_offset,
+                            "origin_size": chunk.origin_size,
+                            "weights_id": chunk.weights_id,
+                            "prefetch_mode": chunk.prefetch_mode,
+                            "prefetch_mode_str": chunk.prefetch_mode_str,
+                        }
+
+                    # compute per-chunk avg_compute_time
+                    key = (mode, chunk.chunk_index, chunk.origin_offset)
+                    compute_ms = context.profile_stats.get(key, self.default_compute_ms)
+
+                    entry = PrefetchPlanEntry(
+                        mode=mode,
+                        chunk_data=dict(chunk_payload),
+                        io_order=prefetch_io_order,
+                        avg_compute_time=compute_ms,
+                    )
+                    plan.plan_entries[mode].append(entry)
         return plan
 
     def _rechunk_mode(
@@ -76,19 +90,22 @@ class RechunkPlanningStrategy(PlanningStrategy):
 
             while index < len(chunks):
                 candidate = chunks[index]
+                # enforce contiguity invariant: candidate must be contiguous in origin space
+                last_chunk = loading[-1] if loading else using[-1]
+                expected_origin = last_chunk.origin_offset + last_chunk.origin_size
+                if candidate.origin_offset != expected_origin:
+                    # not contiguous in origin; stop adding to this loading window so that
+                    # the candidate will begin a new logical group
+                    break
+
                 candidate_size = candidate.aligned_size
                 next_head_size = chunks[index + 1].aligned_size if (index + 1) < len(chunks) else 0
                 mem_after = using_size + loading_size + candidate_size + next_head_size
                 if mem_after > self.max_buffer_size:
                     break
 
-                tentative_loading = loading + [candidate]
-                gap_bytes = _compute_gap_bytes(loading or using, candidate)
-                io_ms = self.io_estimator.estimate(mode, tentative_loading, gap_bytes=gap_bytes)
-
-                if using_compute_ms < io_ms:
-                    break
-
+                # Only enforce the memory invariant. I/O-time-based checks removed to simplify
+                # the algorithm per request — accept candidate if memory allows.
                 loading.append(candidate)
                 loading_size += candidate_size
                 index += 1
@@ -123,51 +140,7 @@ class RechunkPlanningStrategy(PlanningStrategy):
             total += profile_stats.get(key, self.default_compute_ms)
         return total
 
-    def _materialize_group_payload(
-        self,
-        mode: str,
-        logical_index: int,
-        group: Sequence[WeightChunkInfo],
-        chunk_lookup: Mapping[ChunkKey, Dict[str, object]],
-    ) -> Dict[str, object]:
-        first = group[0]
-        weights_id = {chunk.weights_id for chunk in group}
-        prefetch_modes = {chunk.prefetch_mode for chunk in group}
-        prefetch_mode_strs = {chunk.prefetch_mode_str for chunk in group}
-        if len(weights_id) != 1 or len(prefetch_modes) != 1 or len(prefetch_mode_strs) != 1:
-            raise ValueError("Re-chunking requires uniform weights_id and prefetch_mode within a group")
-
-        aggregate_payload = {
-            "chunk_index": logical_index,
-            "aligned_offset": first.aligned_offset,
-            "offset_adjust": first.offset_adjust,
-            "aligned_size": _sum_aligned_size(group),
-            "origin_offset": first.origin_offset,
-            "origin_size": sum(chunk.origin_size for chunk in group),
-            "weights_id": first.weights_id,
-            "prefetch_mode": first.prefetch_mode,
-            "prefetch_mode_str": first.prefetch_mode_str,
-            "rechunked_span": [
-                {
-                    "chunk_index": chunk.chunk_index,
-                    "aligned_offset": chunk.aligned_offset,
-                    "aligned_size": chunk.aligned_size,
-                    "origin_offset": chunk.origin_offset,
-                    "origin_size": chunk.origin_size,
-                }
-                for chunk in group
-            ],
-            "estimated_io_time_ms": self.io_estimator.estimate(mode, group),
-        }
-
-        # Preserve any additional keys from the first raw payload.
-        raw_payload = chunk_lookup.get((mode, first.chunk_index, first.origin_offset))
-        if raw_payload:
-            for key, value in raw_payload.items():
-                aggregate_payload.setdefault(key, value)
-
-        return aggregate_payload
-
+    
     def _validate_chunks(self, context: PlanningContext) -> None:
         if self.max_buffer_size <= 0:
             raise ValueError("max_buffer_size must be positive")

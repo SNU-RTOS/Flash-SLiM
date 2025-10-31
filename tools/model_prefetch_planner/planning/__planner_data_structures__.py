@@ -54,12 +54,72 @@ class PrefetchPlan:
     def to_dict(self) -> Dict[str, Any]:
         metadata_snapshot = dict(self.metadata)
         metadata_snapshot["prefetch_plan_version"] = self.version
+        # Build per-mode, per-io_order summary for quick inspection without
+        # mutating the immutable `weight_chunks` list. This provides how much
+        # data will be prefetched for each logical I/O group.
+        prefetch_summary: Dict[str, Dict[str, Any]] = {}
+        for mode, entries in self.plan_entries.items():
+            groups: Dict[int, Dict[str, Any]] = {}
+            for entry in entries:
+                ed = entry.to_dict()
+                io_order = ed.get("io_order", 0)
+                grp = groups.setdefault(
+                    io_order,
+                    {
+                        "chunk_count": 0,
+                        "total_aligned_size": 0,
+                        "total_origin_size": 0,
+                        "chunk_indices": [],
+                        "start_origin_offset": None,
+                        "total_avg_compute_time": 0.0,
+                    },
+                )
+                grp["chunk_count"] += 1
+                aligned = ed.get("aligned_size") or 0
+                origin_offset = ed.get("origin_offset")
+                origin_size = ed.get("origin_size") or 0
+                # ensure ints and update totals
+                try:
+                    a = int(aligned)
+                    grp["total_aligned_size"] += a
+                except Exception:
+                    pass
+                try:
+                    o_size = int(origin_size)
+                    grp["total_origin_size"] += o_size
+                except Exception:
+                    pass
+                # update start_origin_offset to the smallest origin_offset seen in group
+                try:
+                    if origin_offset is not None:
+                        o_off = int(origin_offset)
+                        if grp["start_origin_offset"] is None or o_off < grp["start_origin_offset"]:
+                            grp["start_origin_offset"] = o_off
+                except Exception:
+                    pass
+                # accumulate per-entry avg_compute_time (treat missing as 0)
+                try:
+                    avg = ed.get("avg_compute_time")
+                    if avg is None:
+                        avg_val = 0.0
+                    else:
+                        avg_val = float(avg)
+                    grp["total_avg_compute_time"] += avg_val
+                except Exception:
+                    pass
+
+                grp["chunk_indices"].append(ed.get("chunk_index"))
+
+            # convert group keys to strings for JSON-friendly stable ordering
+            prefetch_summary[mode] = {str(k): v for k, v in sorted(groups.items())}
+
         return {
             "metadata": metadata_snapshot,
             "weight_chunks": {
                 mode: [entry.to_dict() for entry in entries]
                 for mode, entries in self.plan_entries.items()
             },
+            "prefetch_plan": prefetch_summary,
         }
 
     def to_json(self, *, indent: int = 2) -> str:
