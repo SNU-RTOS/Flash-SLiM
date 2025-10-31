@@ -68,47 +68,77 @@ class RechunkPlanningStrategy(PlanningStrategy):
                     plan.plan_entries[mode].append(entry)
         return plan
 
+
+    def _check_chunk_contiguity(
+        self, 
+        prefetching_chunk_group: List[WeightChunkInfo], 
+        active_chunk_group: List[WeightChunkInfo], 
+        candidate_chunk: WeightChunkInfo
+    ) -> bool:
+        '''
+        Check if the candidate chunk is contiguous in origin space with respect to
+        the last chunk in either the loading_chunks or using_chunks.
+        This ensures that chunks grouped together maintain contiguity in their
+        original data layout.
+        '''
+        # enforce contiguity invariant: candidate must be contiguous in origin space
+        last_chunk = prefetching_chunk_group[-1] if prefetching_chunk_group else active_chunk_group[-1]
+        expected_origin_offset = last_chunk.origin_offset + last_chunk.origin_size
+        
+        if candidate_chunk.origin_offset != expected_origin_offset:
+        # not contiguous in origin; stop adding to this loading set so that the candidate will begin a new logical chunk-group
+            return False
+        else:
+            return True
+
     def _rechunk_mode(
         self,
         mode: str,
         chunks: Sequence[WeightChunkInfo],
         context: PlanningContext,
     ) -> List[List[WeightChunkInfo]]:
+        
         if not chunks:
             return []
-        result: List[List[WeightChunkInfo]] = []
-        index = 0
-        using_chunks: List[WeightChunkInfo] = [chunks[index]]
 
+        # List of grouped (rechunked) chunks to return
+        committed_chunk_groups: List[List[WeightChunkInfo]] = []
+        
+        # Start with the first chunk as the initial using_chunks
+        index = 0
+        compute_chunk_group: List[WeightChunkInfo] = [chunks[index]]
         index += 1
 
+        # Loop until all chunks are processed
         while index < len(chunks):
-            loading_chunks: List[WeightChunkInfo] = []
+            prefetch_chunk_group: List[WeightChunkInfo] = []
 
-            using_chunks_size = sum_chunk_aligned_size(using_chunks)
-            loading_chunks_size = 0
+            compute_chunk_group_size = sum_chunk_aligned_size(compute_chunk_group)
+            prefetch_chunk_group_size = 0
             candidate_chunk_size = 0
-            next_head_chunk_size = 0
+            next_candidate_chunk_size = 0
 
-            using_compute_ms = sum_chunk_compute_time(mode, using_chunks, context.profile_stats)
+            compute_chunk_group_elapsed_ms = sum_chunk_compute_time(mode, 
+                                                                    compute_chunk_group, 
+                                                                    context.profile_stats)
 
             while index < len(chunks):
                 # Get the candidate chunk
                 candidate_chunk = chunks[index]
 
-                # enforce contiguity invariant: candidate must be contiguous in origin space
-                last_chunk = loading_chunks[-1] if loading_chunks else using_chunks[-1]
-                expected_origin = last_chunk.origin_offset + last_chunk.origin_size
-                if candidate_chunk.origin_offset != expected_origin:
-                    # not contiguous in origin; stop adding to this loading set so that the candidate will begin a new logical chunk-group
+                ### Invariant 1. Check chunk memory contiguity ###
+                if not self._check_chunk_contiguity(prefetch_chunk_group, 
+                                                    compute_chunk_group, 
+                                                    candidate_chunk):
                     break
 
-                # Evaluate memory usage if we add the candidate chunk
+                # Get the candidate chunk size
                 candidate_chunk_size = candidate_chunk.aligned_size
 
-                # Get the next chunk size
-                next_head_chunk_size = chunks[index + 1].aligned_size if (index + 1) < len(chunks) else 0
+                # Get the next candidate chunk size
+                next_candidate_chunk_size = chunks[index + 1].aligned_size if (index + 1) < len(chunks) else 0
 
+                ### Invariant 2. Check peak memory usage ###
                 # Evaluate projected peak buffer usage (size) if we include the candidate.
                 #
                 # Why we include the "next head" here:
@@ -128,36 +158,42 @@ class RechunkPlanningStrategy(PlanningStrategy):
                 # planner reserves space to prefetch the next io_order's chunk while
                 # the current `using` chunks are being computed.
                 prefetch_reserved_buffer_size = (
-                    using_chunks_size + loading_chunks_size + candidate_chunk_size + next_head_chunk_size
+                    compute_chunk_group_size + 
+                    prefetch_chunk_group_size + 
+                    candidate_chunk_size + 
+                    next_candidate_chunk_size
                 )
                 if prefetch_reserved_buffer_size > self.max_buffer_size:
                     # Exceeded memory limit; stop adding to this loading set so that
                     # the candidate will begin a new logical chunk-group
                     break
 
-                # Only enforce the memory invariant. I/O-time-based checks removed to simplify
-                # the algorithm per request — accept candidate if memory allows.
-                loading_chunks.append(candidate_chunk)
-                loading_chunks_size += candidate_chunk_size
+                # Passed all invariants -> include the candidate chunk to prefetching chunk group
+                prefetch_chunk_group.append(candidate_chunk)
+                prefetch_chunk_group_size += candidate_chunk_size
                 index += 1
 
-            if not loading_chunks:
-                result.append(using_chunks)
+            # If no chunks were added to prefetching_chunk_group, we must forcibly
+            # start a new group with the next chunk to avoid infinite loop.
+            if not prefetch_chunk_group:
+                committed_chunk_groups.append(compute_chunk_group)
                 if index >= len(chunks):
-                    using_chunks = []
+                    compute_chunk_group = []
                     break
-                using_chunks = [chunks[index]]
+                compute_chunk_group = [chunks[index]]
                 index += 1
                 continue
 
-            result.append(using_chunks)
-            using_chunks = loading_chunks
-            # Reset loop to evaluate a fresh loading set.
+            # Completed the current loading chunk; commits the current using chunk to plan and
+            # start a new using chunk from the loading chunk.
+            committed_chunk_groups.append(compute_chunk_group)
+            compute_chunk_group = prefetch_chunk_group
+            # Rechunk loop to evaluate a fresh loading chunk.
 
-        if using_chunks:
-            result.append(using_chunks)
+        if compute_chunk_group:
+            committed_chunk_groups.append(compute_chunk_group)
 
-        return result
+        return committed_chunk_groups
 
 
     
