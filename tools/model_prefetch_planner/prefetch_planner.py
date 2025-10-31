@@ -17,12 +17,9 @@ import statistics
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
-from planning.__planner_data_structures import PrefetchPlan, WeightChunkInfo
-from planning.stratgey_rechunk import (
-    BandwidthIoTimeEstimator,
-    IoTimeEstimator,
-    RechunkPlanningStrategy,
-)
+from planning.__planner_data_structures__ import PrefetchPlan, WeightChunkInfo
+from planning.io_estimator import IoTimeEstimator, BandwidthIoTimeEstimator
+from planning.stratgey_rechunk import RechunkPlanningStrategy
 from planning.strategy_simple import SimplePlanningStrategy
 from planning.strategy_base import ChunkKey, PlanningContext, PlanningStrategy
 
@@ -36,6 +33,12 @@ class PrefetchPlanner:
         self.profile_stats: Dict[ChunkKey, float] = {}
         self.loaded_profile_files: List[str] = []
 
+    def _resolve_path(self, path: str) -> str:
+        if os.path.isabs(path):
+            return path
+        base_dir = os.path.dirname(self.cmt_path) or os.getcwd()
+        return os.path.join(base_dir, path)
+    
     def load_cmt(self) -> None:
         print(f"[PrefetchPlanner] Loading Weight Chunk Metadata Table from: {self.cmt_path}")
         with open(self._resolve_path(self.cmt_path), "r", encoding="utf-8") as source:
@@ -96,22 +99,6 @@ class PrefetchPlanner:
         }
         print(f"[PrefetchPlanner] Loaded profiling stats for {len(self.profile_stats)} chunks")
 
-    # def integrate_profiling_data(self, plan: PrefetchPlan) -> None:
-    #     if not self.profile_stats:
-    #         print("[PrefetchPlanner] No profiling data to integrate; skipping avg_compute_time enrichment")
-    #         return
-
-    #     print("[PrefetchPlanner] Integrating profiling data into prefetch plan")
-    #     for mode, entries in plan.plan_entries.items():
-    #         for entry in entries:
-    #             if entry.avg_compute_time is not None:
-    #                 continue
-    #             key = (mode, entry.chunk_index, entry.origin_offset)
-    #             if key in self.profile_stats:
-    #                 entry.avg_compute_time = self.profile_stats[key]
-
-    #     print("[PrefetchPlanner] Profiling data integration complete")
-
     def build_context(self) -> PlanningContext:
         return PlanningContext(
             metadata=dict(self.metadata),
@@ -119,6 +106,27 @@ class PrefetchPlanner:
             chunk_lookup=self.chunk_lookup,
             profile_stats=self.profile_stats,
         )
+    
+    def integrate_profiling_data(self, plan: PrefetchPlan) -> None:
+        """Enrich plan entries with avg_compute_time from loaded profiling logs.
+
+        This method is safe to call even when no profiling data was loaded.
+        """
+        if not self.profile_stats:
+            print("[PrefetchPlanner] No profiling data to integrate; skipping avg_compute_time enrichment")
+            return
+
+        print("[PrefetchPlanner] Integrating profiling data into prefetch plan")
+        for mode, entries in plan.plan_entries.items():
+            for entry in entries:
+                # If already set, keep existing value
+                if getattr(entry, "avg_compute_time", None) is not None:
+                    continue
+                key = (mode, entry.chunk_index, entry.origin_offset)
+                if key in self.profile_stats:
+                    entry.avg_compute_time = self.profile_stats[key]
+
+        print("[PrefetchPlanner] Profiling data integration complete")
         
     def save_prefetch_plan(self, plan: PrefetchPlan, output_path: str) -> None:
         output_dir = os.path.dirname(output_path)
@@ -127,68 +135,6 @@ class PrefetchPlanner:
         with open(output_path, "w", encoding="utf-8") as sink:
             json.dump(plan.to_dict(), sink, indent=2)
         print(f"[PrefetchPlanner] Prefetch plan saved to {output_path}")
-
-        
-    def _resolve_path(self, path: str) -> str:
-        if os.path.isabs(path):
-            return path
-        base_dir = os.path.dirname(self.cmt_path) or os.getcwd()
-        return os.path.join(base_dir, path)
-
-
-def create_strategy(args: argparse.Namespace, planner: PrefetchPlanner) -> PlanningStrategy:
-    strategy_id = args.strategy.lower()
-    if strategy_id == "simple":
-        return SimplePlanningStrategy()
-    if strategy_id == "rechunk":
-        buffer_size = _resolve_buffer_size(planner)
-        if buffer_size <= 0:
-            raise ValueError("Re-chunk strategy requires a positive max_buffer_size in metadata")
-        io_estimator = _build_io_estimator(planner)
-        return RechunkPlanningStrategy(
-            max_buffer_size=buffer_size,
-            io_estimator=io_estimator,
-            default_compute_ms=_resolve_default_compute_ms(planner),
-            allow_stall=_resolve_allow_stall(planner),
-        )
-    raise ValueError(f"Unknown planning strategy: {args.strategy}")
-
-
-def _build_io_estimator(planner: PrefetchPlanner) -> IoTimeEstimator:
-    bandwidth = max(
-        _coerce_to_float(planner.metadata.get("io_bandwidth_bytes_per_s"), 1_000_000_000.0),
-        1.0,
-    )
-    base_estimator = BandwidthIoTimeEstimator(
-        bandwidth_bytes_per_sec=bandwidth,
-        fixed_overhead_ms=max(
-            _coerce_to_float(planner.metadata.get("io_fixed_overhead_ms"), 0.0),
-            0.0,
-        ),
-    )
-    return base_estimator
-
-
-def _resolve_buffer_size(planner: PrefetchPlanner) -> int:
-    # Support multiple possible metadata keys (legacy and current)
-    
-    key = "weight_chunk_buffer_size"
-    if key in planner.metadata:
-            return _coerce_to_int(planner.metadata.get(key), 0)
-    return 0
-
-
-def _resolve_default_compute_ms(planner: PrefetchPlanner) -> float:
-    return _coerce_to_float(planner.metadata.get("default_compute_ms"), 0.0)
-
-
-def _resolve_allow_stall(planner: PrefetchPlanner) -> bool:
-    value = planner.metadata.get("allow_stall")
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.lower() in {"1", "true", "yes", "on"}
-    return False
 
 
 def _coerce_to_float(value: Optional[object], default: float) -> float:
@@ -213,9 +159,55 @@ def _coerce_to_int(value: Optional[object], default: int) -> int:
         except ValueError:
             return default
     return default
+    
+    
+def _build_io_estimator(planner: PrefetchPlanner) -> IoTimeEstimator:
+    bandwidth = max(
+        _coerce_to_float(planner.metadata.get("io_bandwidth_bytes_per_s"), 1_000_000_000.0),
+        1.0,
+    )
+    base_estimator = BandwidthIoTimeEstimator(
+        bandwidth_bytes_per_sec=bandwidth,
+        fixed_overhead_ms=max(
+            _coerce_to_float(planner.metadata.get("io_fixed_overhead_ms"), 0.0),
+            0.0,
+        ),
+    )
+    return base_estimator
 
 
-def main() -> None:
+def _resolve_buffer_size(planner: PrefetchPlanner) -> int:
+    # Support multiple possible metadata keys (legacy and current)
+    key = "weight_chunk_buffer_size"
+    if key in planner.metadata:
+            return _coerce_to_int(planner.metadata.get(key), 0)
+    return 0
+
+
+def _resolve_default_compute_ms(planner: PrefetchPlanner) -> float:
+    return _coerce_to_float(planner.metadata.get("default_compute_ms"), 0.0)
+
+
+
+def create_strategy(args: argparse.Namespace, planner: PrefetchPlanner) -> PlanningStrategy:
+    strategy_id = args.strategy.lower()
+    if strategy_id == "simple":
+        return SimplePlanningStrategy()
+    if strategy_id == "rechunk":
+        buffer_size = _resolve_buffer_size(planner)
+        if buffer_size <= 0:
+            raise ValueError("Re-chunk strategy requires a positive max_buffer_size in metadata")
+        io_estimator = _build_io_estimator(planner)
+        return RechunkPlanningStrategy(
+            max_buffer_size=buffer_size,
+            io_estimator=io_estimator,
+            default_compute_ms=_resolve_default_compute_ms(planner),
+        )
+    raise ValueError(f"Unknown planning strategy: {args.strategy}")
+
+
+
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate Prefetch Plan from Weight Chunk Metadata Table",
     )
@@ -240,16 +232,25 @@ def main() -> None:
         default="simple",
         help="Planning strategy to apply",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+    
+    
+def main() -> None:
+    # Parse command-line arguments
+    args = parse_args()
 
+    # Initialize PrefetchPlanner and load CMT and profiling data
     planner = PrefetchPlanner(args.cmt)
     planner.load_cmt()
     planner.load_profile_logs(args.profile_pattern)
 
+    # Build planning context and create strategy
     context = planner.build_context()
     strategy = create_strategy(args, planner)
-    
+
+    # Build prefetch plan
     plan = strategy.build(context)
+    planner.integrate_profiling_data(plan)
     planner.save_prefetch_plan(plan, args.output)
 
 

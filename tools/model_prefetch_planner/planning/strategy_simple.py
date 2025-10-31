@@ -4,26 +4,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Mapping
 
-from .__planner_data_structures import PrefetchPlan, PrefetchPlanEntry, WeightChunkInfo
+from .__planner_data_structures__ import PrefetchPlan, PrefetchPlanEntry, WeightChunkInfo
 from .strategy_base import ChunkKey, PlanningContext, PlanningStrategy
-
-
-class SimplePlanningStrategy(PlanningStrategy):
-    """Replicates the legacy planning behavior without re-chunking."""
-
-    def build(self, context: PlanningContext) -> PrefetchPlan:
-        plan = PrefetchPlan(metadata=dict(context.metadata))
-        io_order = 0
-        for mode, chunks in context.weight_chunks.items():
-            ordered_chunks = _sort_chunks(chunks)
-            plan.plan_entries[mode] = []
-            for chunk in ordered_chunks:
-                chunk_payload = _materialize_chunk_payload(context.chunk_lookup, mode, chunk)
-                plan.plan_entries[mode].append(
-                    PrefetchPlanEntry(mode=mode, chunk_data=chunk_payload, io_order=io_order)
-                )
-                io_order += 1
-        return plan
 
 
 def _sort_chunks(chunks: List[WeightChunkInfo]) -> List[WeightChunkInfo]:
@@ -49,3 +31,21 @@ def _materialize_chunk_payload(
         "prefetch_mode": chunk.prefetch_mode,
         "prefetch_mode_str": chunk.prefetch_mode_str,
     }
+
+
+class SimplePlanningStrategy(PlanningStrategy):
+    """Replicates the legacy planning behavior without re-chunking."""
+
+    def build(self, context: PlanningContext) -> PrefetchPlan:
+        plan = PrefetchPlan(metadata=dict(context.metadata))
+        io_order = 0
+        for mode, chunks in context.weight_chunks.items():
+            ordered_chunks = _sort_chunks(chunks)
+            plan.plan_entries[mode] = []
+            for chunk in ordered_chunks:
+                chunk_payload = _materialize_chunk_payload(context.chunk_lookup, mode, chunk)
+                plan.plan_entries[mode].append(
+                    PrefetchPlanEntry(mode=mode, chunk_data=chunk_payload, io_order=io_order)
+                )
+                io_order += 1
+        return plan

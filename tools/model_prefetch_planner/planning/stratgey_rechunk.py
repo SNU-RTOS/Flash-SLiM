@@ -5,70 +5,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, Protocol, Sequence
 
-from .__planner_data_structures import PrefetchPlan, PrefetchPlanEntry, WeightChunkInfo
+from .__planner_data_structures__ import PrefetchPlan, PrefetchPlanEntry, WeightChunkInfo
 from .strategy_base import ChunkKey, PlanningContext, PlanningStrategy
+from .io_estimator import IoTimeEstimator
 
 
-class IoTimeEstimator(Protocol):
-    def estimate(
-        self,
-        mode: str,
-        chunks: Sequence[WeightChunkInfo],
-        *,
-        gap_bytes: int = 0,
-    ) -> float:
-        """Return the I/O time in milliseconds for loading the provided chunks."""
-        ...
+def _compute_gap_bytes(existing: Sequence[WeightChunkInfo], candidate: WeightChunkInfo) -> int:
+    last = existing[-1]
+    end_offset = last.aligned_offset + last.aligned_size
+    if candidate.aligned_offset <= end_offset:
+        return 0
+    return candidate.aligned_offset - end_offset
 
 
-@dataclass
-class BandwidthIoTimeEstimator:
-    bandwidth_bytes_per_sec: float
-    fixed_overhead_ms: float = 0.0
-
-    def estimate(
-        self,
-        mode: str,
-        chunks: Sequence[WeightChunkInfo],
-        *,
-        gap_bytes: int = 0,
-    ) -> float:
-        del mode  # Mode-specific handling can be added later.
-        total_bytes = sum(chunk.aligned_size for chunk in chunks)
-        if total_bytes <= 0:
-            return self.fixed_overhead_ms
-        transfer_ms = (total_bytes / max(self.bandwidth_bytes_per_sec, 1)) * 1000.0
-        return self.fixed_overhead_ms + transfer_ms
+def _sort_chunks(chunks: Sequence[WeightChunkInfo]) -> List[WeightChunkInfo]:
+    return sorted(chunks, key=lambda c: (c.aligned_offset, c.chunk_index))
 
 
-@dataclass
-class MeasuredIoTimeEstimator:
-    measurements: Mapping[ChunkKey, float]
-    fallback: IoTimeEstimator
-
-    def estimate(
-        self,
-        mode: str,
-        chunks: Sequence[WeightChunkInfo],
-        *,
-        gap_bytes: int = 0,
-    ) -> float:
-        total = 0.0
-        for chunk in chunks:
-            key = (mode, chunk.chunk_index, chunk.origin_offset)
-            measured = self.measurements.get(key)
-            if measured is None:
-                return self.fallback.estimate(mode, chunks, gap_bytes=gap_bytes)
-            total += measured
-        return total
-
+def _sum_aligned_size(chunks: Iterable[WeightChunkInfo]) -> int:
+    return sum(chunk.aligned_size for chunk in chunks)
 
 @dataclass
 class RechunkPlanningStrategy(PlanningStrategy):
     max_buffer_size: int
     io_estimator: IoTimeEstimator
     default_compute_ms: float = 0.0
-    allow_stall: bool = False
 
     def build(self, context: PlanningContext) -> PrefetchPlan:
         self._validate_chunks(context)
@@ -218,17 +179,4 @@ class RechunkPlanningStrategy(PlanningStrategy):
                     )
 
 
-def _compute_gap_bytes(existing: Sequence[WeightChunkInfo], candidate: WeightChunkInfo) -> int:
-    last = existing[-1]
-    end_offset = last.aligned_offset + last.aligned_size
-    if candidate.aligned_offset <= end_offset:
-        return 0
-    return candidate.aligned_offset - end_offset
 
-
-def _sort_chunks(chunks: Sequence[WeightChunkInfo]) -> List[WeightChunkInfo]:
-    return sorted(chunks, key=lambda c: (c.aligned_offset, c.chunk_index))
-
-
-def _sum_aligned_size(chunks: Iterable[WeightChunkInfo]) -> int:
-    return sum(chunk.aligned_size for chunk in chunks)

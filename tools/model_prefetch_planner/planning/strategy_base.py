@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Mapping, Protocol, Tuple
 
-from .__planner_data_structures import PrefetchPlan, WeightChunkInfo
+from .__planner_data_structures__ import PrefetchPlan, WeightChunkInfo
 
 ChunkKey = Tuple[str, int, int]
 
