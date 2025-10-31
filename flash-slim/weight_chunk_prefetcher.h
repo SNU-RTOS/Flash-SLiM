@@ -19,6 +19,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <limits>
 
 #include "tflite/delegates/xnnpack/streaming_weight_cache.h"
 #include "weight_chunk_io_engine.h"
@@ -29,12 +30,25 @@ namespace streaming {
 using weight_chunk_info_t = tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t;
 using ProviderMode = tflite::xnnpack::StreamingWeightCacheProvider::ProviderMode;
 
+struct PrefetchChunkRange {
+  size_t range_index = std::numeric_limits<size_t>::max();
+  size_t io_order = 0;
+  size_t start_origin_offset = 0;
+  size_t start_aligned_offset = 0;
+  size_t total_aligned_size = 0;
+  std::vector<size_t> chunk_indices;
+  std::vector<size_t> chunk_relative_offsets;
+};
+
 class WeightChunkPrefetcher {
 
  public:
   struct PrefetchPlan {
     std::unordered_map<size_t, size_t> offset_to_index;  // origin_offset -> index
     std::vector<weight_chunk_info_t> chunks;             // index -> chunk metadata
+    std::vector<PrefetchChunkRange> chunk_ranges;
+    std::unordered_map<size_t, size_t> chunk_index_to_range;
+    std::unordered_map<size_t, size_t> io_order_to_range_index;
   };
 
   enum class PrefetchMode {
@@ -44,7 +58,7 @@ class WeightChunkPrefetcher {
   };
 
   struct PrefetchRequest {
-    const weight_chunk_info_t* chunk_info = nullptr;
+    const PrefetchChunkRange* chunk_range = nullptr;
     void* buffer_base = nullptr;
     int direct_io_fd = -1;
     int buffer_index = -1;
@@ -57,7 +71,10 @@ class WeightChunkPrefetcher {
 
   void SetPrefetchPlan(PrefetchMode mode,
                        std::unordered_map<size_t, size_t>&& offset_to_index,
-                       std::vector<weight_chunk_info_t>&& chunks);
+                       std::vector<weight_chunk_info_t>&& chunks,
+                       std::vector<PrefetchChunkRange>&& chunk_ranges,
+                       std::unordered_map<size_t, size_t>&& chunk_index_to_range,
+                       std::unordered_map<size_t, size_t>&& io_order_to_range_index);
 
   bool HasPrefetchPlan(PrefetchMode mode) const;
 
@@ -131,14 +148,17 @@ class WeightChunkPrefetcher {
 
   const weight_chunk_info_t* GetChunkInfoByIndex(size_t chunk_index) const;
 
-  std::optional<size_t> GetNextChunkIndex(PrefetchMode mode, size_t current_chunk_index) const;
+  const PrefetchChunkRange* GetChunkRangeByChunkIndex(PrefetchMode mode, size_t chunk_index) const;
+  const PrefetchChunkRange* GetChunkRangeByIoOrder(PrefetchMode mode, size_t io_order) const;
+  const PrefetchChunkRange* GetNextChunkRange(PrefetchMode mode, size_t current_io_order) const;
   
  private:
   struct PrefetchJob {
-    const weight_chunk_info_t* chunk_info = nullptr;
+    const PrefetchChunkRange* chunk_range = nullptr;
     void* buffer_base = nullptr;
     int direct_io_fd = -1;
     int buffer_index = -1;
+    PrefetchMode mode = PrefetchMode::UNINITIALIZED;
   };
 
   struct ChunkIOState {
@@ -149,11 +169,17 @@ class WeightChunkPrefetcher {
     bool success = false;
   };
 
+  struct ChunkRangeIOState {
+    std::mutex mutex;
+    bool in_flight = false;
+  };
+
   void WorkerLoop();
   void ApplyWorkerAffinity();
   void ResetRuntimeState();
   void MarkJobCompleted(const PrefetchJob& job, bool success);
   std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
+  std::shared_ptr<ChunkRangeIOState> GetChunkRangeState(PrefetchMode mode, size_t range_index);
   void RunAsyncWorkerLoop();
   void RunSyncWorkerLoop();
 
@@ -161,9 +187,11 @@ class WeightChunkPrefetcher {
 
   std::array<PrefetchPlan, 2> prefetch_plans_{};  // [PREFILL=0, DECODE=1]
   std::array<bool, 2> has_plan_{{false, false}};
+  std::array<std::unordered_map<size_t, std::shared_ptr<ChunkRangeIOState>>, 2> range_states_;
 
   std::vector<weight_chunk_info_t> index_to_chunks_;
   std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_states_;
+  std::mutex range_state_mutex_;
   
   std::unique_ptr<WeightChunkIOEngine> io_engine_;
 
@@ -189,5 +217,3 @@ using PrefetchMode = WeightChunkPrefetcher::PrefetchMode;
 }  // namespace flash_slim
 
 #endif  // FLASH_SLIM_WEIGHT_CHUNK_PREFETCHER_H_
-
-

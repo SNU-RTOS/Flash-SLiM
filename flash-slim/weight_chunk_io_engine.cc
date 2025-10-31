@@ -96,7 +96,7 @@ bool WeightChunkIOEngine::Submit(const IORequest& request) {
     return false;
   }
 
-  if (!request.chunk_info || request.direct_io_fd < 0 || !request.buffer_base) {
+  if (request.direct_io_fd < 0 || !request.buffer_base) {
     return false;
   }
 
@@ -107,28 +107,28 @@ bool WeightChunkIOEngine::Submit(const IORequest& request) {
     return false;
   }
 
-  if (!ValidateRequestBuffer(request)) {
+  if (request.range_index > std::numeric_limits<uint32_t>::max()) {
     TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                    "WeightChunkIOEngine: request buffer out of range for index %d",
-                    request.buffer_index);
+                    "WeightChunkIOEngine: range_index=%zu exceeds 32-bit limit; using fallback",
+                    request.range_index);
     return false;
   }
 
-  if (request.chunk_info->chunk_index > std::numeric_limits<uint32_t>::max()) {
-    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                    "WeightChunkIOEngine: chunk_index=%zu exceeds 32-bit limit; using fallback",
-                    request.chunk_info->chunk_index);
-    return false;
-  }
-
-  if (request.chunk_info->aligned_size == 0) {
+  if (request.aligned_size == 0) {
     Completion completion;
-    completion.chunk_index = request.chunk_info->chunk_index;
+    completion.range_index = request.range_index;
     completion.success = true;
     completion.bytes_transferred = 0;
     completion.epoch = 0;
     pending_completions_.push_back(completion);
     return true;
+  }
+
+  if (!ValidateRequestBuffer(request)) {
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                    "WeightChunkIOEngine: request buffer out of range for index %d",
+                    request.buffer_index);
+    return false;
   }
 
   if (!SubmitInternal(request)) {
@@ -199,22 +199,21 @@ void WeightChunkIOEngine::UnpackTag(uint64_t tag, uint32_t* chunk_index, uint16_
 }
 
 bool WeightChunkIOEngine::SubmitInternal(const IORequest& request) {
-  const auto* chunk_info = request.chunk_info;
-  const size_t chunk_index = chunk_info->chunk_index;
+  const size_t range_index = request.range_index;
 
-  auto& state = inflight_[chunk_index];
+  auto& state = inflight_[range_index];
   state.epoch = static_cast<uint32_t>((state.epoch + 1) & 0xFFFFu);
   if ((state.epoch & 0xFFFFu) == 0) {
     state.epoch = 1;
   }
   state.pending = 0;
-  state.expected_bytes = chunk_info->aligned_size;
+  state.expected_bytes = request.aligned_size;
   state.completed_bytes = 0;
   state.error = false;
 
   uint8_t* buffer = static_cast<uint8_t*>(request.buffer_base);
-  off_t offset = static_cast<off_t>(chunk_info->aligned_offset);
-  size_t remaining = chunk_info->aligned_size;
+  off_t offset = static_cast<off_t>(request.aligned_offset);
+  size_t remaining = request.aligned_size;
   uint16_t sub_index = 0;
 
   while (remaining > 0) {
@@ -240,7 +239,7 @@ bool WeightChunkIOEngine::SubmitInternal(const IORequest& request) {
     }
     io_uring_prep_read_fixed(sqe, request.direct_io_fd, buffer, len, offset,
                              static_cast<unsigned>(request.buffer_index));
-    sqe->user_data = PackTag(static_cast<uint32_t>(chunk_index),
+    sqe->user_data = PackTag(static_cast<uint32_t>(range_index),
                              static_cast<uint16_t>(state.epoch & 0xFFFFu),
                              sub_index++);
 
@@ -251,12 +250,12 @@ bool WeightChunkIOEngine::SubmitInternal(const IORequest& request) {
   }
 
   if (state.pending == 0 || state.error) {
-    inflight_.erase(chunk_index);
+    inflight_.erase(range_index);
     return false;
   }
 
   if (io_uring_submit(&ring_) < 0) {
-    inflight_.erase(chunk_index);
+    inflight_.erase(range_index);
     return false;
   }
 
@@ -311,7 +310,7 @@ void WeightChunkIOEngine::ProcessCqe(struct io_uring_cqe* cqe) {
 
   if (state.pending == 0) {
     Completion completion;
-    completion.chunk_index = static_cast<size_t>(chunk_index);
+    completion.range_index = static_cast<size_t>(chunk_index);
     completion.epoch = state.epoch;
     completion.bytes_transferred = state.completed_bytes;
     completion.success = !state.error && state.completed_bytes == state.expected_bytes;
@@ -339,7 +338,7 @@ bool WeightChunkIOEngine::ValidateRequestBuffer(const IORequest& request) const 
     return false;
   }
 
-  const uint8_t* ptr_end = ptr + request.chunk_info->aligned_size;
+  const uint8_t* ptr_end = ptr + request.aligned_size;
   if (ptr_end > end) {
     return false;
   }

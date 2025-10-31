@@ -25,15 +25,16 @@ namespace streaming {
 class WeightChunkIOEngine {
  public:
   struct IORequest {
-    size_t chunk_index = 0;
-    const tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t* chunk_info = nullptr;
+    size_t range_index = 0;
+    size_t aligned_offset = 0;
+    size_t aligned_size = 0;
     void* buffer_base = nullptr;
     int direct_io_fd = -1;
     int buffer_index = -1;
   };
 
   struct Completion {
-    size_t chunk_index = 0;
+    size_t range_index = 0;
     bool success = false;
     size_t bytes_transferred = 0;
     uint32_t epoch = 0;

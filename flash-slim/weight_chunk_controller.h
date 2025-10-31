@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <limits>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -72,12 +73,14 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   void EmitBPFProbe(size_t offset);
   
 //   bool EnsureChunkReady(const weight_chunk_info_t* info, int buffer_index, int fd);
-  bool ScheduleNextChunk(const weight_chunk_info_t* current_info, int fd);
+  bool ScheduleNextRange(const PrefetchChunkRange* current_range, int fd);
   int GetInactiveBufferIndex() const { return 1 - active_weight_chunk_buffer_index_; }
   size_t ComputeInactiveSlotOffset(size_t next_aligned_size) const;
   void ResetBufferSlots();
   
-  void UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info);
+  void UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info,
+                            const PrefetchChunkRange& range);
+  size_t FindChunkRelativeOffset(const PrefetchChunkRange& range, size_t chunk_index) const;
   
   tflite::xnnpack::StreamingWeightCacheProvider* provider_ = nullptr;
   std::unique_ptr<WeightChunkPrefetcher> prefetcher_ = nullptr;
@@ -92,9 +95,12 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   bool bpf_probe_first_call_ = true;
   int active_weight_chunk_buffer_index_ = 0;
   void* weight_chunk_buffer_base_ = nullptr;
+  std::array<bool, 2> first_prefetch_per_mode_{{true, true}};
   std::array<void*, 2> weight_chunk_buffers_{nullptr, nullptr};
   std::array<size_t, 2> buffer_offsets_{0, 0};
   std::array<size_t, 2> buffer_sizes_{0, 0};
+  std::array<size_t, 2> buffer_range_ids_{{std::numeric_limits<size_t>::max(),
+                                           std::numeric_limits<size_t>::max()}};
   std::unordered_map<size_t, weight_chunk_info_t> offset_to_chunk_info_;
   std::unordered_map<size_t, std::array<void*, 2>> offset_to_weights_ptr_;
 };
