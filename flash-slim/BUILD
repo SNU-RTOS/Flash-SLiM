@@ -103,11 +103,21 @@ cc_library(
 
 cc_library(
     name = "weight_chunk_prefetcher",
-    srcs = ["weight_chunk_prefetcher.cc"],
-    hdrs = ["weight_chunk_prefetcher.h"],
+    srcs = [
+        "weight_chunk_io_engine.cc",
+        "weight_chunk_prefetcher.cc",
+    ],
+    hdrs = [
+        "weight_chunk_io_engine.h",
+        "weight_chunk_prefetcher.h",
+    ],
     deps = [
         "@litert//tflite/delegates/xnnpack:streaming_weight_cache",
     ],
+    linkopts = select({
+        "@bazel_tools//src/conditions:linux": ["-luring"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(

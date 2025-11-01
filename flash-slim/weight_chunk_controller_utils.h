@@ -58,14 +58,29 @@ namespace flash_slim
             // Optional: write model info into metadata (e.g., model path)
             void WriteModelInfo(const std::string &model_path) { model_path_ = model_path; }
 
+            size_t GetMaxAlignedSize() const { return max_aligned_size_; }
+
         private:
             std::string output_path_;
             nlohmann::ordered_json json_root_; // Root JSON object
             bool finalized_;
             size_t max_aligned_size_;
+            size_t weight_chunk_buffer_size_;
             std::map<std::string, size_t> per_mode_counts_;
             std::map<std::string, size_t> per_mode_total_aligned_size_;
+            std::map<std::string, size_t> last_chunk_aligned_size_;
             std::string model_path_;
+        };
+
+        using ChunkIoRange = PrefetchChunkRange;
+
+        struct ModeChunkPlan
+        {
+            std::vector<weight_chunk_info_t> chunks;
+            std::unordered_map<size_t, size_t> offset_to_index;
+            std::vector<ChunkIoRange> io_order_ranges;
+            std::unordered_map<size_t, size_t> chunk_index_to_range;
+            std::unordered_map<size_t, size_t> io_order_to_range_index;
         };
 
         //* ==================== JsonPrefetchPlanLoader ==================== */
@@ -82,6 +97,7 @@ namespace flash_slim
             const std::string &version() const { return version_; }
             const std::string &model() const { return model_path_; }
             uint64_t max_aligned_size() const { return max_aligned_size_; }
+            uint64_t weight_chunk_buffer_size() const { return weight_chunk_buffer_size_; }
 
             // 모드 목록("PREFILL", "DECODE", ...)
             std::vector<std::string> modes() const;
@@ -104,6 +120,12 @@ namespace flash_slim
             // 특정 모드: index -> weight_chunk_info_t 벡터(사본) 반환
             std::vector<weight_chunk_info_t> BuildIndexToChunkVectorForMode(const std::string &mode) const;
 
+            // io_order 기반 청크 범위를 반환
+            const std::vector<ChunkIoRange> &ChunkIoRanges(const std::string &mode) const;
+
+            // 모드에 대한 전체 계획 구조 반환
+            ModeChunkPlan BuildModeChunkPlan(const std::string &mode) const;
+
             // 모드별 개수/총 aligned_size
             const std::map<std::string, size_t> &chunk_count_by_mode() const { return count_by_mode_; }
             const std::map<std::string, uint64_t> &total_aligned_size_by_mode() const { return size_by_mode_; }
@@ -118,11 +140,15 @@ namespace flash_slim
             nlohmann::ordered_json root_;
             std::string model_path_;
             uint64_t max_aligned_size_ = 0;
+            uint64_t weight_chunk_buffer_size_ = 0;
             std::map<std::string, size_t> count_by_mode_;
             std::map<std::string, uint64_t> size_by_mode_;
             std::map<std::string, std::vector<weight_chunk_info_t>> groups_;
             std::vector<weight_chunk_info_t> prefill_chunks_;
             std::vector<weight_chunk_info_t> decode_chunks_;
+            std::map<std::string, std::vector<ChunkIoRange>> io_order_ranges_;
+            std::map<std::string, std::unordered_map<size_t, size_t>> chunk_index_to_range_index_;
+            std::map<std::string, std::unordered_map<size_t, size_t>> io_order_to_range_index_;
             static std::vector<std::string> KeysOf(const nlohmann::ordered_json &obj);
         };
 

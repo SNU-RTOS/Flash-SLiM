@@ -419,82 +419,82 @@ int trace_ops_check(struct pt_regs *ctx)
 //     return 0;
 // }
 
-// /* ---------- tracepoint: block_io_start (start) / block_io_done (done) ---------- */
-// TRACEPOINT_PROBE(block, block_io_start)
-// {
-//     u32 tgid = get_tgid();
-//     if (!phase_ts_pid.lookup(&tgid))
-//         return 0;
+/* ---------- tracepoint: block_io_start (start) / block_io_done (done) ---------- */
+TRACEPOINT_PROBE(block, block_io_start)
+{
+    u32 tgid = get_tgid();
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
 
-//     struct block_start_t st = {};
-//     st.start_ns = bpf_ktime_get_ns();
-//     u64 pid_tgid = get_pid_tgid();
-//     st.pid_tgid = pid_tgid;
-//     st.bytes = args->bytes;
+    struct block_start_t st = {};
+    st.start_ns = bpf_ktime_get_ns();
+    u64 pid_tgid = get_pid_tgid();
+    st.pid_tgid = pid_tgid;
+    st.bytes = args->bytes;
 
-//     char c = 0;
-//     bpf_probe_read_kernel(&c, sizeof(c), &args->rwbs[0]);
-//     if (c == 'W')
-//         st.op = 'W';
-//     else
-//         st.op = 'R';
+    char c = 0;
+    bpf_probe_read_kernel(&c, sizeof(c), &args->rwbs[0]);
+    if (c == 'W')
+        st.op = 'W';
+    else
+        st.op = 'R';
 
-//     struct bio_key_t key = {.dev = args->dev, .sector = args->sector};
-//     block_start.update(&key, &st);
+    struct bio_key_t key = {.dev = args->dev, .sector = args->sector};
+    block_start.update(&key, &st);
 
-//     return 0;
-// }
+    return 0;
+}
 
-// TRACEPOINT_PROBE(block, block_io_done)
-// {
-//     struct bio_key_t key = {.dev = args->dev, .sector = args->sector};
-//     struct block_start_t *st = block_start.lookup(&key);
-//     if (!st)
-//         return 0;
+TRACEPOINT_PROBE(block, block_io_done)
+{
+    struct bio_key_t key = {.dev = args->dev, .sector = args->sector};
+    struct block_start_t *st = block_start.lookup(&key);
+    if (!st)
+        return 0;
 
-//     u64 now = bpf_ktime_get_ns();
-//     u64 delta = now - st->start_ns;
+    u64 now = bpf_ktime_get_ns();
+    u64 delta = now - st->start_ns;
 
-//     struct block_stat_t zero = {};
-//     struct block_stat_t *bs = blockstat.lookup_or_try_init(&st->pid_tgid, &zero);
-//     if (bs)
-//     {
-//         bs->time_ns += delta;
-//         bs->count += 1;
-//         if (st->op == 'W')
-//             bs->write_bytes += st->bytes;
-//         else
-//             bs->read_bytes += st->bytes;
-//     }
+    struct block_stat_t zero = {};
+    struct block_stat_t *bs = blockstat.lookup_or_try_init(&st->pid_tgid, &zero);
+    if (bs)
+    {
+        bs->time_ns += delta;
+        bs->count += 1;
+        if (st->op == 'W')
+            bs->write_bytes += st->bytes;
+        else
+            bs->read_bytes += st->bytes;
+    }
 
-//     // Submit exact interval via ring buffer (copy helper for broad BCC compatibility)
-//     struct block_io_interval_t iv = {};
-//     iv.pid_tgid = st->pid_tgid;
-//     iv.start_ns = st->start_ns;
-//     iv.end_ns = now;
-//     iv.bytes = st->bytes;
-//     iv.op = st->op;
-//     intervals.ringbuf_output(&iv, sizeof(iv), 0);
+    // Submit exact interval via ring buffer (copy helper for broad BCC compatibility)
+    struct block_io_interval_t iv = {};
+    iv.pid_tgid = st->pid_tgid;
+    iv.start_ns = st->start_ns;
+    iv.end_ns = now;
+    iv.bytes = st->bytes;
+    iv.op = st->op;
+    intervals.ringbuf_output(&iv, sizeof(iv), 0);
 
-//     block_start.delete(&key);
+    block_start.delete(&key);
 
-//     return 0;
-// }
+    return 0;
+}
 
-// /* ---------- sched tracepoints: cpu runtime / cpu wait ---------- */
-// TRACEPOINT_PROBE(sched, sched_stat_runtime)
-// {
-//     u32 tgid = get_tgid();
-//     if (!phase_ts_pid.lookup(&tgid))
-//         return 0;
-//     u64 pid_tgid = get_pid_tgid();
-//     struct sched_stat_t zero = {};
-//     struct sched_stat_t *s = schedstat.lookup_or_try_init(&pid_tgid, &zero);
-//     if (!s)
-//         return 0;
-//     s->runtime_ns += args->runtime;
-//     return 0;
-// }
+/* ---------- sched tracepoints: cpu runtime / cpu wait ---------- */
+TRACEPOINT_PROBE(sched, sched_stat_runtime)
+{
+    u32 tgid = get_tgid();
+    if (!phase_ts_pid.lookup(&tgid))
+        return 0;
+    u64 pid_tgid = get_pid_tgid();
+    struct sched_stat_t zero = {};
+    struct sched_stat_t *s = schedstat.lookup_or_try_init(&pid_tgid, &zero);
+    if (!s)
+        return 0;
+    s->runtime_ns += args->runtime;
+    return 0;
+}
 
 // TRACEPOINT_PROBE(sched, sched_stat_wait)
 // {

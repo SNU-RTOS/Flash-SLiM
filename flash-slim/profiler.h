@@ -92,7 +92,6 @@ namespace flash_slim::profiling
     /* Functions */
     //////////////////////////////////////////////////////////////
 
-    void detect_active_cores(std::vector<int> &cores);
     void print_rusage(rusage usage_start, rusage usage_end, double wall_time_ms, const std::string phase_name);
     void print_rusage_records(const std::vector<RUsageRecord> &records, const std::string &phase_name_prefix = "");
     void upload_tensors_for_all_subgraphs(tflite::Interpreter *interpreter);

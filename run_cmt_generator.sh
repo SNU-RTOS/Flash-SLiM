@@ -60,13 +60,11 @@ BIN="bin/cmt_generator"
 # --- Execution Settings ---
 TARGET="cpu"           # Default target: cpu | gpu
 LOG_ENABLED=false      # Default logging: false
-CORE_LIST="all"          # Default core list for taskset
+CORE_LIST="all"        # Default core list for taskset
 NUM_THREADS=1          # Default number of threads
 PROMPT_FILE="${PROMPT_PATH}/sample_prompt_8_1.json" # Default prompt file
-MAX_TOK_LEN=16         # Default max tokens to generate
-NUM_REPEATS=1          # Default number of iterations
-MEMORY_LIMITS=()       # Array of memory limits for cgroup testing
-ENABLE_CGROUP=false    # Default cgroup enable state
+
+
 
 # --- Logging Settings ---
 # Base directory for logs. The final path will be e.g. <LOG_DIR_BASE>/<model_target_mem>
@@ -106,9 +104,6 @@ usage() {
     -t, --threads <N>        Set the number of threads to use for inference (default: 1)
     -f, --file <PATH>        Path to the input prompt file (JSON format)
                              Default: ./${PROMPT_PATH}/sample_prompt_8_1.json
-    --tl, --max_tokens <N>   Set the maximum number of tokens to generate (default: 16)
-    -r, --repeat <N>         Repeat all prompts N times (default: 1)
-                                 Supports suffixes: K, M, G (e.g., 512M, 1G, 2G)
     -h, --help               Show this help message and exit
 
     JSON Format:
@@ -139,10 +134,6 @@ parse_command_line(){
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-    -g | --target)
-        TARGET="$2"
-        shift 2
-        ;;
     -l | --log)
         LOG_ENABLED=true
         shift
@@ -159,14 +150,6 @@ while [[ $# -gt 0 ]]; do
         PROMPT_FILE="$2"
         shift 2
         ;;
-    --tl | --max_tokens)
-        MAX_TOK_LEN="$2"
-        shift 2
-        ;;
-    -r | --repeat)
-        NUM_REPEATS="$2"
-        shift 2
-        ;;
     -h | --help) 
         usage 
         ;;
@@ -177,70 +160,26 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate target
-[[ "${TARGET}" =~ ^(gpu|cpu)$ ]] || error "Invalid target argument: ${TARGET}"
-
-# Validate memory limits if specified
-if [[ ${#MEMORY_LIMITS[@]} -gt 0 ]]; then
-    log "Memory-constrained benchmarking enabled with limits: ${MEMORY_LIMITS[*]}"
-fi
-
-# Set default memory limits if cgroup is enabled but no limits specified
-if [[ "$ENABLE_CGROUP" == true && ${#MEMORY_LIMITS[@]} -eq 0 ]]; then
-    MEMORY_LIMITS=("2G")
-    log "No memory limits specified, using default: ${MEMORY_LIMITS[*]}"
-fi
-
 }
 
-
-
 # =========================================================================== #
-# 5. Core Functions                                                           #
+# 4. Core Functions                                                           #
 # =========================================================================== #
 
-
-# Function to parse JSON and extract prompt data
-parse_json_file() {
-    local json_file="$1"
-    
-    log "Detected JSON format. Processing..." >&2
-    
-    # Check if Python3 is available
-    if ! command -v python3 >/dev/null 2>&1; then
-        error "Python3 is required for JSON parsing but not installed. Please install Python3: sudo apt-get install python3"
-    fi
-    
-    # Check if parser script exists
-    local parser_script="./tools/prompt/parse_json_prompt.py"
-    if [[ ! -f "$parser_script" ]]; then
-        error "JSON parser script not found: $parser_script. Please ensure the script exists in the scripts directory."
-    fi
-    
-    # Run the Python parser
-    local parse_result
-    parse_result=$(python3 "$parser_script" "$json_file")
-    local parse_status=$?
-    
-    if [[ $parse_status -ne 0 ]]; then
-        error "Failed to parse JSON file:\n$parse_result"
-    fi
-    
-    echo "$parse_result"
-}
 
 # Function to run a single prompt
-run_single_prompt() {
+run_with_single_prompt() {
     local TOKENS="$1"
     local PROMPT="$2"  
-    local LOG_FILE="$3"
+    local LOG_FILE_PATH="$3"
     local TEMPERATURE="$4"
     local TOP_K="$5"
     local TOP_P="$6"
     local REPETITION_PENALTY="$7"
     local ENABLE_REPETITION_PENALTY="$8"
-    local MEMORY_LIMIT="${9:-}"
-    local CSV_FILE="${LOG_FILE%.log}.csv"
+    local CSV_LOG_FILE_PATH="${LOG_FILE_PATH%.log}.csv"
+    local BPF_OPS_PYTHON_PATH="./tools/ebpf/profile_ops.py"
+    local BPF_LOG_FILE_PATH="bpf_profile_ops_results_${NUM_THREADS}threads_prefill_${TOKENS}.log"
 
     banner "LLM inference start (${TARGET^^})"
     log "Model                           : ${MODEL_NAME}"
@@ -248,18 +187,17 @@ run_single_prompt() {
     # log "Prompt           : ${PROMPT}"
     log "Cores                           : ${CORE_LIST}"
     log "Threads                         : ${NUM_THREADS}"
-    log "Max tokens                      : ${MAX_TOK_LEN}"
     log "Temperature                     : ${TEMPERATURE}"
     log "Top-k                           : ${TOP_K}"
     log "Top-p                           : ${TOP_P}"
     log "Repetition penalty              : ${REPETITION_PENALTY}"
     log "Enable rep. penalty             : ${ENABLE_REPETITION_PENALTY}"
-    [[ -n "$MEMORY_LIMIT" ]] && \
-    log "Memory limit                    : ${MEMORY_LIMIT}"
     log "Target Processor                : ${TARGET^^}"
     if [[ "$LOG_ENABLED" == "true" ]]; then
-        log "Log file                        : ${LOG_FILE}"
-        log "Op-level profiling csv results  : ${CSV_FILE}"
+        log "Log file                        : ${LOG_FILE_PATH}"
+        log "Op-level profiling csv results  : ${CSV_LOG_FILE_PATH}"
+        log "BPF profiling log               : ${BPF_LOG_FILE_PATH}"
+        log "BPF profiling script            : ${BPF_OPS_PYTHON_PATH}"
     fi
 
     clear_caches
@@ -271,7 +209,6 @@ run_single_prompt() {
             "${BIN}"
             --tflite_model "${MODEL_DIR}/${MODEL_NAME}.tflite"
             --sentencepiece_model "${MODEL_DIR}/tokenizer.model"
-            --max_decode_steps "${MAX_TOK_LEN}"
             --start_token "<bos>"
             --stop_token "<end_of_turn>"
             --num_threads "${NUM_THREADS}"
@@ -281,7 +218,7 @@ run_single_prompt() {
             --top_k "${TOP_K}"
             --top_p "${TOP_P}"
             --repetition_penalty "${REPETITION_PENALTY}"
-            --csv_profile_output_path "$CSV_FILE"
+            --csv_profile_output_path "$CSV_LOG_FILE_PATH"
             --model_dump_file_path "${MODEL_DIR}/${MODEL_NAME}_dump.log"
             --op_tensor_byte_stats
             --dump_tensor_details
@@ -291,7 +228,6 @@ run_single_prompt() {
             "${BIN}"
             --tflite_model "${MODEL_DIR}/${MODEL_NAME}.tflite"
             --sentencepiece_model "${MODEL_DIR}/tokenizer.model"
-            --max_decode_steps "${MAX_TOK_LEN}"
             --start_token "<bos>"
             --stop_token "<end_of_turn>"
             --num_threads "${NUM_THREADS}"
@@ -308,7 +244,6 @@ run_single_prompt() {
     fi
     
 
-
     # Add repetition penalty flag if enabled
     if [[ "${ENABLE_REPETITION_PENALTY}" == "true" ]]; then
         CMD+=(--enable_repetition_penalty)
@@ -317,24 +252,26 @@ run_single_prompt() {
     # Add taskset if specified
     [[ "${CORE_LIST}" != "all" ]] && CMD=(taskset -c "${CORE_LIST}" "${CMD[@]}")
 
+    # Start BPF profiler in the background with proper session management
+    banner "--- BPF PROFILER START ---"
+    run_bpf "$BPF_OPS_PYTHON_PATH" "$BIN" "$BPF_LOG_FILE_PATH" &
+    BG_PID=$! # Get background process PID (run_bpf)
+    sleep 3 # Give some time for BPF to initialize
+
     banner "--- C++ Binary Execution START ---"
     banner "Command: ${CMD[*]}"
-    # Execute command with or without memory limit
-    if [[ -n "$MEMORY_LIMIT" ]]; then
-        # Memory-constrained execution with cgroup
-        run_with_memlimit "$MEMORY_LIMIT" "${CMD[@]}"
-    else
-        # Normal execution
-        sudo "${CMD[@]}"
-    fi
-
-
+    sudo "${CMD[@]}"
     banner "--- C++ Binary Execution END ---"
 
-    if [[ "$LOG_ENABLED" == "true" ]]; then
-        log "Log saved to ${LOG_FILE}"
-    fi
+    banner "--- BPF PROFILER END ---"
+    cleanup_bpf "$BPF_OPS_PYTHON_PATH" "$BG_PID"
+    log "BPF profiling log saved to ${BPF_LOG_FILE_PATH}"
 
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        log "Log saved to ${LOG_FILE_PATH}"
+    fi
+    
+    # Generate analysis report
     # python3 tools/model_dump/tensor_visualization.py \
     #         "${MODEL_DIR}/${MODEL_NAME}_dump.log" \
     #          "${MODEL_DIR}/${MODEL_NAME}_analysis_report.txt" \
@@ -342,24 +279,40 @@ run_single_prompt() {
 
 }
 
+# =========================================================================== #
+# 5. Main Execution                                                           #
+# =========================================================================== #
 
-# Function to process multiple prompts from array
-process_multiple_prompts() {
-    local parse_result="$1"
-    local memory_limit="${2:-}"
-    local iteration="${3:-1}"
-    local log_dir="$4"
+main() {
+    parse_command_line "$@"
 
-    local prompt_count
-    prompt_count=$(echo "$parse_result" | head -n1 | awk '{print $2}')
+    # Setup log directory
+    local model_id="${MODEL_NAME}"
+    local target_id="${TARGET}"
+    local log_dir="${LOG_DIR_BASE}/${model_id}_${target_id}_cmt_generator"
+    
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        if [[ -d "${log_dir}" ]]; then
+            log "Log directory exists: ${log_dir} (appending)"
+        else
+            ensure_dir "${log_dir}"
+            log "Created log directory: ${log_dir}"
+        fi
+    fi
+    
+    # Parse JSON file
+    local parse_result=$(parse_json_file "${PROMPT_FILE}")
+    local prompt_count=$(echo "$parse_result" | head -n1 | awk '{print $2}')
     
     log "Found $prompt_count prompts in JSON file. Processing all..."
     
     local prompt_index=0
-    local current_tokens current_temperature current_top_k current_top_p
-    local current_repetition_penalty current_enable_repetition_penalty
-    local current_prompt="" in_prompt=false
+    local current_prompt="" 
+    local in_prompt=false
+    local current_tokens current_temperature current_top_k current_top_p \
+        current_repetition_penalty current_enable_repetition_penalty
     
+    # Loop through each line of the parse result
     while IFS= read -r line; do
         if [[ "$line" =~ ^ITEM ]]; then
             # Parse: ITEM index tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
@@ -386,16 +339,12 @@ process_multiple_prompts() {
             
             local timestamp log_file
             timestamp=$(date +'%y%m%d_%H%M%S')
-            if [[ $NUM_REPEATS -gt 1 ]]; then
-                log_file="${log_dir}/run_${current_tokens}_${prompt_index_display}_${iteration}_${timestamp}.log"
-            else
-                log_file="${log_dir}/run_${current_tokens}_${prompt_index_display}_${timestamp}.log"
-            fi
+            log_file="${log_dir}/run_${current_tokens}_${prompt_index_display}_${timestamp}.log"
 
             log "Executing LLM Inference"
-            execute_with_log "$log_file" run_single_prompt "$current_tokens" "$current_prompt" "$log_file" \
+            execute_with_log "$log_file" run_with_single_prompt "$current_tokens" "$current_prompt" "$log_file" \
                 "$current_temperature" "$current_top_k" "$current_top_p" \
-                "$current_repetition_penalty" "$current_enable_repetition_penalty" "$memory_limit"
+                "$current_repetition_penalty" "$current_enable_repetition_penalty" 
                 
         elif [[ "$in_prompt" == "true" ]]; then
             if [[ -z "$current_prompt" ]]; then
@@ -405,111 +354,6 @@ process_multiple_prompts() {
             fi
         fi
     done <<< "$parse_result"
-}
-
-# Function to process single prompt
-process_single_prompt() {
-    local parse_result="$1"
-    local memory_limit="${2:-}"
-    local iteration="${3:-}"
-    local log_dir="$4"
-    
-    # Parse: SINGLE tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
-    local first_line tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
-    first_line=$(echo "$parse_result" | head -n1)
-    tokens=$(echo "$first_line" | awk '{print $2}')
-    temperature=$(echo "$first_line" | awk '{print $3}')
-    top_k=$(echo "$first_line" | awk '{print $4}')
-    top_p=$(echo "$first_line" | awk '{print $5}')
-    repetition_penalty=$(echo "$first_line" | awk '{print $6}')
-    enable_repetition_penalty=$(echo "$first_line" | awk '{print $7}')
-    
-    local prompt timestamp log_file
-    prompt=$(echo "$parse_result" | sed -n '/PROMPT_START/,/PROMPT_END/p' | sed '1d;$d')
-    timestamp=$(date +'%y%m%d_%H%M%S')
-    if [[ $NUM_REPEATS -gt 1 ]]; then
-        log_file="${log_dir}/run_${tokens}_${iteration}_${timestamp}.log"
-    else
-        log_file="${log_dir}/run_${tokens}_${timestamp}.log"
-    fi
-    
-    log "Executing LLM Inference"
-    execute_with_log "$log_file" run_single_prompt "$tokens" "$prompt" "$log_file" \
-        "$temperature" "$top_k" "$top_p" "$repetition_penalty" "$enable_repetition_penalty" "$memory_limit"
-
-}
-
-
-# Function to execute benchmarks with or without memory constraints
-execute_benchmarks() {
-    local memory_limit="${1:-}"
-    local current_log_dir
-    
-    # Setup log directory
-    local model_id="${MODEL_NAME}"
-    local target_id="${TARGET}"
-    local mem_id
-    
-    if [[ -n "$memory_limit" ]]; then
-        mem_id="_${memory_limit}"
-        log "Memory Limit: $memory_limit"
-    else
-        mem_id=""
-        log "Normal run (no memory limit)"
-    fi
-    current_log_dir="${LOG_DIR_BASE}/${model_id}_${target_id}${mem_id}"
-    
-    if [[ "$LOG_ENABLED" == "true" ]]; then
-        if [[ -d "${current_log_dir}" ]]; then
-            log "Log directory exists: ${current_log_dir} (appending)"
-        else
-            ensure_dir "${current_log_dir}"
-            log "Created log directory: ${current_log_dir}"
-        fi
-    fi
-    
-    # Execute for each repeat
-    for ((iter = 1; iter <= NUM_REPEATS; iter++)); do
-        if [[ $NUM_REPEATS -gt 1 ]]; then
-            banner "Iteration $iter / $NUM_REPEATS"
-        fi
-        
-        # Parse JSON file
-        local parse_result
-        parse_result=$(parse_json_file "${PROMPT_FILE}")
-        
-        # Process based on JSON structure
-        if [[ "$parse_result" =~ ^ARRAY ]]; then
-            # Multiple prompts
-            process_multiple_prompts "$parse_result" "$memory_limit" "$iter" "$current_log_dir"
-        elif [[ "$parse_result" =~ ^SINGLE ]]; then
-            # Single prompt
-            process_single_prompt "$parse_result" "$memory_limit" "$iter" "$current_log_dir"
-        else
-            error "Invalid JSON parse result format"
-        fi
-    done
-}
-
-# =========================================================================== #
-# 6. Main Execution                                                           #
-# =========================================================================== #
-
-
-# --- Main Execution Logic ---
-main() {
-    parse_command_line "$@"
-
-    # Main execution logic
-    if [[ "$ENABLE_CGROUP" == "true" ]]; then
-        # Memory-constrained benchmarking
-        for memory_limit in "${MEMORY_LIMITS[@]}"; do
-            execute_benchmarks "$memory_limit"
-        done
-    else
-        # Normal benchmarking
-        execute_benchmarks
-    fi
 
     log "All benchmarks completed successfully!"
 }

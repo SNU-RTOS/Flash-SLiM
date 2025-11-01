@@ -122,7 +122,6 @@ int DetectKVCacheSequenceDimension(TfLiteTensor *kv_cache_tensor);
 
 int CountTotalNodes(tflite::Interpreter *interpreter);
 
-void PrintCurrentPageCacheKB();
 
 
 #endif // FLASH_SLIM_COMMON_H
