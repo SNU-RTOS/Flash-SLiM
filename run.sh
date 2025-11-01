@@ -300,7 +300,8 @@ run_with_single_prompt() {
         banner "--- BPF PROFILER START ---"
         run_bpf "$BPF_PHASE_PYTHON_PATH" "$BIN" "$BPF_LOG_FILE_PATH" &
         BG_PID=$! # Get background process PID (run_bpf)
-        sleep 3 # Give some time for BPF to initialize
+        log "Started BPF profiler with PID: $BG_PID, Wait for initialization... 10 seconds"
+        sleep 10 # Give some time for BPF to initialize
     fi
 
     banner "--- C++ Binary Execution START ---"
