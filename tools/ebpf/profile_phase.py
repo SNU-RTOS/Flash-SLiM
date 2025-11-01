@@ -8,8 +8,8 @@ import common
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BINARY_PATH = "bin/text_generator_main"
 
-SHOW_SEQUENCE = False  # 시퀀스 테이블이 필요할 때만 True
-TOPK = 7            # 시퀀스 테이블 최대 항목 수
+SHOW_SEQUENCE = True  # 시퀀스 테이블이 필요할 때만 True
+TOPK = 10       # 시퀀스 테이블 최대 항목 수
 PROFILE_PHASE_REPORT_PATH = 'bpf_phase_profile.log' # default report file name
 
 # ======== eBPF text ========
@@ -683,10 +683,10 @@ def _print_phase_breakdown(rec: PhaseRecord):
 def _print_report():
     print("\n===== Phase Report (start–stop) =====")
 
-    if SHOW_SEQUENCE and seq:
-        print("\n-- Sequence (ms) --")
-        for name, ms in seq:
-            print(f"{name:>26s} : {ms:9.3f}")
+    # if SHOW_SEQUENCE and seq:
+    #     print("\n-- Sequence (ms) --")
+    #     for name, ms in seq:
+    #         print(f"{name:>26s} : {ms:9.3f}")
 
     if cnt:
         print("\n-- Summary by Phase --")

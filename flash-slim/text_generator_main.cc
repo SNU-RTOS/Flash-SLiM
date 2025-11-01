@@ -27,12 +27,20 @@ ABSL_FLAG(std::string, prefetch_plan_path, "prefetch_plan.json", "Path to the we
 // TODO : add io_engine selection logic
 ABSL_FLAG(std::string, io_engine, "io_uring", "IO engine to use for weight chunk prefetching. Options: 'io_uring', 'pread'.");
 
-void __run_main(GenAIMetrics &genai_metrics,
-                std::unique_ptr<BufferedProfiler> &op_profiler,
-                const std::vector<ProfilerOutput> &op_profiler_outputs,
-                std::unique_ptr<StreamingWeightCacheProvider> &weight_cache_provider,
-                std::unique_ptr<WeightChunkController> &weight_chunk_controller);
 
+#ifdef USE_WEIGHT_STREAMING    
+void __run_main(GenAIMetrics &genai_metrics,
+    std::unique_ptr<BufferedProfiler> &op_profiler,
+    const std::vector<ProfilerOutput> &op_profiler_outputs,
+    std::unique_ptr<StreamingWeightCacheProvider> &weight_cache_provider,
+    std::unique_ptr<WeightChunkController> &weight_chunk_controller
+);
+#else
+void __run_main(GenAIMetrics &genai_metrics,
+    std::unique_ptr<BufferedProfiler> &op_profiler,
+    const std::vector<ProfilerOutput> &op_profiler_outputs
+);
+#endif // End USE_WEIGHT_STREAMING
 
 
 // =======================================================================
@@ -95,7 +103,7 @@ int main(int argc, char *argv[])
     weight_chunk_controller->AttachPrefetcher(std::move(weight_chunk_prefetcher), cores_to_use_io);
 
     MINIMAL_CHECK(weight_chunk_controller->LoadPrefetchPlan(prefetch_plan_path));
-#endif
+#endif // USE_WEIGHT_STREAMING
 
     //* ============ Generate Token ============ */
     std::cout << "\n[INFO] Start Generating Text" << std::endl;
@@ -105,8 +113,14 @@ int main(int argc, char *argv[])
     // active_cores. This keeps the main() body simpler by delegating
     // affinity+threading behavior to util helpers.
 
+#ifdef USE_WEIGHT_STREAMING
     flash_slim::util::run_thread_with_affinity_and_join([&]()
-                                                        { __run_main(genai_metrics, op_profiler, op_profiler_outputs, weight_cache_provider, weight_chunk_controller); }, cores_to_use_inference);
+                                                        { __run_main(genai_metrics, op_profiler, op_profiler_outputs, weight_cache_provider, weight_chunk_controller);}, cores_to_use_inference);
+#else
+    flash_slim::util::run_thread_with_affinity_and_join([&]()
+                                                        { __run_main(genai_metrics, op_profiler, op_profiler_outputs);}, cores_to_use_inference);
+#endif // USE_WEIGHT_STREAMING
+
 
     //* ============ Print Results ============ */
 
@@ -125,11 +139,18 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+#ifdef USE_WEIGHT_STREAMING    
 void __run_main(GenAIMetrics &genai_metrics,
                 std::unique_ptr<BufferedProfiler> &op_profiler,
                 const std::vector<ProfilerOutput> &op_profiler_outputs,
                 std::unique_ptr<StreamingWeightCacheProvider> &weight_cache_provider,
-                std::unique_ptr<WeightChunkController> &weight_chunk_controller)
+                std::unique_ptr<WeightChunkController> &weight_chunk_controller
+            )
+#else
+void __run_main(GenAIMetrics &genai_metrics,
+                std::unique_ptr<BufferedProfiler> &op_profiler,
+                const std::vector<ProfilerOutput> &op_profiler_outputs)
+#endif // USE_WEIGHT_STREAMING
 {
     // Declare local variables
     std::vector<int> prompt_tokens;

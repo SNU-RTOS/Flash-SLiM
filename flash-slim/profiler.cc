@@ -256,12 +256,14 @@ namespace flash_slim::profiling
     ScopeEventHandler::ScopeEventHandler(const std::string &name)
         : current_phase_name_(name)
     {
-        TRACE_LOGIC_START(current_phase_name_.c_str());
+        const std::string c_name = current_phase_name_;
+        TRACE_LOGIC_START(c_name.c_str());
     }
 
     ScopeEventHandler::~ScopeEventHandler()
     {
-        TRACE_LOGIC_END(current_phase_name_.c_str());
+        const std::string c_name = current_phase_name_;
+        TRACE_LOGIC_END(c_name.c_str());
     }
 
 
