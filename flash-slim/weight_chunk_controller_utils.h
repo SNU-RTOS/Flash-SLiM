@@ -135,6 +135,11 @@ namespace flash_slim
 
         private:
             void Clear();
+            bool LoadRootFromFile(const std::string &path);
+            bool ParseMetadataSection(const nlohmann::ordered_json &meta);
+            bool ParseChunkGroups(const nlohmann::ordered_json &groups);
+            void ParsePrefetchPlan(const nlohmann::ordered_json &plan_root);
+            void DeriveWeightChunkBufferSize();
 
             std::string version_;
             nlohmann::ordered_json root_;
