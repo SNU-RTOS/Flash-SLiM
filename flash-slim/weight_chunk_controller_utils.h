@@ -17,9 +17,9 @@ namespace flash_slim::streaming
 
     struct ModeChunkPlan
     {
-        std::vector<WeightChunkInfo> chunks;
-        std::unordered_map<size_t, size_t> offset_to_index;
-        std::vector<PrefetchChunkRange> io_order_ranges;
+    std::vector<WeightChunkInfo> chunks;
+    std::unordered_map<size_t, size_t> offset_to_index;
+    std::vector<PrefetchChunkGroup> io_order_groups;
     };
 
     //* ==================== Interfaces ==================== */
@@ -116,7 +116,7 @@ namespace flash_slim::streaming
         std::vector<WeightChunkInfo> BuildIndexToChunkVectorForMode(const std::string &mode) const;
 
         // io_order 기반 청크 범위를 반환
-        const std::vector<PrefetchChunkRange> &PrefetchChunkRanges(const std::string &mode) const;
+    const std::vector<PrefetchChunkGroup> &PrefetchChunkGroups(const std::string &mode) const;
 
         // 모드에 대한 전체 계획 구조 반환
         ModeChunkPlan BuildModeChunkPlan(const std::string &mode) const;
@@ -144,7 +144,7 @@ namespace flash_slim::streaming
         std::map<std::string, size_t> count_by_mode_;
         std::map<std::string, uint64_t> size_by_mode_;
         std::map<std::string, std::vector<WeightChunkInfo>> weight_chunks_;
-        std::map<std::string, std::vector<PrefetchChunkRange>> io_order_ranges_;
+    std::map<std::string, std::vector<PrefetchChunkGroup>> io_order_groups_;
         static std::vector<std::string> KeysOf(const nlohmann::ordered_json &obj);
     };
 

@@ -82,12 +82,12 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   // Helper to emit BPF probe for chunk completion
   void EmitBPFProbe(size_t offset);
   
-  bool ScheduleNextRange(const PrefetchChunkRange* current_range, int fd);
+  bool ScheduleNextGroup(const PrefetchChunkGroup* current_group, int fd);
   size_t ComputeInactiveSlotOffset(size_t next_aligned_size) const;
   void ResetBufferSlots();
   void UpdateWeightsPointer(size_t offset, const WeightChunkInfo& info,
-                            const PrefetchChunkRange& range);
-  size_t FindChunkRelativeOffset(const PrefetchChunkRange& range, size_t chunk_index) const;
+                            const PrefetchChunkGroup& group);
+  size_t FindChunkRelativeOffset(const PrefetchChunkGroup& group, size_t chunk_index) const;
   
   static inline size_t AlignTo(size_t value, size_t alignment) {
     if (alignment == 0) {
@@ -100,7 +100,6 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   tflite::xnnpack::StreamingWeightCacheProvider* provider_ = nullptr;
   std::unique_ptr<WeightChunkPrefetcher> prefetcher_ = nullptr;
   WeightChunkMetaDataWriter* writer_ = nullptr;
-
   PreInvokeHandler preinvoke_handler_ = &WeightChunkController::HandleDefaultPreInvoke;
   PostInvokeHandler postinvoke_handler_ = &WeightChunkController::HandleDefaultPostInvoke;
 

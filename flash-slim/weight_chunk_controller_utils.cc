@@ -179,7 +179,7 @@ namespace flash_slim
             count_by_mode_.clear();
             size_by_mode_.clear();
             weight_chunks_.clear();
-            io_order_ranges_.clear();
+            io_order_groups_.clear();
         }
 
         std::vector<std::string> JsonPrefetchPlanLoader::KeysOf(const nlohmann::ordered_json &obj)
@@ -351,7 +351,7 @@ namespace flash_slim
 
         bool JsonPrefetchPlanLoader::ParsePrefetchPlan(const nlohmann::ordered_json &plan_root)
         {
-            io_order_ranges_.clear();
+            io_order_groups_.clear();
 
             if (!plan_root.is_object())
             {
@@ -367,9 +367,9 @@ namespace flash_slim
                     continue;
                 }
 
-                auto &ranges = io_order_ranges_[mode];
-                ranges.clear();
-                ranges.reserve(mode_plan.size());
+                auto &groups = io_order_groups_[mode];
+                groups.clear();
+                groups.reserve(mode_plan.size());
 
                 for (auto it = mode_plan.begin(); it != mode_plan.end(); ++it)
                 {
@@ -378,10 +378,10 @@ namespace flash_slim
                     {
                         continue;
                     }
-                    PrefetchChunkRange range;
+                    PrefetchChunkGroup group;
                     try
                     {
-                        range.io_order = static_cast<size_t>(std::stoull(it.key()));
+                        group.io_order = static_cast<size_t>(std::stoull(it.key()));
                     }
                     catch (const std::exception &)
                     {
@@ -392,70 +392,70 @@ namespace flash_slim
 
                     if (entry.contains("start_origin_offset"))
                     {
-                        range.start_origin_offset = entry.at("start_origin_offset").get<uint64_t>();
+                        group.start_origin_offset = entry.at("start_origin_offset").get<uint64_t>();
                     }
                     if (entry.contains("start_aligned_offset"))
                     {
-                        range.start_aligned_offset = entry.at("start_aligned_offset").get<uint64_t>();
+                        group.start_aligned_offset = entry.at("start_aligned_offset").get<uint64_t>();
                     }
                     if (entry.contains("total_aligned_size"))
                     {
-                        range.total_aligned_size = entry.at("total_aligned_size").get<uint64_t>();
+                        group.total_aligned_size = entry.at("total_aligned_size").get<uint64_t>();
                     }
                     if (entry.contains("chunk_indices") && entry.at("chunk_indices").is_array())
                     {
                         const auto &indices = entry.at("chunk_indices");
-                        range.chunk_indices.reserve(indices.size());
+                        group.chunk_indices.reserve(indices.size());
                         for (const auto &idx_val : indices)
                         {
-                            range.chunk_indices.push_back(static_cast<size_t>(idx_val.get<uint64_t>()));
+                            group.chunk_indices.push_back(static_cast<size_t>(idx_val.get<uint64_t>()));
                         }
                     }
                     if (entry.contains("chunk_relative_offsets") && entry.at("chunk_relative_offsets").is_array())
                     {
                         const auto &rel_offsets = entry.at("chunk_relative_offsets");
-                        range.chunk_relative_offsets.clear();
-                        range.chunk_relative_offsets.reserve(rel_offsets.size());
+                        group.chunk_relative_offsets.clear();
+                        group.chunk_relative_offsets.reserve(rel_offsets.size());
                         for (const auto &offset_val : rel_offsets)
                         {
-                            range.chunk_relative_offsets.push_back(static_cast<size_t>(offset_val.get<uint64_t>()));
+                            group.chunk_relative_offsets.push_back(static_cast<size_t>(offset_val.get<uint64_t>()));
                         }
                     }
                     else
                     {
-                        range.chunk_relative_offsets.clear();
+                        group.chunk_relative_offsets.clear();
                     }
 
-                    ranges.emplace_back(std::move(range));
+                    groups.emplace_back(std::move(group));
                 }
 
-                std::sort(ranges.begin(), ranges.end(), [](const PrefetchChunkRange &lhs, const PrefetchChunkRange &rhs) {
+                std::sort(groups.begin(), groups.end(), [](const PrefetchChunkGroup &lhs, const PrefetchChunkGroup &rhs) {
                     return lhs.io_order < rhs.io_order;
                 });
 
-                if (!ranges.empty())
+                if (!groups.empty())
                 {
-                    if (ranges.front().io_order != 0)
+                    if (groups.front().io_order != 0)
                     {
                         std::cerr << "[JsonPrefetchPlanLoader] Invalid prefetch plan for mode " << mode
                                   << ": io_order values must start at 0" << std::endl;
                         return false;
                     }
-                    for (size_t idx = 1; idx < ranges.size(); ++idx)
+                    for (size_t idx = 1; idx < groups.size(); ++idx)
                     {
-                        if (ranges[idx].io_order != ranges[idx - 1].io_order + 1)
+                        if (groups[idx].io_order != groups[idx - 1].io_order + 1)
                         {
                             std::cerr << "[JsonPrefetchPlanLoader] Invalid prefetch plan for mode " << mode
-                                      << ": io_order=" << ranges[idx].io_order
-                                      << " is not contiguous after " << ranges[idx - 1].io_order << std::endl;
+                                      << ": io_order=" << groups[idx].io_order
+                                      << " is not contiguous after " << groups[idx - 1].io_order << std::endl;
                             return false;
                         }
                     }
                 }
 
-                for (size_t range_index = 0; range_index < ranges.size(); ++range_index)
+                for (size_t group_index = 0; group_index < groups.size(); ++group_index)
                 {
-                    ranges[range_index].range_index = range_index;
+                    groups[group_index].range_index = group_index;
                 }
             }
 
@@ -487,11 +487,11 @@ namespace flash_slim
             }
 
             uint64_t derived_io_order_max = 0;
-            for (const auto &kv : io_order_ranges_)
+            for (const auto &kv : io_order_groups_)
             {
-                for (const auto &range : kv.second)
+                for (const auto &group : kv.second)
                 {
-                    derived_io_order_max = std::max<uint64_t>(derived_io_order_max, range.total_aligned_size);
+                    derived_io_order_max = std::max<uint64_t>(derived_io_order_max, group.total_aligned_size);
                 }
             }
 
@@ -582,12 +582,12 @@ namespace flash_slim
             return out;
         }
 
-        const std::vector<PrefetchChunkRange> &
-        JsonPrefetchPlanLoader::PrefetchChunkRanges(const std::string &mode) const
+        const std::vector<PrefetchChunkGroup> &
+        JsonPrefetchPlanLoader::PrefetchChunkGroups(const std::string &mode) const
         {
-            static const std::vector<PrefetchChunkRange> kEmpty;
-            auto it = io_order_ranges_.find(mode);
-            if (it == io_order_ranges_.end())
+            static const std::vector<PrefetchChunkGroup> kEmpty;
+            auto it = io_order_groups_.find(mode);
+            if (it == io_order_groups_.end())
             {
                 return kEmpty;
             }
@@ -608,13 +608,13 @@ namespace flash_slim
                 }
             }
 
-            auto ranges_it = io_order_ranges_.find(mode);
-            if (ranges_it != io_order_ranges_.end())
+            auto groups_it = io_order_groups_.find(mode);
+            if (groups_it != io_order_groups_.end())
             {
-                plan.io_order_ranges = ranges_it->second;
+                plan.io_order_groups = groups_it->second;
             }
 
-            if (!plan.chunks.empty() && !plan.io_order_ranges.empty())
+            if (!plan.chunks.empty() && !plan.io_order_groups.empty())
             {
                 std::unordered_map<size_t, size_t> chunk_index_to_vector_index;
                 chunk_index_to_vector_index.reserve(plan.chunks.size());
@@ -623,65 +623,65 @@ namespace flash_slim
                     chunk_index_to_vector_index.emplace(plan.chunks[i].chunk_index, i);
                 }
 
-                for (auto &range : plan.io_order_ranges)
+                for (auto &group : plan.io_order_groups)
                 {
-                    if (range.chunk_indices.empty())
+                    if (group.chunk_indices.empty())
                     {
-                        range.chunk_relative_offsets.clear();
+                        group.chunk_relative_offsets.clear();
                         continue;
                     }
 
-                    range.chunk_relative_offsets.resize(range.chunk_indices.size(), 0);
+                    group.chunk_relative_offsets.resize(group.chunk_indices.size(), 0);
 
-                    const size_t first_chunk_index = range.chunk_indices.front();
+                    const size_t first_chunk_index = group.chunk_indices.front();
                     auto first_it = chunk_index_to_vector_index.find(first_chunk_index);
                     bool start_initialized = false;
                     if (first_it != chunk_index_to_vector_index.end())
                     {
                         const auto &first_chunk = plan.chunks[first_it->second];
-                        range.start_origin_offset = first_chunk.origin_offset;
-                        range.start_aligned_offset = first_chunk.aligned_offset;
+                        group.start_origin_offset = first_chunk.origin_offset;
+                        group.start_aligned_offset = first_chunk.aligned_offset;
                         start_initialized = true;
                     }
 
                     size_t max_extent = 0;
-                    for (size_t i = 0; i < range.chunk_indices.size(); ++i)
+                    for (size_t i = 0; i < group.chunk_indices.size(); ++i)
                     {
-                        const size_t chunk_index = range.chunk_indices[i];
+                        const size_t chunk_index = group.chunk_indices[i];
                         auto chunk_it = chunk_index_to_vector_index.find(chunk_index);
                         if (chunk_it == chunk_index_to_vector_index.end())
                         {
                             std::cerr << "[JsonPrefetchPlanLoader] Warning: chunk_index " << chunk_index
-                                      << " referenced by io_order " << range.io_order
+                                      << " referenced by io_order " << group.io_order
                                       << " not found in weight_chunks for mode " << mode << std::endl;
                             continue;
                         }
                         const auto &chunk = plan.chunks[chunk_it->second];
                         if (!start_initialized)
                         {
-                            range.start_aligned_offset = chunk.aligned_offset;
-                            range.start_origin_offset = chunk.origin_offset;
+                            group.start_aligned_offset = chunk.aligned_offset;
+                            group.start_origin_offset = chunk.origin_offset;
                             start_initialized = true;
                         }
                         const size_t relative_offset =
-                            chunk.aligned_offset >= range.start_aligned_offset
-                                ? chunk.aligned_offset - range.start_aligned_offset
+                            chunk.aligned_offset >= group.start_aligned_offset
+                                ? chunk.aligned_offset - group.start_aligned_offset
                                 : 0;
-                        range.chunk_relative_offsets[i] = relative_offset;
+                        group.chunk_relative_offsets[i] = relative_offset;
                         max_extent = std::max(max_extent, relative_offset + chunk.aligned_size);
                     }
 
-                    if (range.total_aligned_size == 0)
+                    if (group.total_aligned_size == 0)
                     {
-                        range.total_aligned_size = max_extent;
+                        group.total_aligned_size = max_extent;
                     }
-                    else if (max_extent > 0 && range.total_aligned_size < max_extent)
+                    else if (max_extent > 0 && group.total_aligned_size < max_extent)
                     {
                         std::cerr << "[JsonPrefetchPlanLoader] Warning: total_aligned_size for io_order "
-                                  << range.io_order << " (" << range.total_aligned_size
+                                  << group.io_order << " (" << group.total_aligned_size
                                   << ") smaller than derived extent (" << max_extent
                                   << "). Using derived value.\n";
-                        range.total_aligned_size = max_extent;
+                        group.total_aligned_size = max_extent;
                     }
                 }
             }
