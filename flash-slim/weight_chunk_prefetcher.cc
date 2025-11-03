@@ -241,16 +241,7 @@ void WeightChunkPrefetcher::BuildIndexToChunksFromPlans() {
 }
 
 std::string WeightChunkPrefetcher::GetPrefetchModeString() const {
-  switch (prefetch_mode_) {
-    case PrefetchMode::PREFILL:
-      return "PREFILL";
-    case PrefetchMode::DECODE:
-      return "DECODE";
-    case PrefetchMode::UNINITIALIZED:
-      return "UNINITIALIZED";
-    default:
-      return "UNKNOWN";
-  }
+  return std::string(PrefetchModeName(prefetch_mode_));
 }
 
 const weight_chunk_info_t* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode mode,
@@ -675,12 +666,12 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
                         range_index);
         continue;
       }
-      const int mode_int = IndexToPrefetchMode(plan_index);
-      if (mode_int < 0) {
+      const auto mode = IndexToPrefetchMode(plan_index);
+      if (!mode.has_value()) {
         continue;
       }
       job_snapshot.chunk_range = &plan.chunk_ranges[range_index];
-      job_snapshot.mode = static_cast<PrefetchMode>(mode_int);
+      job_snapshot.mode = *mode;
       MarkJobCompleted(job_snapshot, completion.success);
     }
 

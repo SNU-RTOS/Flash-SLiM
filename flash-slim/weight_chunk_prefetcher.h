@@ -43,18 +43,33 @@ struct PrefetchChunkRange {
 class WeightChunkPrefetcher {
 
  public:
+  enum class PrefetchMode {
+    PREFILL,
+    DECODE,
+    UNINITIALIZED,
+  };
+
+  static constexpr int kPrefetchPlanCount = 2;
+
+  static constexpr const char* PrefetchModeName(PrefetchMode mode) {
+    switch (mode) {
+      case PrefetchMode::PREFILL:
+        return "PREFILL";
+      case PrefetchMode::DECODE:
+        return "DECODE";
+      case PrefetchMode::UNINITIALIZED:
+        return "UNINITIALIZED";
+      default:
+        return "UNKNOWN";
+    }
+  }
+
   struct PrefetchPlan {
     std::unordered_map<size_t, size_t> offset_to_index;  // origin_offset -> index
     std::vector<weight_chunk_info_t> chunks;             // index -> chunk metadata
     std::vector<PrefetchChunkRange> chunk_ranges;
     std::unordered_map<size_t, size_t> chunk_index_to_range;
     std::unordered_map<size_t, size_t> io_order_to_range_index;
-  };
-
-  enum class PrefetchMode {
-    PREFILL,
-    DECODE,
-    UNINITIALIZED,
   };
 
   struct PrefetchRequest {
@@ -83,42 +98,33 @@ class WeightChunkPrefetcher {
   void UpdatePrefetcherMode(PrefetchMode mode) { prefetch_mode_ = mode; }
 
   inline int PrefetchModeToIndex(PrefetchMode mode) const {
-        switch (mode) {
-        case PrefetchMode::PREFILL:
+    switch (mode) {
+      case PrefetchMode::PREFILL:
         return 0;
-        case PrefetchMode::DECODE:
+      case PrefetchMode::DECODE:
         return 1;
-        case PrefetchMode::UNINITIALIZED:
-        return 2;
-        default:
+      default:
         return -1;
     }
   }
 
-  inline int IndexToPrefetchMode(int index) const {
-        switch (index) {
-        case 0:
-        return static_cast<int>(PrefetchMode::PREFILL);
-        case 1:
-        return static_cast<int>(PrefetchMode::DECODE);
-        case 2:
-        return static_cast<int>(PrefetchMode::UNINITIALIZED);
-        default:
-        return -1;
+  inline std::optional<PrefetchMode> IndexToPrefetchMode(int index) const {
+    switch (index) {
+      case 0:
+        return PrefetchMode::PREFILL;
+      case 1:
+        return PrefetchMode::DECODE;
+      default:
+        return std::nullopt;
     }
   }
 
   inline std::string IndexToPrefetchModeString(int index) const {
-        switch (index) {
-        case 0:
-        return "PREFILL";
-        case 1:
-        return "DECODE";
-        case 2:
-        return "UNINITIALIZED";
-        default:
-        return "UNKNOWN";
+    const auto mode = IndexToPrefetchMode(index);
+    if (!mode.has_value()) {
+      return "UNKNOWN";
     }
+    return std::string(PrefetchModeName(*mode));
   }
 
   PrefetchMode GetPrefetchMode() const { return prefetch_mode_; }
@@ -185,9 +191,9 @@ class WeightChunkPrefetcher {
 
   PrefetchMode prefetch_mode_ = PrefetchMode::UNINITIALIZED;
 
-  std::array<PrefetchPlan, 2> prefetch_plans_{};  // [PREFILL=0, DECODE=1]
-  std::array<bool, 2> has_plan_{{false, false}};
-  std::array<std::unordered_map<size_t, std::shared_ptr<ChunkRangeIOState>>, 2> range_states_;
+  std::array<PrefetchPlan, kPrefetchPlanCount> prefetch_plans_{};  // [PREFILL=0, DECODE=1]
+  std::array<bool, kPrefetchPlanCount> has_plan_{{false, false}};
+  std::array<std::unordered_map<size_t, std::shared_ptr<ChunkRangeIOState>>, kPrefetchPlanCount> range_states_;
 
   std::vector<weight_chunk_info_t> index_to_chunks_;
   std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_states_;

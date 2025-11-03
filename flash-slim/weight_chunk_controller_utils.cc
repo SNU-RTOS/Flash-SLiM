@@ -38,21 +38,6 @@ namespace flash_slim
             }
         }
 
-        static inline const char *PrefetchModeToString(
-            PrefetchMode mode)
-        {
-            using Mode = PrefetchMode;
-            switch (mode)
-            {
-            case Mode::PREFILL:
-                return "PREFILL";
-            case Mode::DECODE:
-                return "DECODE";
-            default:
-                return "UNKNOWN";
-            }
-        }
-
         void JsonWeightChunkMetaDataWriter::WriteChunkInfo(
             const weight_chunk_info_t &chunk_info,
             PrefetchMode prefetch_mode)
@@ -78,7 +63,7 @@ namespace flash_slim
             chunk_json["offset_adjust"] = chunk_info.offset_adjust;
             chunk_json["weights_id"] = chunk_info.weights_id;
             chunk_json["prefetch_mode"] = static_cast<int>(prefetch_mode);
-            chunk_json["prefetch_mode_str"] = PrefetchModeToString(prefetch_mode);
+            chunk_json["prefetch_mode_str"] = WeightChunkPrefetcher::PrefetchModeName(prefetch_mode);
 
             // Update max aligned size
             if (chunk_info.aligned_size > max_aligned_size_)
@@ -86,7 +71,7 @@ namespace flash_slim
                 max_aligned_size_ = chunk_info.aligned_size;
             }
             // Group by prefetch mode
-            const std::string mode_key = PrefetchModeToString(prefetch_mode);
+            const std::string mode_key = WeightChunkPrefetcher::PrefetchModeName(prefetch_mode);
             if (!json_root_["weight_chunks"].contains(mode_key))
             {
                 json_root_["weight_chunks"][mode_key] = nlohmann::ordered_json::array();
