@@ -279,6 +279,19 @@ run_with_single_prompt() {
     #          "${MODEL_DIR}/${MODEL_NAME}_analysis_report.txt" \
     #          "${MODEL_DIR}/${MODEL_NAME}_analysis_data.json"
 
+    
+    # run prefetch_planner
+    python3 ./tools/model_prefetch_planner/prefetch_planner.py \
+        --cmt weight_chunks_metadata_table.json \
+        --output prefetch_plan_simple_${NUM_THREADS}_${TOKENS}.json \
+        --profile-pattern ${BPF_LOG_FILE_PATH} \
+        --strategy simple
+    
+    python3 ./tools/model_prefetch_planner/prefetch_planner.py \
+        --cmt weight_chunks_metadata_table.json \
+        --output prefetch_plan_rechunk_${NUM_THREADS}_${TOKENS}.json \
+        --profile-pattern ${BPF_LOG_FILE_PATH} \
+        --strategy rechunk
 }
 
 # =========================================================================== #
@@ -364,11 +377,3 @@ main() {
 main "$@"
 
 
-# run prefetch_planner
-
-BIN=./tools/model_prefetch_planner/prefetch_planner.py
-python3 $BIN \
-    --cmt weight_chunks_metadata_table.json \
-    --output prefetch_plan.json \
-    --profile-pattern bpf_profile_ops_results_1threads_prefill_8.log \
-    --strategy simple
