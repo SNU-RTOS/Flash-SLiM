@@ -16,6 +16,16 @@ namespace flash_slim
 {
     namespace streaming
     {
+        using ChunkIoRange = PrefetchChunkRange;
+
+        struct ModeChunkPlan
+        {
+            std::vector<weight_chunk_info_t> chunks;
+            std::unordered_map<size_t, size_t> offset_to_index;
+            std::vector<ChunkIoRange> io_order_ranges;
+            std::unordered_map<size_t, size_t> chunk_index_to_range;
+            std::unordered_map<size_t, size_t> io_order_to_range_index;
+        };
 
         //* ==================== Interfaces ==================== */
         class WeightChunkMetaDataWriter
@@ -34,6 +44,7 @@ namespace flash_slim
             virtual ~PrefetchPlanLoader() = default;
             virtual bool LoadFromFile(const std::string &plan_file_path) = 0;
         };
+
 
         //* ==================== JsonWeightChunkInfoWriter ==================== */
 
@@ -72,16 +83,6 @@ namespace flash_slim
             std::string model_path_;
         };
 
-        using ChunkIoRange = PrefetchChunkRange;
-
-        struct ModeChunkPlan
-        {
-            std::vector<weight_chunk_info_t> chunks;
-            std::unordered_map<size_t, size_t> offset_to_index;
-            std::vector<ChunkIoRange> io_order_ranges;
-            std::unordered_map<size_t, size_t> chunk_index_to_range;
-            std::unordered_map<size_t, size_t> io_order_to_range_index;
-        };
 
         //* ==================== JsonPrefetchPlanLoader ==================== */
         class JsonPrefetchPlanLoader : public flash_slim::streaming::PrefetchPlanLoader
@@ -106,11 +107,12 @@ namespace flash_slim
             const std::vector<weight_chunk_info_t> &chunks(const std::string &mode) const;
 
             // 편의 접근자: PREFILL / DECODE 전용 벡터
-            const std::vector<weight_chunk_info_t> &prefill_chunks() const { return prefill_chunks_; }
-            const std::vector<weight_chunk_info_t> &decode_chunks() const { return decode_chunks_; }
+            const std::vector<weight_chunk_info_t> &prefill_chunks() const { return chunks("PREFILL"); }
+            const std::vector<weight_chunk_info_t> &decode_chunks() const { return chunks("DECODE"); }
 
             // 메타데이터 출력
             void PrintMetadata(std::ostream &os) const;
+
             // 표준 출력으로 메타데이터 출력 (구현은 .cc에서 std::cout 사용)
             void PrintMetadata() const;
 
@@ -148,12 +150,10 @@ namespace flash_slim
             uint64_t weight_chunk_buffer_size_ = 0;
             std::map<std::string, size_t> count_by_mode_;
             std::map<std::string, uint64_t> size_by_mode_;
-            std::map<std::string, std::vector<weight_chunk_info_t>> groups_;
-            std::vector<weight_chunk_info_t> prefill_chunks_;
-            std::vector<weight_chunk_info_t> decode_chunks_;
+            std::map<std::string, std::vector<weight_chunk_info_t>> weight_chunks_;
             std::map<std::string, std::vector<ChunkIoRange>> io_order_ranges_;
-            std::map<std::string, std::unordered_map<size_t, size_t>> chunk_index_to_range_index_;
             std::map<std::string, std::unordered_map<size_t, size_t>> io_order_to_range_index_;
+            std::map<std::string, std::unordered_map<size_t, size_t>> chunk_index_to_range_index_;
             static std::vector<std::string> KeysOf(const nlohmann::ordered_json &obj);
         };
 

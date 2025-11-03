@@ -180,9 +180,7 @@ namespace flash_slim
               max_aligned_size_(0),
               count_by_mode_(),
               size_by_mode_(),
-              groups_(),
-              prefill_chunks_(),
-              decode_chunks_()
+              weight_chunks_()
         {
             std::cout << "[JsonPrefetchPlanLoader] Initialized" << std::endl;
         }
@@ -201,9 +199,7 @@ namespace flash_slim
             weight_chunk_buffer_size_ = 0;
             count_by_mode_.clear();
             size_by_mode_.clear();
-            groups_.clear();
-            prefill_chunks_.clear();
-            decode_chunks_.clear();
+            weight_chunks_.clear();
             io_order_ranges_.clear();
             chunk_index_to_range_index_.clear();
             io_order_to_range_index_.clear();
@@ -344,7 +340,7 @@ namespace flash_slim
                     continue;
                 }
 
-                auto &vec = groups_[mode];
+                auto &vec = weight_chunks_[mode];
                 vec.reserve(arr.size());
                 for (const auto &j : arr)
                 {
@@ -364,14 +360,6 @@ namespace flash_slim
                     if (j.contains("weights_id"))
                         c.weights_id = static_cast<size_t>(j.at("weights_id").get<uint64_t>());
                     vec.emplace_back(c);
-                    if (mode == "PREFILL")
-                    {
-                        prefill_chunks_.emplace_back(c);
-                    }
-                    else if (mode == "DECODE")
-                    {
-                        decode_chunks_.emplace_back(c);
-                    }
                 }
             }
 
@@ -483,7 +471,7 @@ namespace flash_slim
         void JsonPrefetchPlanLoader::DeriveWeightChunkBufferSize()
         {
             uint64_t derived_pair_max = 0;
-            for (const auto &kv : groups_)
+            for (const auto &kv : weight_chunks_)
             {
                 const auto &vec = kv.second;
                 if (vec.empty())
@@ -538,8 +526,8 @@ namespace flash_slim
         JsonPrefetchPlanLoader::chunks(const std::string &mode) const
         {
             static const std::vector<weight_chunk_info_t> kEmpty;
-            auto it = groups_.find(mode);
-            if (it == groups_.end())
+            auto it = weight_chunks_.find(mode);
+            if (it == weight_chunks_.end())
                 return kEmpty;
             return it->second;
         }
@@ -574,8 +562,8 @@ namespace flash_slim
         JsonPrefetchPlanLoader::BuildOffsetToIndexForMode(const std::string &mode) const
         {
             std::unordered_map<size_t, size_t> map;
-            auto it = groups_.find(mode);
-            if (it == groups_.end())
+            auto it = weight_chunks_.find(mode);
+            if (it == weight_chunks_.end())
                 return map;
             const auto &vec = it->second;
             map.reserve(vec.size());
@@ -592,8 +580,8 @@ namespace flash_slim
         JsonPrefetchPlanLoader::BuildIndexToChunkVectorForMode(const std::string &mode) const
         {
             std::vector<weight_chunk_info_t> out;
-            auto it = groups_.find(mode);
-            if (it == groups_.end())
+            auto it = weight_chunks_.find(mode);
+            if (it == weight_chunks_.end())
                 return out;
             const auto &vec = it->second;
             out = vec; // 사본 반환
@@ -615,8 +603,8 @@ namespace flash_slim
         ModeChunkPlan JsonPrefetchPlanLoader::BuildModeChunkPlan(const std::string &mode) const
         {
             ModeChunkPlan plan;
-            auto chunks_it = groups_.find(mode);
-            if (chunks_it != groups_.end())
+            auto chunks_it = weight_chunks_.find(mode);
+            if (chunks_it != weight_chunks_.end())
             {
                 plan.chunks = chunks_it->second;
                 plan.offset_to_index.reserve(plan.chunks.size());
