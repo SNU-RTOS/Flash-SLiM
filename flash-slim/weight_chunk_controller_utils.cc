@@ -378,7 +378,7 @@ namespace flash_slim
                     {
                         continue;
                     }
-                    PrefetchChunkGroup group;
+                    WeightChunkGroupInfo group;
                     try
                     {
                         group.io_order = static_cast<size_t>(std::stoull(it.key()));
@@ -429,7 +429,7 @@ namespace flash_slim
                     groups.emplace_back(std::move(group));
                 }
 
-                std::sort(groups.begin(), groups.end(), [](const PrefetchChunkGroup &lhs, const PrefetchChunkGroup &rhs) {
+                std::sort(groups.begin(), groups.end(), [](const WeightChunkGroupInfo &lhs, const WeightChunkGroupInfo &rhs) {
                     return lhs.io_order < rhs.io_order;
                 });
 
@@ -582,10 +582,10 @@ namespace flash_slim
             return out;
         }
 
-        const std::vector<PrefetchChunkGroup> &
+        const std::vector<WeightChunkGroupInfo> &
         JsonPrefetchPlanLoader::PrefetchChunkGroups(const std::string &mode) const
         {
-            static const std::vector<PrefetchChunkGroup> kEmpty;
+            static const std::vector<WeightChunkGroupInfo> kEmpty;
             auto it = io_order_groups_.find(mode);
             if (it == io_order_groups_.end())
             {

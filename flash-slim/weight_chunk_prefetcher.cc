@@ -1,3 +1,7 @@
+// Copyright 2025 Flash-SLiM Research Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
 
 #include <algorithm>
 #include <chrono>
@@ -21,35 +25,36 @@
 namespace flash_slim {
 namespace streaming {
 
-namespace {
 
-constexpr unsigned kDefaultRingDepth = 64;
-constexpr size_t kDefaultSubreadBytes = 512 * 1024;
-constexpr uint32_t kPlanIndexShift = 30;
-constexpr size_t kPlanIndexMask = (static_cast<size_t>(1) << kPlanIndexShift) - static_cast<size_t>(1);
+static constexpr unsigned kDefaultRingDepth = 64;
+static constexpr size_t kDefaultSubreadBytes = 512 * 1024;
 
-inline size_t EncodeRangeId(int plan_index, size_t range_index) {
+// static constexpr unsigned kDefaultRingDepth = 128;
+// static constexpr size_t kDefaultSubreadBytes = 4 * 1024 * 1024;
+
+// static constexpr unsigned kDefaultRingDepth = 128;
+// static constexpr size_t kDefaultSubreadBytes = 2 * 1024 * 1024;
+
+static constexpr uint32_t kPlanIndexShift = 30;
+static constexpr size_t kPlanIndexMask = (static_cast<size_t>(1) << kPlanIndexShift) - static_cast<size_t>(1);
+
+static inline size_t EncodeRangeId(int plan_index, size_t range_index) {
   return (static_cast<size_t>(plan_index) << kPlanIndexShift) | range_index;
 }
 
-inline int DecodePlanIndex(size_t encoded) {
+static inline int DecodePlanIndex(size_t encoded) {
   return static_cast<int>(encoded >> kPlanIndexShift);
 }
 
-inline size_t DecodeRangeIndex(size_t encoded) {
+static inline size_t DecodeRangeIndex(size_t encoded) {
   return encoded & kPlanIndexMask;
 }
 
-// constexpr unsigned kDefaultRingDepth = 128;
-// constexpr size_t kDefaultSubreadBytes = 4 * 1024 * 1024;
 
-// constexpr unsigned kDefaultRingDepth = 128;
-// constexpr size_t kDefaultSubreadBytes = 2 * 1024 * 1024;
+static constexpr size_t kMinBlockSize = 512 * 1024;
+static constexpr size_t kMaxThreads = 4;
 
-
-bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
-  constexpr size_t kMinBlockSize = 512 * 1024;
-  constexpr size_t kMaxThreads = 4;
+static inline bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
 
   if (fd < 0 || buffer == nullptr || size == 0) {
     return false;
@@ -90,31 +95,27 @@ bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
   return all_success;
 }
 
-}  // namespace
-
 WeightChunkPrefetcher::~WeightChunkPrefetcher() { StopWorker(); }
 
 void WeightChunkPrefetcher::ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1,
                                                size_t size1) {
   std::lock_guard<std::mutex> lock(io_config_mutex_);
-  registered_buffers_[0] = buffer0;
-  registered_buffer_sizes_[0] = size0;
-  registered_buffers_[1] = buffer1;
-  registered_buffer_sizes_[1] = size1;
-  buffers_configured_ = buffer0 != nullptr && buffer1 != nullptr && size0 > 0 && size1 > 0;
+  io_registered_buffers_[0] = buffer0;
+  io_registered_buffer_sizes_[0] = size0;
+  io_registered_buffers_[1] = buffer1;
+  io_registered_buffer_sizes_[1] = size1;
+  io_buffers_configured_ = buffer0 != nullptr && buffer1 != nullptr && size0 > 0 && size1 > 0;
 }
 
 void WeightChunkPrefetcher::SetWorkerThreadAffinity(const std::vector<int>& cores) {
-  {
     std::lock_guard<std::mutex> lock(io_worker_mutex_);
     io_worker_cores_ = cores;
-  }
 }
 
 void WeightChunkPrefetcher::SetPrefetchPlan(
   PrefetchMode mode, std::unordered_map<size_t, size_t>&& offset_to_index,
   std::vector<WeightChunkInfo>&& chunks,
-  std::vector<PrefetchChunkGroup>&& chunk_groups) {
+  std::vector<WeightChunkGroupInfo>&& chunk_groups) {
 
   const int idx = PrefetchModeToIndex(mode);
 
@@ -128,7 +129,7 @@ void WeightChunkPrefetcher::SetPrefetchPlan(
   plan.chunk_groups = std::move(chunk_groups);
 
   std::sort(plan.chunk_groups.begin(), plan.chunk_groups.end(),
-            [](const PrefetchChunkGroup& lhs, const PrefetchChunkGroup& rhs) {
+            [](const WeightChunkGroupInfo& lhs, const WeightChunkGroupInfo& rhs) {
               return lhs.io_order < rhs.io_order;
             });
 
@@ -263,7 +264,7 @@ const WeightChunkInfo* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chunk_i
   return &info;
 }
 
-const PrefetchChunkGroup* WeightChunkPrefetcher::GetChunkGroupByChunkIndex(
+const WeightChunkGroupInfo* WeightChunkPrefetcher::GetChunkGroupByChunkIndex(
     PrefetchMode mode, size_t chunk_index) const {
   const int plan_idx = PrefetchModeToIndex(mode);
   if (plan_idx < 0 || !has_plan_[plan_idx]) {
@@ -284,25 +285,8 @@ const PrefetchChunkGroup* WeightChunkPrefetcher::GetChunkGroupByChunkIndex(
   return nullptr;
 }
 
-const PrefetchChunkGroup* WeightChunkPrefetcher::GetChunkGroupByIoOrder(
-    PrefetchMode mode, size_t io_order) const {
-  const int plan_idx = PrefetchModeToIndex(mode);
-  if (plan_idx < 0 || !has_plan_[plan_idx]) {
-    return nullptr;
-  }
-  const auto& plan = prefetch_plans_[plan_idx];
-  if (io_order < plan.chunk_groups.size() && plan.chunk_groups[io_order].io_order == io_order) {
-    return &plan.chunk_groups[io_order];
-  }
-  for (size_t i = 0; i < plan.chunk_groups.size(); ++i) {
-    if (plan.chunk_groups[i].io_order == io_order) {
-      return &plan.chunk_groups[i];
-    }
-  }
-  return nullptr;
-}
 
-const PrefetchChunkGroup* WeightChunkPrefetcher::GetNextChunkGroup(
+const WeightChunkGroupInfo* WeightChunkPrefetcher::GetNextChunkGroup(
     PrefetchMode mode, size_t current_io_order) const {
   const int plan_idx = PrefetchModeToIndex(mode);
   if (plan_idx < 0 || !has_plan_[plan_idx]) {
@@ -342,11 +326,11 @@ void WeightChunkPrefetcher::StartWorker() {
   bool configured = false;
   {
     std::lock_guard<std::mutex> lock(io_config_mutex_);
-    buffer0 = registered_buffers_[0];
-    buffer1 = registered_buffers_[1];
-    size0 = registered_buffer_sizes_[0];
-    size1 = registered_buffer_sizes_[1];
-    configured = buffers_configured_;
+    buffer0 = io_registered_buffers_[0];
+    buffer1 = io_registered_buffers_[1];
+    size0 = io_registered_buffer_sizes_[0];
+    size1 = io_registered_buffer_sizes_[1];
+    configured = io_buffers_configured_;
   }
 
   if (!configured) {
@@ -420,7 +404,7 @@ void WeightChunkPrefetcher::StopWorker() {
 }
 
 bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
-  const PrefetchChunkGroup* group = request.chunk_group;
+  const WeightChunkGroupInfo* group = request.chunk_group;
   if (!request.buffer_base || request.direct_io_fd < 0 || request.buffer_index < 0 || !group ||
       group->chunk_indices.empty()) {
     return false;
@@ -554,7 +538,7 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
 
     bool needs_blocking_drain = had_pending_before_wait;
     for (auto& job : jobs_to_submit) {
-      const PrefetchChunkGroup* group = job.chunk_group;
+      const WeightChunkGroupInfo* group = job.chunk_group;
       if (!group) {
         MarkJobCompleted(job, false);
         continue;
@@ -663,7 +647,7 @@ void WeightChunkPrefetcher::RunSyncWorkerLoop() {
       io_job_queue_.pop_front();
     }
 
-    const PrefetchChunkGroup* group = job.chunk_group;
+    const WeightChunkGroupInfo* group = job.chunk_group;
     const bool success = group &&
                          ExecuteIO(job.direct_io_fd, job.buffer_base, group->total_aligned_size,
                                    static_cast<off_t>(group->start_aligned_offset));
@@ -753,7 +737,7 @@ void WeightChunkPrefetcher::ResetRuntimeState() {
 }
 
 void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool success) {
-  const PrefetchChunkGroup* group = job.chunk_group;
+  const WeightChunkGroupInfo* group = job.chunk_group;
   if (!group) {
     return;
   }

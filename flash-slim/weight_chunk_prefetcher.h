@@ -40,7 +40,7 @@ struct WeightChunkInfo {
     size_t weights_id;
 };
 
-struct PrefetchChunkGroup {
+struct WeightChunkGroupInfo {
   size_t range_index = std::numeric_limits<size_t>::max();
   size_t io_order = 0;
   size_t start_origin_offset = 0;
@@ -59,9 +59,39 @@ class WeightChunkPrefetcher {
     UNINITIALIZED,
   };
 
-  static constexpr int kPrefetchPlanCount = 2;
 
-  static constexpr const char* PrefetchModeName(PrefetchMode mode) {
+  struct PrefetchPlan {
+    std::unordered_map<size_t, size_t> offset_to_index;  // origin_offset -> index
+    std::vector<WeightChunkInfo> chunks;                 // index -> chunk metadata
+    std::vector<WeightChunkGroupInfo> chunk_groups;        // io_order-sorted chunk groups
+  };
+
+  struct PrefetchRequest {
+    const WeightChunkGroupInfo* chunk_group = nullptr;
+    void* buffer_base = nullptr;
+    int direct_io_fd = -1;
+    int buffer_index = -1;
+  };
+
+  WeightChunkPrefetcher() = default;
+  ~WeightChunkPrefetcher();
+  
+ 
+
+  void ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1, size_t size1);
+
+  void SetPrefetchPlan(PrefetchMode mode,
+                       std::unordered_map<size_t, size_t>&& offset_to_index,
+                       std::vector<WeightChunkInfo>&& chunks,
+                       std::vector<WeightChunkGroupInfo>&& chunk_groups);
+
+  bool HasPrefetchPlan(PrefetchMode mode) const;
+
+  const PrefetchPlan* GetPrefetchPlan(PrefetchMode mode) const;
+
+  void UpdatePrefetcherMode(PrefetchMode mode) { prefetch_mode_ = mode; }
+
+   static constexpr const char* PrefetchModeName(PrefetchMode mode) {
     switch (mode) {
       case PrefetchMode::PREFILL:
         return "PREFILL";
@@ -73,36 +103,6 @@ class WeightChunkPrefetcher {
         return "UNKNOWN";
     }
   }
-
-  struct PrefetchPlan {
-    std::unordered_map<size_t, size_t> offset_to_index;  // origin_offset -> index
-    std::vector<WeightChunkInfo> chunks;                 // index -> chunk metadata
-    std::vector<PrefetchChunkGroup> chunk_groups;        // io_order-sorted chunk groups
-  };
-
-  struct PrefetchRequest {
-    const PrefetchChunkGroup* chunk_group = nullptr;
-    void* buffer_base = nullptr;
-    int direct_io_fd = -1;
-    int buffer_index = -1;
-  };
-
-  WeightChunkPrefetcher() = default;
-  ~WeightChunkPrefetcher();
-  
-  void ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1, size_t size1);
-
-  void SetPrefetchPlan(PrefetchMode mode,
-                       std::unordered_map<size_t, size_t>&& offset_to_index,
-                       std::vector<WeightChunkInfo>&& chunks,
-                       std::vector<PrefetchChunkGroup>&& chunk_groups);
-
-  bool HasPrefetchPlan(PrefetchMode mode) const;
-
-  const PrefetchPlan* GetPrefetchPlan(PrefetchMode mode) const;
-
-  void UpdatePrefetcherMode(PrefetchMode mode) { prefetch_mode_ = mode; }
-
   inline int PrefetchModeToIndex(PrefetchMode mode) const {
     switch (mode) {
       case PrefetchMode::PREFILL:
@@ -154,14 +154,13 @@ class WeightChunkPrefetcher {
   const WeightChunkInfo* LookupChunkInfo(PrefetchMode mode, size_t offset) const;
 
   const WeightChunkInfo* GetChunkInfoByIndex(size_t chunk_index) const;
-
-  const PrefetchChunkGroup* GetChunkGroupByChunkIndex(PrefetchMode mode, size_t chunk_index) const;
-  const PrefetchChunkGroup* GetChunkGroupByIoOrder(PrefetchMode mode, size_t io_order) const;
-  const PrefetchChunkGroup* GetNextChunkGroup(PrefetchMode mode, size_t current_io_order) const;
+  const WeightChunkGroupInfo* GetChunkGroupByChunkIndex(PrefetchMode mode, size_t chunk_index) const;
+  const WeightChunkGroupInfo* GetNextChunkGroup(PrefetchMode mode, size_t current_io_order) const;
   
  private:
+  static constexpr int kPrefetchPlanCount = 2;
   struct PrefetchJob {
-    const PrefetchChunkGroup* chunk_group = nullptr;
+    const WeightChunkGroupInfo* chunk_group = nullptr;
     void* buffer_base = nullptr;
     int direct_io_fd = -1;
     int buffer_index = -1;
@@ -181,14 +180,14 @@ class WeightChunkPrefetcher {
     bool in_flight = false;
   };
 
-  void WorkerLoop();
   void ApplyWorkerAffinity();
   void ResetRuntimeState();
   void MarkJobCompleted(const PrefetchJob& job, bool success);
-  std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
-  std::shared_ptr<ChunkGroupIOState> GetChunkGroupIOState(PrefetchMode mode, size_t group_index);
+  void WorkerLoop();
   void RunAsyncWorkerLoop();
   void RunSyncWorkerLoop();
+  std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
+  std::shared_ptr<ChunkGroupIOState> GetChunkGroupIOState(PrefetchMode mode, size_t group_index);
 
   PrefetchMode prefetch_mode_ = PrefetchMode::UNINITIALIZED;
 
@@ -196,16 +195,13 @@ class WeightChunkPrefetcher {
   std::array<bool, kPrefetchPlanCount> has_plan_{{false, false}};
   
   std::vector<WeightChunkInfo> index_to_chunks_;
-
   std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_io_states_;
   std::array<std::unordered_map<size_t, std::shared_ptr<ChunkGroupIOState>>, kPrefetchPlanCount> index_to_group_io_states_;
   
-  
-  std::array<void*, 2> registered_buffers_{nullptr, nullptr};
-  std::array<size_t, 2> registered_buffer_sizes_{0, 0};
-  bool buffers_configured_ = false;
-
   std::unique_ptr<WeightChunkIOEngine> io_engine_;
+  std::array<void*, 2> io_registered_buffers_{nullptr, nullptr};
+  std::array<size_t, 2> io_registered_buffer_sizes_{0, 0};
+  bool io_buffers_configured_ = false;
   std::mutex io_config_mutex_;
   std::mutex chunk_io_state_mutex_;
   std::mutex group_io_state_mutex_;
