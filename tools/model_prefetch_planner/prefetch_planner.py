@@ -15,14 +15,10 @@ import os
 import re
 import statistics
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Mapping
 
 from planning.__planner_data_structures__ import PrefetchPlan, WeightChunkInfo
-from planning.io_estimator import (
-    IoTimeEstimator,
-    BandwidthIoTimeEstimator,
-    DirectIoTimeEstimator,
-)
+from planning.io_estimator import BandwidthIoTimeEstimator, DirectIoTimeEstimator
 from planning.stratgey_rechunk import RechunkPlanningStrategy
 from planning.strategy_simple import SimplePlanningStrategy
 from planning.strategy_base import ChunkKey, PlanningContext, PlanningStrategy
@@ -34,9 +30,8 @@ class PrefetchPlanner:
         self.cmt_path = cmt_path
         self.metadata: Dict[str, object] = {}
         self.weight_chunks: Dict[str, List[WeightChunkInfo]] = {}
-        self.chunk_lookup: Dict[ChunkKey, Dict[str, object]] = {}
+        self.chunk_lookup: Dict[ChunkKey, Mapping[str, object]] = {}
         self.profile_stats: Dict[ChunkKey, float] = {}
-        self.loaded_profile_files: List[str] = []
 
     def _resolve_path(self, path: str) -> str:
         if os.path.isabs(path):
@@ -89,7 +84,6 @@ class PrefetchPlanner:
 
         for profile_file in profile_files:
             print(f"[PrefetchPlanner] Parsing profiling log: {profile_file}")
-            self.loaded_profile_files.append(profile_file)
             with open(profile_file, "r", encoding="utf-8") as source:
                 for line in source:
                     line = line.strip()
@@ -101,10 +95,10 @@ class PrefetchPlanner:
                     ):
                         continue
                     parts = line.split()
-                    if not parts:
+                    if len(parts) < 3:
                         continue
                     match = ops_pattern.match(parts[0])
-                    if not match or len(parts) < 6 or not parts[1].isdigit():
+                    if not match:
                         continue
                     mode = match.group("mode")
                     chunk_idx = int(match.group("chunk"))
@@ -246,25 +240,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    # Parse command-line arguments
-    args = parse_args()
-
-    # Initialize PrefetchPlanner and load CMT and profiling data
+def run_prefetch_planner(args: argparse.Namespace) -> PrefetchPlan:
     planner = PrefetchPlanner(args.cmt)
     planner.load_cmt()
     planner.load_profile_logs(args.profile_pattern)
 
-    # Build planning context and create strategy
     context = planner.build_context()
     strategy = create_strategy(args, planner)
 
-    # Build prefetch plan
     print("[PrefetchPlanner] Building prefetch plan...")
     plan = strategy.build(context)
     planner.integrate_profiling_data(plan)
     planner.save_prefetch_plan(plan, args.output)
+    return plan
 
+def main() -> None:
+    args = parse_args()
+    run_prefetch_planner(args)
 
 if __name__ == "__main__":
     main()

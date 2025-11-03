@@ -12,16 +12,14 @@ class SimplePlanningStrategy(PlanningStrategy):
 
     def build(self, context: PlanningContext) -> PrefetchPlan:
         plan = PrefetchPlan(metadata=dict(context.metadata))
-        io_order = 0
         for mode, chunks in context.weight_chunks.items():
             ordered_chunks = sort_chunk_list(chunks)
             plan.plan_entries[mode] = []
-            for chunk in ordered_chunks:
+            for io_order, chunk in enumerate(ordered_chunks):
                 chunk_payload = resolve_chunk_payload(context.chunk_lookup, mode, chunk)
                 plan.plan_entries[mode].append(
                     PrefetchPlanEntry(
                         mode=mode, chunk_data=chunk_payload, io_order=io_order
                     )
                 )
-                io_order += 1
         return plan
