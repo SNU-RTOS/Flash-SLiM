@@ -26,8 +26,7 @@ namespace {
 constexpr unsigned kDefaultRingDepth = 64;
 constexpr size_t kDefaultSubreadBytes = 512 * 1024;
 constexpr uint32_t kPlanIndexShift = 30;
-constexpr size_t kPlanIndexMask =
-    (static_cast<size_t>(1) << kPlanIndexShift) - static_cast<size_t>(1);
+constexpr size_t kPlanIndexMask = (static_cast<size_t>(1) << kPlanIndexShift) - static_cast<size_t>(1);
 
 inline size_t EncodeRangeId(int plan_index, size_t range_index) {
   return (static_cast<size_t>(plan_index) << kPlanIndexShift) | range_index;
@@ -118,16 +117,20 @@ void WeightChunkPrefetcher::SetPrefetchPlan(
     std::vector<PrefetchChunkRange>&& chunk_ranges,
     std::unordered_map<size_t, size_t>&& chunk_index_to_range,
     std::unordered_map<size_t, size_t>&& io_order_to_range_index) {
+
   const int idx = PrefetchModeToIndex(mode);
+
   if (idx < 0) {
     return;
   }
+
   auto& plan = prefetch_plans_[idx];
   plan.offset_to_index = std::move(offset_to_index);
   plan.chunks = std::move(chunks);
   plan.chunk_ranges = std::move(chunk_ranges);
   plan.chunk_index_to_range = std::move(chunk_index_to_range);
   plan.io_order_to_range_index = std::move(io_order_to_range_index);
+
   for (size_t range_index = 0; range_index < plan.chunk_ranges.size(); ++range_index) {
     if (range_index > kPlanIndexMask) {
       TFLITE_LOG_PROD(
@@ -154,6 +157,7 @@ void WeightChunkPrefetcher::SetPrefetchPlan(
       }
     }
   }
+  
   if (rebuild_chunk_map) {
     plan.chunk_index_to_range.clear();
     for (const auto& range : plan.chunk_ranges) {

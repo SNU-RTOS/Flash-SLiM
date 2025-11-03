@@ -27,8 +27,18 @@
 namespace flash_slim {
 namespace streaming {
 
-using weight_chunk_info_t = tflite::xnnpack::StreamingWeightCacheProvider::weight_chunk_info_t;
+
 using ProviderMode = tflite::xnnpack::StreamingWeightCacheProvider::ProviderMode;
+
+  struct weight_chunk_info_t {
+    size_t chunk_index;
+    size_t aligned_offset;
+    size_t offset_adjust; //abs_offset(mmap_buffer_base_offset_ + offset) - aligned_offset
+    size_t aligned_size;
+    size_t origin_offset;
+    size_t origin_size;
+    size_t weights_id;
+  };
 
 struct PrefetchChunkRange {
   size_t range_index = std::numeric_limits<size_t>::max();

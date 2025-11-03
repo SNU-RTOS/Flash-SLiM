@@ -891,10 +891,9 @@ int main(int argc, char *argv[])
 
         std::cout << single_decoded_text << std::flush;
 
-        std::cout << "\n\n\n";
-        std::cout << "[INFO] Decoded " << decode_steps << " tokens." << std::endl;
-        std::cout << "[INFO] Decoding Phase completed" << std::endl;
+        std::cout << "\n\n\ntest finished.\n";
         std::cout << "---------------------------------------------------\n\n";
+        
         //* ============ [Phase] 11. Profiling Phase ============ */
 
         std::cout << "---------------------------------------------------\n\n";
