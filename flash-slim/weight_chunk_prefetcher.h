@@ -30,7 +30,7 @@ namespace streaming {
 
 using ProviderMode = tflite::xnnpack::StreamingWeightCacheProvider::ProviderMode;
 
-  struct weight_chunk_info_t {
+struct WeightChunkInfo {
     size_t chunk_index;
     size_t aligned_offset;
     size_t offset_adjust; //abs_offset(mmap_buffer_base_offset_ + offset) - aligned_offset
@@ -38,7 +38,7 @@ using ProviderMode = tflite::xnnpack::StreamingWeightCacheProvider::ProviderMode
     size_t origin_offset;
     size_t origin_size;
     size_t weights_id;
-  };
+};
 
 struct PrefetchChunkRange {
   size_t range_index = std::numeric_limits<size_t>::max();
@@ -76,10 +76,8 @@ class WeightChunkPrefetcher {
 
   struct PrefetchPlan {
     std::unordered_map<size_t, size_t> offset_to_index;  // origin_offset -> index
-    std::vector<weight_chunk_info_t> chunks;             // index -> chunk metadata
-    std::vector<PrefetchChunkRange> chunk_ranges;
-    std::unordered_map<size_t, size_t> chunk_index_to_range;
-    std::unordered_map<size_t, size_t> io_order_to_range_index;
+    std::vector<WeightChunkInfo> chunks;                 // index -> chunk metadata
+    std::vector<PrefetchChunkRange> chunk_ranges;        // io_order-sorted ranges
   };
 
   struct PrefetchRequest {
@@ -96,10 +94,8 @@ class WeightChunkPrefetcher {
 
   void SetPrefetchPlan(PrefetchMode mode,
                        std::unordered_map<size_t, size_t>&& offset_to_index,
-                       std::vector<weight_chunk_info_t>&& chunks,
-                       std::vector<PrefetchChunkRange>&& chunk_ranges,
-                       std::unordered_map<size_t, size_t>&& chunk_index_to_range,
-                       std::unordered_map<size_t, size_t>&& io_order_to_range_index);
+                       std::vector<WeightChunkInfo>&& chunks,
+                       std::vector<PrefetchChunkRange>&& chunk_ranges);
 
   bool HasPrefetchPlan(PrefetchMode mode) const;
 
@@ -145,7 +141,7 @@ class WeightChunkPrefetcher {
 
   bool Submit(const PrefetchRequest& request);
 
-  bool WaitReady(const weight_chunk_info_t* chunk_info);
+  bool WaitReady(const WeightChunkInfo* chunk_info);
   
   void StartWorker();
 
@@ -158,11 +154,11 @@ class WeightChunkPrefetcher {
   
   void BuildIndexToChunksFromPlans();
 
-  const std::vector<weight_chunk_info_t>& GetIndexToChunks() const { return index_to_chunks_; }
+  const std::vector<WeightChunkInfo>& GetIndexToChunks() const { return index_to_chunks_; }
 
-  const weight_chunk_info_t* LookupChunkInfo(PrefetchMode mode, size_t offset) const;
+  const WeightChunkInfo* LookupChunkInfo(PrefetchMode mode, size_t offset) const;
 
-  const weight_chunk_info_t* GetChunkInfoByIndex(size_t chunk_index) const;
+  const WeightChunkInfo* GetChunkInfoByIndex(size_t chunk_index) const;
 
   const PrefetchChunkRange* GetChunkRangeByChunkIndex(PrefetchMode mode, size_t chunk_index) const;
   const PrefetchChunkRange* GetChunkRangeByIoOrder(PrefetchMode mode, size_t io_order) const;
@@ -205,7 +201,7 @@ class WeightChunkPrefetcher {
   std::array<bool, kPrefetchPlanCount> has_plan_{{false, false}};
   std::array<std::unordered_map<size_t, std::shared_ptr<ChunkRangeIOState>>, kPrefetchPlanCount> range_states_;
 
-  std::vector<weight_chunk_info_t> index_to_chunks_;
+  std::vector<WeightChunkInfo> index_to_chunks_;
   std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_states_;
   std::mutex range_state_mutex_;
   

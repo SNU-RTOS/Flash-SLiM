@@ -39,7 +39,7 @@ namespace flash_slim
         }
 
         void JsonWeightChunkMetaDataWriter::WriteChunkInfo(
-            const weight_chunk_info_t &chunk_info,
+            const WeightChunkInfo &chunk_info,
             PrefetchMode prefetch_mode)
         {
             if (finalized_)
@@ -47,12 +47,6 @@ namespace flash_slim
                 std::cerr << "[JsonWeightChunkMetaDataWriter] Error: Cannot write after Finalize()" << std::endl;
                 return;
             }
-
-            // std::cout << "[JsonWeightChunkMetaDataWriter] Writing chunk_index=" << chunk_info.chunk_index
-            //           << " aligned_offset=" << chunk_info.aligned_offset << " aligned_size=" << chunk_info.aligned_size
-            //           << " buffer_index=" << chunk_info.managed_buffer_index
-            //           << " origin_offset=" << chunk_info.origin_offset
-            //           << " weights_id=" << chunk_info.weights_id << std::endl;
 
             nlohmann::ordered_json chunk_json;
             chunk_json["chunk_index"] = chunk_info.chunk_index;
@@ -186,8 +180,6 @@ namespace flash_slim
             size_by_mode_.clear();
             weight_chunks_.clear();
             io_order_ranges_.clear();
-            chunk_index_to_range_index_.clear();
-            io_order_to_range_index_.clear();
         }
 
         std::vector<std::string> JsonPrefetchPlanLoader::KeysOf(const nlohmann::ordered_json &obj)
@@ -224,11 +216,17 @@ namespace flash_slim
 
             if (root_.contains("prefetch_plan"))
             {
-                ParsePrefetchPlan(root_.at("prefetch_plan"));
+                if (!ParsePrefetchPlan(root_.at("prefetch_plan")))
+                {
+                    return false;
+                }
             }
             else
             {
-                ParsePrefetchPlan(nlohmann::ordered_json::object());
+                if (!ParsePrefetchPlan(nlohmann::ordered_json::object()))
+                {
+                    return false;
+                }
             }
 
             DeriveWeightChunkBufferSize();
@@ -329,7 +327,7 @@ namespace flash_slim
                 vec.reserve(arr.size());
                 for (const auto &j : arr)
                 {
-                    weight_chunk_info_t c{};
+                    WeightChunkInfo c{};
                     if (j.contains("chunk_index"))
                         c.chunk_index = static_cast<size_t>(j.at("chunk_index").get<uint64_t>());
                     if (j.contains("origin_offset"))
@@ -351,15 +349,13 @@ namespace flash_slim
             return true;
         }
 
-        void JsonPrefetchPlanLoader::ParsePrefetchPlan(const nlohmann::ordered_json &plan_root)
+        bool JsonPrefetchPlanLoader::ParsePrefetchPlan(const nlohmann::ordered_json &plan_root)
         {
             io_order_ranges_.clear();
-            chunk_index_to_range_index_.clear();
-            io_order_to_range_index_.clear();
 
             if (!plan_root.is_object())
             {
-                return;
+                return true;
             }
 
             for (auto pit = plan_root.begin(); pit != plan_root.end(); ++pit)
@@ -372,11 +368,7 @@ namespace flash_slim
                 }
 
                 auto &ranges = io_order_ranges_[mode];
-                auto &chunk_to_range = chunk_index_to_range_index_[mode];
-                auto &order_to_range = io_order_to_range_index_[mode];
                 ranges.clear();
-                chunk_to_range.clear();
-                order_to_range.clear();
                 ranges.reserve(mode_plan.size());
 
                 for (auto it = mode_plan.begin(); it != mode_plan.end(); ++it)
@@ -386,7 +378,7 @@ namespace flash_slim
                     {
                         continue;
                     }
-                    ChunkIoRange range;
+                    PrefetchChunkRange range;
                     try
                     {
                         range.io_order = static_cast<size_t>(std::stoull(it.key()));
@@ -437,20 +429,37 @@ namespace flash_slim
                     ranges.emplace_back(std::move(range));
                 }
 
-                std::sort(ranges.begin(), ranges.end(), [](const ChunkIoRange &lhs, const ChunkIoRange &rhs) {
+                std::sort(ranges.begin(), ranges.end(), [](const PrefetchChunkRange &lhs, const PrefetchChunkRange &rhs) {
                     return lhs.io_order < rhs.io_order;
                 });
 
-                for (size_t range_index = 0; range_index < ranges.size(); ++range_index)
+                if (!ranges.empty())
                 {
-                    const auto &range = ranges[range_index];
-                    order_to_range[range.io_order] = range_index;
-                    for (const size_t chunk_idx : range.chunk_indices)
+                    if (ranges.front().io_order != 0)
                     {
-                        chunk_to_range[chunk_idx] = range_index;
+                        std::cerr << "[JsonPrefetchPlanLoader] Invalid prefetch plan for mode " << mode
+                                  << ": io_order values must start at 0" << std::endl;
+                        return false;
+                    }
+                    for (size_t idx = 1; idx < ranges.size(); ++idx)
+                    {
+                        if (ranges[idx].io_order != ranges[idx - 1].io_order + 1)
+                        {
+                            std::cerr << "[JsonPrefetchPlanLoader] Invalid prefetch plan for mode " << mode
+                                      << ": io_order=" << ranges[idx].io_order
+                                      << " is not contiguous after " << ranges[idx - 1].io_order << std::endl;
+                            return false;
+                        }
                     }
                 }
+
+                for (size_t range_index = 0; range_index < ranges.size(); ++range_index)
+                {
+                    ranges[range_index].range_index = range_index;
+                }
             }
+
+            return true;
         }
 
         void JsonPrefetchPlanLoader::DeriveWeightChunkBufferSize()
@@ -507,10 +516,10 @@ namespace flash_slim
             return k;
         }
 
-        const std::vector<weight_chunk_info_t> &
+        const std::vector<WeightChunkInfo> &
         JsonPrefetchPlanLoader::chunks(const std::string &mode) const
         {
-            static const std::vector<weight_chunk_info_t> kEmpty;
+            static const std::vector<WeightChunkInfo> kEmpty;
             auto it = weight_chunks_.find(mode);
             if (it == weight_chunks_.end())
                 return kEmpty;
@@ -561,10 +570,10 @@ namespace flash_slim
             return map;
         }
 
-        std::vector<weight_chunk_info_t>
+        std::vector<WeightChunkInfo>
         JsonPrefetchPlanLoader::BuildIndexToChunkVectorForMode(const std::string &mode) const
         {
-            std::vector<weight_chunk_info_t> out;
+            std::vector<WeightChunkInfo> out;
             auto it = weight_chunks_.find(mode);
             if (it == weight_chunks_.end())
                 return out;
@@ -573,10 +582,10 @@ namespace flash_slim
             return out;
         }
 
-        const std::vector<ChunkIoRange> &
-        JsonPrefetchPlanLoader::ChunkIoRanges(const std::string &mode) const
+        const std::vector<PrefetchChunkRange> &
+        JsonPrefetchPlanLoader::PrefetchChunkRanges(const std::string &mode) const
         {
-            static const std::vector<ChunkIoRange> kEmpty;
+            static const std::vector<PrefetchChunkRange> kEmpty;
             auto it = io_order_ranges_.find(mode);
             if (it == io_order_ranges_.end())
             {
@@ -603,18 +612,6 @@ namespace flash_slim
             if (ranges_it != io_order_ranges_.end())
             {
                 plan.io_order_ranges = ranges_it->second;
-            }
-
-            auto chunk_to_range_it = chunk_index_to_range_index_.find(mode);
-            if (chunk_to_range_it != chunk_index_to_range_index_.end())
-            {
-                plan.chunk_index_to_range = chunk_to_range_it->second;
-            }
-
-            auto order_to_range_it = io_order_to_range_index_.find(mode);
-            if (order_to_range_it != io_order_to_range_index_.end())
-            {
-                plan.io_order_to_range_index = order_to_range_it->second;
             }
 
             if (!plan.chunks.empty() && !plan.io_order_ranges.empty())

@@ -113,10 +113,8 @@ void WeightChunkPrefetcher::SetWorkerThreadAffinity(const std::vector<int>& core
 
 void WeightChunkPrefetcher::SetPrefetchPlan(
     PrefetchMode mode, std::unordered_map<size_t, size_t>&& offset_to_index,
-    std::vector<weight_chunk_info_t>&& chunks,
-    std::vector<PrefetchChunkRange>&& chunk_ranges,
-    std::unordered_map<size_t, size_t>&& chunk_index_to_range,
-    std::unordered_map<size_t, size_t>&& io_order_to_range_index) {
+    std::vector<WeightChunkInfo>&& chunks,
+    std::vector<PrefetchChunkRange>&& chunk_ranges) {
 
   const int idx = PrefetchModeToIndex(mode);
 
@@ -128,10 +126,14 @@ void WeightChunkPrefetcher::SetPrefetchPlan(
   plan.offset_to_index = std::move(offset_to_index);
   plan.chunks = std::move(chunks);
   plan.chunk_ranges = std::move(chunk_ranges);
-  plan.chunk_index_to_range = std::move(chunk_index_to_range);
-  plan.io_order_to_range_index = std::move(io_order_to_range_index);
+
+  std::sort(plan.chunk_ranges.begin(), plan.chunk_ranges.end(),
+            [](const PrefetchChunkRange& lhs, const PrefetchChunkRange& rhs) {
+              return lhs.io_order < rhs.io_order;
+            });
 
   for (size_t range_index = 0; range_index < plan.chunk_ranges.size(); ++range_index) {
+    auto& range = plan.chunk_ranges[range_index];
     if (range_index > kPlanIndexMask) {
       TFLITE_LOG_PROD(
           tflite::TFLITE_LOG_WARNING,
@@ -139,39 +141,14 @@ void WeightChunkPrefetcher::SetPrefetchPlan(
           "undefined.",
           range_index, kPlanIndexMask);
     }
-    plan.chunk_ranges[range_index].range_index = range_index;
-  }
-
-  // Ensure chunk_index_to_range map covers all chunks; rebuild if necessary.
-  bool rebuild_chunk_map = plan.chunk_index_to_range.empty();
-  if (!rebuild_chunk_map) {
-    for (const auto& range : plan.chunk_ranges) {
-      for (const size_t chunk_idx : range.chunk_indices) {
-        if (plan.chunk_index_to_range.find(chunk_idx) == plan.chunk_index_to_range.end()) {
-          rebuild_chunk_map = true;
-          break;
-        }
-      }
-      if (rebuild_chunk_map) {
-        break;
-      }
+    if (range.io_order != range_index) {
+      TFLITE_LOG_PROD(
+          tflite::TFLITE_LOG_WARNING,
+          "WeightChunkPrefetcher: adjusting io_order from %zu to %zu to maintain contiguity.",
+          range.io_order, range_index);
+      range.io_order = range_index;
     }
-  }
-  
-  if (rebuild_chunk_map) {
-    plan.chunk_index_to_range.clear();
-    for (const auto& range : plan.chunk_ranges) {
-      for (const size_t chunk_idx : range.chunk_indices) {
-        plan.chunk_index_to_range[chunk_idx] = range.range_index;
-      }
-    }
-  }
-
-  // Likewise safeguard io_order map.
-  if (plan.io_order_to_range_index.empty()) {
-    for (const auto& range : plan.chunk_ranges) {
-      plan.io_order_to_range_index[range.io_order] = range.range_index;
-    }
+    range.range_index = range_index;
   }
 
   has_plan_[idx] = true;
@@ -212,7 +189,7 @@ void WeightChunkPrefetcher::BuildIndexToChunksFromPlans() {
     return;
   }
 
-  weight_chunk_info_t tmp_chunk;
+  WeightChunkInfo tmp_chunk;
   tmp_chunk.chunk_index = SIZE_MAX;
   tmp_chunk.origin_offset = 0;
   tmp_chunk.origin_size = 0;
@@ -248,7 +225,7 @@ std::string WeightChunkPrefetcher::GetPrefetchModeString() const {
   return std::string(PrefetchModeName(prefetch_mode_));
 }
 
-const weight_chunk_info_t* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode mode,
+const WeightChunkInfo* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode mode,
                                                                  size_t offset) const {
   const int idx = PrefetchModeToIndex(mode);
   if (idx < 0 || !has_plan_[idx]) {
@@ -273,7 +250,7 @@ const weight_chunk_info_t* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode m
   return &candidate;
 }
 
-const weight_chunk_info_t* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chunk_index) const {
+const WeightChunkInfo* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chunk_index) const {
   if (chunk_index >= index_to_chunks_.size()) {
     return nullptr;
   }
@@ -293,40 +270,18 @@ const PrefetchChunkRange* WeightChunkPrefetcher::GetChunkRangeByChunkIndex(
     return nullptr;
   }
   const auto& plan = prefetch_plans_[plan_idx];
-
-  auto it = plan.chunk_index_to_range.find(chunk_index);
-  if(it == plan.chunk_index_to_range.end()) {
-    std::cout << "[WeightChunkPrefetcher] GetChunkRangeByChunkIndex: chunk_index=" << chunk_index
-              << " not found in chunk_index_to_range map for mode " << plan_idx << std::endl;
-    return nullptr;
-  }
-
-  size_t range_index = std::numeric_limits<size_t>::max();
-  if (it != plan.chunk_index_to_range.end()) {
-    range_index = it->second;
-  } else {
-    for (size_t i = 0; i < plan.chunk_ranges.size(); ++i) {
-      const auto& range = plan.chunk_ranges[i];
-      if (std::find(range.chunk_indices.begin(), range.chunk_indices.end(), chunk_index) !=
-          range.chunk_indices.end()) {
-        range_index = i;
-        break;
-      }
+  for (size_t i = 0; i < plan.chunk_ranges.size(); ++i) {
+    const auto& range = plan.chunk_ranges[i];
+    if (std::find(range.chunk_indices.begin(), range.chunk_indices.end(), chunk_index) !=
+        range.chunk_indices.end()) {
+      return &plan.chunk_ranges[i];
     }
   }
 
-  if (range_index == std::numeric_limits<size_t>::max()) {
-    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                    "WeightChunkPrefetcher: chunk_index=%zu not found in range map for mode %d",
-                    chunk_index, plan_idx);
-    return nullptr;
-  }
-
-  if (range_index >= plan.chunk_ranges.size()) {
-    return nullptr;
-  }
-
-  return &plan.chunk_ranges[range_index];
+  TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                  "WeightChunkPrefetcher: chunk_index=%zu not found in range list for mode %d",
+                  chunk_index, plan_idx);
+  return nullptr;
 }
 
 const PrefetchChunkRange* WeightChunkPrefetcher::GetChunkRangeByIoOrder(
@@ -336,15 +291,15 @@ const PrefetchChunkRange* WeightChunkPrefetcher::GetChunkRangeByIoOrder(
     return nullptr;
   }
   const auto& plan = prefetch_plans_[plan_idx];
-  const auto it = plan.io_order_to_range_index.find(io_order);
-  if (it == plan.io_order_to_range_index.end()) {
-    return nullptr;
+  if (io_order < plan.chunk_ranges.size() && plan.chunk_ranges[io_order].io_order == io_order) {
+    return &plan.chunk_ranges[io_order];
   }
-  const size_t range_index = it->second;
-  if (range_index >= plan.chunk_ranges.size()) {
-    return nullptr;
+  for (size_t i = 0; i < plan.chunk_ranges.size(); ++i) {
+    if (plan.chunk_ranges[i].io_order == io_order) {
+      return &plan.chunk_ranges[i];
+    }
   }
-  return &plan.chunk_ranges[range_index];
+  return nullptr;
 }
 
 const PrefetchChunkRange* WeightChunkPrefetcher::GetNextChunkRange(
@@ -358,21 +313,17 @@ const PrefetchChunkRange* WeightChunkPrefetcher::GetNextChunkRange(
   if (plan.chunk_ranges.empty()) {
     return nullptr;
   }
-
-  const auto current_it = plan.io_order_to_range_index.find(current_io_order);
-  size_t next_index = 0;
-  if (current_it != plan.io_order_to_range_index.end()) {
-    next_index = current_it->second + 1;
+  const size_t target_io_order = (current_io_order + 1) % plan.chunk_ranges.size();
+  if (target_io_order < plan.chunk_ranges.size() &&
+      plan.chunk_ranges[target_io_order].io_order == target_io_order) {
+    return &plan.chunk_ranges[target_io_order];
   }
-
-  if (next_index >= plan.chunk_ranges.size()) {
-    next_index = 0;
+  for (size_t i = 0; i < plan.chunk_ranges.size(); ++i) {
+    if (plan.chunk_ranges[i].io_order == target_io_order) {
+      return &plan.chunk_ranges[i];
+    }
   }
-
-  if (plan.chunk_ranges.empty()) {
-    return nullptr;
-  }
-  return &plan.chunk_ranges[next_index];
+  return &plan.chunk_ranges.front();
 }
 
 
@@ -540,7 +491,7 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
   return true;
 }
 
-bool WeightChunkPrefetcher::WaitReady(const weight_chunk_info_t* chunk_info) {
+bool WeightChunkPrefetcher::WaitReady(const WeightChunkInfo* chunk_info) {
  
   if (!chunk_info) {
     return false;

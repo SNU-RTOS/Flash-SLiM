@@ -12,152 +12,142 @@
 
 #include "weight_chunk_prefetcher.h"
 
-namespace flash_slim
+namespace flash_slim::streaming
 {
-    namespace streaming
+
+    struct ModeChunkPlan
     {
-        using ChunkIoRange = PrefetchChunkRange;
+        std::vector<WeightChunkInfo> chunks;
+        std::unordered_map<size_t, size_t> offset_to_index;
+        std::vector<PrefetchChunkRange> io_order_ranges;
+    };
 
-        struct ModeChunkPlan
-        {
-            std::vector<weight_chunk_info_t> chunks;
-            std::unordered_map<size_t, size_t> offset_to_index;
-            std::vector<ChunkIoRange> io_order_ranges;
-            std::unordered_map<size_t, size_t> chunk_index_to_range;
-            std::unordered_map<size_t, size_t> io_order_to_range_index;
-        };
+    //* ==================== Interfaces ==================== */
+    class WeightChunkMetaDataWriter
+    {
+    public:
+        virtual ~WeightChunkMetaDataWriter() = default;
+        virtual void WriteChunkInfo(
+            const WeightChunkInfo &chunk_info,
+            PrefetchMode prefetch_mode) = 0;
+        virtual void Finalize() = 0;
+    };
 
-        //* ==================== Interfaces ==================== */
-        class WeightChunkMetaDataWriter
-        {
-        public:
-            virtual ~WeightChunkMetaDataWriter() = default;
-            virtual void WriteChunkInfo(
-                const weight_chunk_info_t &chunk_info,
-                PrefetchMode prefetch_mode) = 0;
-            virtual void Finalize() = 0;
-        };
+    class PrefetchPlanLoader
+    {
+    public:
+        virtual ~PrefetchPlanLoader() = default;
+        virtual bool LoadFromFile(const std::string &plan_file_path) = 0;
+    };
 
-        class PrefetchPlanLoader
-        {
-        public:
-            virtual ~PrefetchPlanLoader() = default;
-            virtual bool LoadFromFile(const std::string &plan_file_path) = 0;
-        };
+    //* ==================== JsonWeightChunkInfoWriter ==================== */
 
+    // JSON-based implementation of WeightChunkMetaDataWriter
+    // Uses nlohmann/json for serialization
+    class JsonWeightChunkMetaDataWriter : public flash_slim::streaming::WeightChunkMetaDataWriter
+    {
+    public:
+        explicit JsonWeightChunkMetaDataWriter(const std::string &output_path);
+        ~JsonWeightChunkMetaDataWriter() override;
 
-        //* ==================== JsonWeightChunkInfoWriter ==================== */
+        // Delete copy constructor and assignment operator
+        JsonWeightChunkMetaDataWriter(const JsonWeightChunkMetaDataWriter &) = delete;
+        JsonWeightChunkMetaDataWriter &operator=(const JsonWeightChunkMetaDataWriter &) = delete;
 
-        // JSON-based implementation of WeightChunkMetaDataWriter
-        // Uses nlohmann/json for serialization
-        class JsonWeightChunkMetaDataWriter : public flash_slim::streaming::WeightChunkMetaDataWriter
-        {
-        public:
-            explicit JsonWeightChunkMetaDataWriter(const std::string &output_path);
-            ~JsonWeightChunkMetaDataWriter() override;
+        void WriteChunkInfo(
+            const WeightChunkInfo &chunk_info,
+            flash_slim::streaming::WeightChunkPrefetcher::PrefetchMode prefetch_mode) override;
 
-            // Delete copy constructor and assignment operator
-            JsonWeightChunkMetaDataWriter(const JsonWeightChunkMetaDataWriter &) = delete;
-            JsonWeightChunkMetaDataWriter &operator=(const JsonWeightChunkMetaDataWriter &) = delete;
+        void Finalize() override;
 
-            void WriteChunkInfo(
-                const weight_chunk_info_t &chunk_info,
-                flash_slim::streaming::WeightChunkPrefetcher::PrefetchMode prefetch_mode) override;
+        // Optional: write model info into metadata (e.g., model path)
+        void WriteModelInfo(const std::string &model_path) { model_path_ = model_path; }
 
-            void Finalize() override;
+        size_t GetMaxAlignedSize() const { return max_aligned_size_; }
 
-            // Optional: write model info into metadata (e.g., model path)
-            void WriteModelInfo(const std::string &model_path) { model_path_ = model_path; }
+    private:
+        std::string output_path_;
+        nlohmann::ordered_json json_root_; // Root JSON object
+        bool finalized_;
+        size_t max_aligned_size_;
+        size_t weight_chunk_buffer_size_;
+        std::map<std::string, size_t> per_mode_counts_;
+        std::map<std::string, size_t> per_mode_total_aligned_size_;
+        std::map<std::string, size_t> last_chunk_aligned_size_;
+        std::string model_path_;
+    };
 
-            size_t GetMaxAlignedSize() const { return max_aligned_size_; }
+    //* ==================== JsonPrefetchPlanLoader ==================== */
+    class JsonPrefetchPlanLoader : public flash_slim::streaming::PrefetchPlanLoader
+    {
+    public:
+        JsonPrefetchPlanLoader();
+        ~JsonPrefetchPlanLoader() override;
 
-        private:
-            std::string output_path_;
-            nlohmann::ordered_json json_root_; // Root JSON object
-            bool finalized_;
-            size_t max_aligned_size_;
-            size_t weight_chunk_buffer_size_;
-            std::map<std::string, size_t> per_mode_counts_;
-            std::map<std::string, size_t> per_mode_total_aligned_size_;
-            std::map<std::string, size_t> last_chunk_aligned_size_;
-            std::string model_path_;
-        };
+        // JSON 파일 로드(성공 시 true)
+        bool LoadFromFile(const std::string &path) override;
 
+        // 메타데이터 접근자
+        const std::string &version() const { return version_; }
+        const std::string &model() const { return model_path_; }
+        uint64_t max_aligned_size() const { return max_aligned_size_; }
+        uint64_t weight_chunk_buffer_size() const { return weight_chunk_buffer_size_; }
 
-        //* ==================== JsonPrefetchPlanLoader ==================== */
-        class JsonPrefetchPlanLoader : public flash_slim::streaming::PrefetchPlanLoader
-        {
-        public:
-            JsonPrefetchPlanLoader();
-            ~JsonPrefetchPlanLoader() override;
+        // 모드 목록("PREFILL", "DECODE", ...)
+        std::vector<std::string> modes() const;
 
-            // JSON 파일 로드(성공 시 true)
-            bool LoadFromFile(const std::string &path) override;
+        // 모드별 chunk 벡터(모드가 없으면 빈 벡터 반환)
+        const std::vector<WeightChunkInfo> &chunks(const std::string &mode) const;
 
-            // 메타데이터 접근자
-            const std::string &version() const { return version_; }
-            const std::string &model() const { return model_path_; }
-            uint64_t max_aligned_size() const { return max_aligned_size_; }
-            uint64_t weight_chunk_buffer_size() const { return weight_chunk_buffer_size_; }
+        // 편의 접근자: PREFILL / DECODE 전용 벡터
+        const std::vector<WeightChunkInfo> &prefill_chunks() const { return chunks("PREFILL"); }
+        const std::vector<WeightChunkInfo> &decode_chunks() const { return chunks("DECODE"); }
 
-            // 모드 목록("PREFILL", "DECODE", ...)
-            std::vector<std::string> modes() const;
+        // 메타데이터 출력
+        void PrintMetadata(std::ostream &os) const;
 
-            // 모드별 chunk 벡터(모드가 없으면 빈 벡터 반환)
-            const std::vector<weight_chunk_info_t> &chunks(const std::string &mode) const;
+        // 표준 출력으로 메타데이터 출력 (구현은 .cc에서 std::cout 사용)
+        void PrintMetadata() const;
 
-            // 편의 접근자: PREFILL / DECODE 전용 벡터
-            const std::vector<weight_chunk_info_t> &prefill_chunks() const { return chunks("PREFILL"); }
-            const std::vector<weight_chunk_info_t> &decode_chunks() const { return chunks("DECODE"); }
+        // 특정 모드: origin_offset -> index 맵(사본) 반환
+        std::unordered_map<size_t, size_t> BuildOffsetToIndexForMode(const std::string &mode) const;
 
-            // 메타데이터 출력
-            void PrintMetadata(std::ostream &os) const;
+        // 특정 모드: index -> weight_chunk_info_t 벡터(사본) 반환
+        std::vector<WeightChunkInfo> BuildIndexToChunkVectorForMode(const std::string &mode) const;
 
-            // 표준 출력으로 메타데이터 출력 (구현은 .cc에서 std::cout 사용)
-            void PrintMetadata() const;
+        // io_order 기반 청크 범위를 반환
+        const std::vector<PrefetchChunkRange> &PrefetchChunkRanges(const std::string &mode) const;
 
-            // 특정 모드: origin_offset -> index 맵(사본) 반환
-            std::unordered_map<size_t, size_t> BuildOffsetToIndexForMode(const std::string &mode) const;
+        // 모드에 대한 전체 계획 구조 반환
+        ModeChunkPlan BuildModeChunkPlan(const std::string &mode) const;
 
-            // 특정 모드: index -> weight_chunk_info_t 벡터(사본) 반환
-            std::vector<weight_chunk_info_t> BuildIndexToChunkVectorForMode(const std::string &mode) const;
+        // 모드별 개수/총 aligned_size
+        const std::map<std::string, size_t> &chunk_count_by_mode() const { return count_by_mode_; }
+        const std::map<std::string, uint64_t> &total_aligned_size_by_mode() const { return size_by_mode_; }
 
-            // io_order 기반 청크 범위를 반환
-            const std::vector<ChunkIoRange> &ChunkIoRanges(const std::string &mode) const;
+        // 원본 JSON에 접근이 필요하면 제공
+        const nlohmann::ordered_json &raw_json() const { return root_; }
 
-            // 모드에 대한 전체 계획 구조 반환
-            ModeChunkPlan BuildModeChunkPlan(const std::string &mode) const;
+    private:
+        void Clear();
+        bool LoadRootFromFile(const std::string &path);
+        bool ParseMetadataSection(const nlohmann::ordered_json &meta);
+        bool ParseChunkGroups(const nlohmann::ordered_json &groups);
+    bool ParsePrefetchPlan(const nlohmann::ordered_json &plan_root);
+        void DeriveWeightChunkBufferSize();
 
-            // 모드별 개수/총 aligned_size
-            const std::map<std::string, size_t> &chunk_count_by_mode() const { return count_by_mode_; }
-            const std::map<std::string, uint64_t> &total_aligned_size_by_mode() const { return size_by_mode_; }
+        std::string version_;
+        nlohmann::ordered_json root_;
+        std::string model_path_;
+        uint64_t max_aligned_size_ = 0;
+        uint64_t weight_chunk_buffer_size_ = 0;
+        std::map<std::string, size_t> count_by_mode_;
+        std::map<std::string, uint64_t> size_by_mode_;
+        std::map<std::string, std::vector<WeightChunkInfo>> weight_chunks_;
+        std::map<std::string, std::vector<PrefetchChunkRange>> io_order_ranges_;
+        static std::vector<std::string> KeysOf(const nlohmann::ordered_json &obj);
+    };
 
-            // 원본 JSON에 접근이 필요하면 제공
-            const nlohmann::ordered_json &raw_json() const { return root_; }
-
-        private:
-            void Clear();
-            bool LoadRootFromFile(const std::string &path);
-            bool ParseMetadataSection(const nlohmann::ordered_json &meta);
-            bool ParseChunkGroups(const nlohmann::ordered_json &groups);
-            void ParsePrefetchPlan(const nlohmann::ordered_json &plan_root);
-            void DeriveWeightChunkBufferSize();
-
-            std::string version_;
-            nlohmann::ordered_json root_;
-            std::string model_path_;
-            uint64_t max_aligned_size_ = 0;
-            uint64_t weight_chunk_buffer_size_ = 0;
-            std::map<std::string, size_t> count_by_mode_;
-            std::map<std::string, uint64_t> size_by_mode_;
-            std::map<std::string, std::vector<weight_chunk_info_t>> weight_chunks_;
-            std::map<std::string, std::vector<ChunkIoRange>> io_order_ranges_;
-            std::map<std::string, std::unordered_map<size_t, size_t>> io_order_to_range_index_;
-            std::map<std::string, std::unordered_map<size_t, size_t>> chunk_index_to_range_index_;
-            static std::vector<std::string> KeysOf(const nlohmann::ordered_json &obj);
-        };
-
-    } // namespace streaming
-} // namespace flash_slim
+} // namespace flash_slim::streaming
 
 #endif // FLASH_SLIM_WEIGHT_CHUNK_CONTROLLER_UTILS_H_
