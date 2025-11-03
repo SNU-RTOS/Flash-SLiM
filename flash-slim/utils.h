@@ -16,27 +16,25 @@ limitations under the License.
 #ifndef FLASH_SLIM_UTILS_H_
 #define FLASH_SLIM_UTILS_H_
 
-#include <cstddef>
-#include <iomanip>
+#include <cerrno>
+#include <chrono>
 #include <cstddef>
 #include <cstring>
+#include <fstream>
+#include <functional>
+#include <iomanip>
+#include <map>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
-#include <chrono>
-#include <map>
-#include <sstream>
-#include <iomanip>
-#include <cerrno>
-#include <thread>
-#include <fstream>
+
 #include <fcntl.h>
-#include <unistd.h>
-#include <functional>
-#include <thread>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -114,6 +112,6 @@ namespace flash_slim::util
     int drop_page_cache();
 
     
-} // namespace custom::util
+} // namespace flash_slim::util
 
 #endif // FLASH_SLIM_UTILS_H_
