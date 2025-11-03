@@ -39,6 +39,8 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   void ReleaseWeightChunkBuffer();
   void SwitchActiveBufferIndex();
   void UpdateActiveBufferIndex(int index);
+  int GetActiveBufferIndex() const { return active_weight_chunk_buffer_index_; }
+  int GetInactiveBufferIndex() const { return 1 - active_weight_chunk_buffer_index_; }
 
   bool ResetBPFProbe();
   
@@ -72,9 +74,7 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   // Helper to emit BPF probe for chunk completion
   void EmitBPFProbe(size_t offset);
   
-//   bool EnsureChunkReady(const weight_chunk_info_t* info, int buffer_index, int fd);
   bool ScheduleNextRange(const PrefetchChunkRange* current_range, int fd);
-  int GetInactiveBufferIndex() const { return 1 - active_weight_chunk_buffer_index_; }
   size_t ComputeInactiveSlotOffset(size_t next_aligned_size) const;
   void ResetBufferSlots();
   

@@ -118,10 +118,4 @@ tflite::SignatureRunner *GetDecodeRunner(
 std::unique_ptr<sentencepiece::SentencePieceProcessor> LoadSentencePieceProcessor();
 
 
-int DetectKVCacheSequenceDimension(TfLiteTensor *kv_cache_tensor);
-
-int CountTotalNodes(tflite::Interpreter *interpreter);
-
-
-
 #endif // FLASH_SLIM_COMMON_H

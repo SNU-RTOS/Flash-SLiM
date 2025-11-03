@@ -174,4 +174,70 @@ namespace flash_slim::util
 
         return 0;
     }
+
+
+       //* ============= Utility Functions ============ */
+    // --------------------------------------------------------------------------
+    // Helper function to detect the sequence dimension in KV cache tensor
+    // --------------------------------------------------------------------------
+    int DetectKVCacheSequenceDimension(TfLiteTensor *kv_cache_tensor)
+    {
+        if (kv_cache_tensor == nullptr || kv_cache_tensor->dims == nullptr)
+        {
+            return -1;
+        }
+
+        int num_dims = kv_cache_tensor->dims->size;
+        if (num_dims < 2)
+        {
+            return -1;
+        }
+
+        // Print tensor dimensions for debugging
+        std::cout << "[INFO] KV Cache tensor dims: [";
+        for (int i = 0; i < num_dims; ++i)
+        {
+            std::cout << kv_cache_tensor->dims->data[i] << (i == num_dims - 1 ? "" : ", ");
+        }
+        std::cout << "]\n";
+
+        // Check different known patterns
+        if (num_dims == 4)
+        {
+            // Pattern 1: [batch, seq_len, num_heads, head_dim] - e.g., [1, 1280, 3, 64]
+            if (kv_cache_tensor->dims->data[1] > 100 && kv_cache_tensor->dims->data[2] < 20)
+            {
+                std::cout << "[INFO] Detected pattern [batch, seq_len, num_heads, head_dim]\n";
+                return 1; // sequence dimension is at index 1
+            }
+            // Pattern 2: [batch, batch, seq_len, hidden_dim,] - e.g., [1, 1, 1280, 256,]
+            else if (kv_cache_tensor->dims->data[1] == 1 && kv_cache_tensor->dims->data[2] > 100)
+            {
+                std::cout << "[INFO] Detected pattern [batch, batch, seq_len, hidden_dim,]\n";
+                return 2; // sequence dimension is at index 2
+            }
+        }
+
+        // Default fallback: assume sequence dimension is at index 1
+        std::cout << "[INFO] Using default: sequence dimension at index 1\n";
+        return 1;
+    }
+
+    // --------------------------------------------------------------------------
+    // Counts the total number of nodes across all subgraphs in the interpreter
+    // --------------------------------------------------------------------------
+    int CountTotalNodes(tflite::Interpreter *interpreter)
+    {
+        int total_nodes = 0;
+        if (!interpreter)
+            return 0;
+
+        for (int i = 0; i < interpreter->subgraphs_size(); ++i)
+        {
+            total_nodes += static_cast<int>(interpreter->subgraph(i)->nodes_size());
+            // std::cout << "[INFO] Subgraph " << i
+            //           << " has " << interpreter->subgraph(i)->nodes_size() << " nodes." << std::endl;
+        }
+        return total_nodes;
+    }
 } // namespace flash_slim::util

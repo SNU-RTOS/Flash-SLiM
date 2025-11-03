@@ -157,12 +157,14 @@ bool WeightChunkController::LoadPrefetchPlan(const std::string& path) {
                                std::move(prefill_plan.io_order_ranges),
                                std::move(prefill_plan.chunk_index_to_range),
                                std::move(prefill_plan.io_order_to_range_index));
+
   prefetcher_->SetPrefetchPlan(WeightChunkPrefetcher::PrefetchMode::DECODE,
                                std::move(decode_plan.offset_to_index),
                                std::move(decode_plan.chunks),
                                std::move(decode_plan.io_order_ranges),
                                std::move(decode_plan.chunk_index_to_range),
                                std::move(decode_plan.io_order_to_range_index));
+
   prefetcher_->BuildIndexToChunksFromPlans();
 
   offset_to_weights_ptr_.clear();
@@ -367,6 +369,7 @@ void WeightChunkController::UpdatePostInvokeHandler(ProviderMode mode) {
       break;
   }
 }
+
 bool WeightChunkController::ScheduleNextRange(const PrefetchChunkRange* current_range, int fd) {
   if (!prefetcher_ || !current_range ||
       prefetcher_->GetPrefetchMode() == PrefetchMode::UNINITIALIZED) {
@@ -380,9 +383,9 @@ bool WeightChunkController::ScheduleNextRange(const PrefetchChunkRange* current_
     return true;
   }
 
-  std::cout << "[WeightChunkController] ScheduleNextRange: current_io_order="
-            << current_range->io_order << " -> next_io_order=" << next_range->io_order
-            << " (size=" << next_range->total_aligned_size << ")" << std::endl;
+//   std::cout << "[WeightChunkController] ScheduleNextRange: current_io_order="
+//             << current_range->io_order << " -> next_io_order=" << next_range->io_order
+//             << " (size=" << next_range->total_aligned_size << ")" << std::endl;
 
   if (next_range->total_aligned_size > weight_chunk_buffer_capacity_) {
     std::cerr << "[WeightChunkController] Next range (io_order=" << next_range->io_order
@@ -401,9 +404,9 @@ bool WeightChunkController::ScheduleNextRange(const PrefetchChunkRange* current_
 
   const int buffer_index = GetInactiveBufferIndex();
   if (buffer_range_ids_[buffer_index] == next_range->io_order) {
-    std::cout << "[WeightChunkController] ScheduleNextRange: io_order="
-              << next_range->io_order << " already resident in buffer_index="
-              << buffer_index << std::endl;
+    // std::cout << "[WeightChunkController] ScheduleNextRange: io_order="
+    //           << next_range->io_order << " already resident in buffer_index="
+    //           << buffer_index << std::endl;
     return true;
   }
   buffer_offsets_[buffer_index] = target_offset;
@@ -431,9 +434,10 @@ bool WeightChunkController::ScheduleNextRange(const PrefetchChunkRange* current_
     return false;
   }
 
-  std::cout << "[WeightChunkController] ScheduleNextRange: submitted io_order="
-            << next_range->io_order << " to buffer_index=" << buffer_index
-            << " offset=" << target_offset << std::endl;
+//   std::cout << "[WeightChunkController] ScheduleNextRange: submitted io_order="
+//             << next_range->io_order << " to buffer_index=" << buffer_index
+//             << " offset=" << target_offset << std::endl;
+
   buffer_range_ids_[buffer_index] = next_range->io_order;
 
   return true;
@@ -593,16 +597,16 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     return false;
   }
 
-  std::cout << "[WeightChunkController] RuntimePreInvoke: offset=" << offset << " Try to LookupChunkInfo"
-            << std::endl;
+//   std::cout << "[WeightChunkController] RuntimePreInvoke: offset=" << offset << " Try to LookupChunkInfo"
+            // << std::endl;
 
   const weight_chunk_info_t* current_chunk_info = prefetcher_->LookupChunkInfo(prefetch_mode, offset);
   if (!current_chunk_info) {
     return false;
   }
 
-  std::cout << "[WeightChunkController] RuntimePreInvoke: Requesting ChunkRange with chunk_index="
-            << current_chunk_info->chunk_index << " for offset=" << offset << std::endl;
+//   std::cout << "[WeightChunkController] RuntimePreInvoke: Requesting ChunkRange with chunk_index="
+//             << current_chunk_info->chunk_index << " for offset=" << offset << std::endl;
 
   const PrefetchChunkRange* current_range =
       prefetcher_->GetChunkRangeByChunkIndex(prefetch_mode, current_chunk_info->chunk_index);
@@ -674,20 +678,20 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     
   // WaitReady returns immediately if already ready
 //   printf("WeightChunkController: Waiting for chunk_index=%zu\n", current_chunk_info->chunk_index);
-  std::cout << "[WeightChunkController] RuntimePreInvoke: Waiting for chunk_index="
-            << current_chunk_info->chunk_index << std::endl;
+//   std::cout << "[WeightChunkController] RuntimePreInvoke: Waiting for chunk_index="
+//             << current_chunk_info->chunk_index << std::endl;
   if (!prefetcher_->WaitReady(current_chunk_info)) {
     std::cerr << "[WeightChunkController] WaitReady failed for chunk_index="
             << current_chunk_info->chunk_index << "\n";
     return false;
   }
-  std::cout << "[WeightChunkController] RuntimePreInvoke: chunk_index="
-            << current_chunk_info->chunk_index << " ready" << std::endl;
+//   std::cout << "[WeightChunkController] RuntimePreInvoke: chunk_index="
+//             << current_chunk_info->chunk_index << " ready" << std::endl;
 
   // 3. Update state and pointer
   UpdateWeightsPointer(offset, *current_chunk_info, *current_range);
-  std::cout << "[WeightChunkController] RuntimePreInvoke: Updated pointer for chunk_index="
-            << current_chunk_info->chunk_index << std::endl;
+//   std::cout << "[WeightChunkController] RuntimePreInvoke: Updated pointer for chunk_index="
+//             << current_chunk_info->chunk_index << std::endl;
   
   // 4. Schedule next chunk to inactive buffer asynchronously
   if (is_first_chunk_in_range) {

@@ -185,7 +185,7 @@ void __run_main(GenAIMetrics &genai_metrics,
 
     // Create profiler if profiling is enabled
     constexpr int kProfilingBufferHeadrooms = 512;
-    int total_nodes = CountTotalNodes(interpreter.get());
+    int total_nodes = flash_slim::util::CountTotalNodes(interpreter.get());
     if (total_nodes > kProfilingBufferHeadrooms)
         total_nodes += kProfilingBufferHeadrooms;
     op_profiler = std::make_unique<BufferedProfiler>(total_nodes, true);
@@ -305,7 +305,7 @@ void __run_main(GenAIMetrics &genai_metrics,
         max_seq_size = prefill_input->dims->data[1];
 
         // Detect KV cache sequence dimension and set max size accordingly
-        seq_dim_index = DetectKVCacheSequenceDimension(kv_cache_k_0);
+        seq_dim_index = flash_slim::util::DetectKVCacheSequenceDimension(kv_cache_k_0);
         if (seq_dim_index >= 0 && seq_dim_index < kv_cache_k_0->dims->size)
         {
             kv_cache_max_size = kv_cache_k_0->dims->data[seq_dim_index];
