@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class WeightChunkInfo:
 @dataclass
 class PrefetchPlanEntry:
     mode: str
-    chunk_data: Dict[str, Any]
+    chunk_data: Mapping[str, Any]
     io_order: int
     avg_compute_time: Optional[float] = None
     estimated_io_time_ms: Optional[float] = None
@@ -96,7 +96,10 @@ class PrefetchPlan:
                 try:
                     if origin_offset is not None:
                         o_off = int(origin_offset)
-                        if grp["start_origin_offset"] is None or o_off < grp["start_origin_offset"]:
+                        if (
+                            grp["start_origin_offset"] is None
+                            or o_off < grp["start_origin_offset"]
+                        ):
                             grp["start_origin_offset"] = o_off
                 except Exception:
                     pass
