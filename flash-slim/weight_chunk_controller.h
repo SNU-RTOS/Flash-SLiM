@@ -113,7 +113,7 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   int active_weight_chunk_buffer_index_ = 0;
   void* weight_chunk_buffer_base_ = nullptr;
 
-  std::array<bool, 2> first_prefetch_per_mode_{{true, true}};
+  bool initial_prefetch_pending_ = true;
   std::array<WeightChunkBufferSlot, 2> buffer_slots_{};
 
   std::unordered_map<size_t, WeightChunkInfo> offset_to_chunk_info_;

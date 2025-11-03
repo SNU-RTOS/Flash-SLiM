@@ -287,27 +287,35 @@ const WeightChunkGroupInfo* WeightChunkPrefetcher::GetChunkGroupByChunkIndex(
 
 
 const WeightChunkGroupInfo* WeightChunkPrefetcher::GetNextChunkGroup(
-    PrefetchMode mode, size_t current_io_order) const {
+    PrefetchMode mode, size_t current_io_order, PrefetchMode* next_mode) const {
+
   const int plan_idx = PrefetchModeToIndex(mode);
   if (plan_idx < 0 || !has_plan_[plan_idx]) {
     return nullptr;
   }
 
   const auto& plan = prefetch_plans_[plan_idx];
-  if (plan.chunk_groups.empty()) {
+    if (plan.chunk_groups.empty()) {
     return nullptr;
   }
-  const size_t target_io_order = (current_io_order + 1) % plan.chunk_groups.size();
-  if (target_io_order < plan.chunk_groups.size() &&
-      plan.chunk_groups[target_io_order].io_order == target_io_order) {
+
+  const size_t next_index = current_io_order + 1;
+  const size_t group_count = plan.chunk_groups.size();
+  const size_t target_io_order = next_index % group_count;
+
+  if (mode == PrefetchMode::PREFILL && next_index >= group_count) {  
+    const auto& decode_plan = prefetch_plans_[PrefetchModeToIndex(PrefetchMode::DECODE)];
+    *next_mode = PrefetchMode::DECODE;
+    return &decode_plan.chunk_groups.front();
+  } else if (target_io_order < plan.chunk_groups.size() &&
+    plan.chunk_groups[target_io_order].io_order == target_io_order) {
+    *next_mode = mode;
     return &plan.chunk_groups[target_io_order];
+  } else {
+    std::cerr<<"[GetNextChunkGroup] Invalid target_io_order = " << target_io_order << "\n";
+    return nullptr;
   }
-  for (size_t i = 0; i < plan.chunk_groups.size(); ++i) {
-    if (plan.chunk_groups[i].io_order == target_io_order) {
-      return &plan.chunk_groups[i];
-    }
-  }
-  return &plan.chunk_groups.front();
+  
 }
 
 
@@ -410,16 +418,14 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
     return false;
   }
 
-  const PrefetchMode mode = prefetch_mode_;
+  PrefetchMode mode = request.mode;
+  if (mode == PrefetchMode::UNINITIALIZED) {
+    mode = prefetch_mode_;
+  }
   const int plan_idx = PrefetchModeToIndex(mode);
   if (plan_idx < 0 || !has_plan_[plan_idx]) {
     return false;
   }
-
-//   std::cout << "[WeightChunkPrefetcher] Submit: mode=" << plan_idx
-//             << " io_order=" << group->io_order
-//             << " buffer_index=" << request.buffer_index
-//             << " size=" << group->total_aligned_size << std::endl;
 
   {
     std::lock_guard<std::mutex> lock(io_worker_mutex_);
@@ -483,29 +489,23 @@ bool WeightChunkPrefetcher::WaitReady(const WeightChunkInfo* chunk_info) {
 
   auto state = GetChunkIOState(chunk_info->chunk_index);
   std::unique_lock<std::mutex> lock(state->mutex);
-//   std::cout << "[WeightChunkPrefetcher] WaitReady: chunk_index=" << chunk_info->chunk_index
-//             << " waiting for ready" << std::endl;
-  state->cv.wait(lock, [&]() { 
-;
-    return state->ready || !state->in_flight; });
+  state->cv.wait(lock, [&]() { return state->ready || !state->in_flight; });
   const bool success = state->success;
   state->ready = false;
   state->in_flight = false;
-//   std::cout << "[WeightChunkPrefetcher] WaitReady: chunk_index=" << chunk_info->chunk_index
-//             << " completed, success=" << success << std::endl;
   return success;
 }
 
 void WeightChunkPrefetcher::WorkerLoop() {
-// #if defined(__linux__)
-//   if (io_engine_ && io_engine_->IsReady()) {
-//     std::cout << "[INFO] WeightChunkPrefetcher: using io_uring IO worker loop" << std::endl;
-//     RunAsyncWorkerLoop();
-//     return;
-//   }
-// #endif
-std::cout << "[INFO] WeightChunkPrefetcher: using parallel pread IO worker loop" << std::endl;
-  RunSyncWorkerLoop();
+#if defined(__linux__)
+  if (io_engine_ && io_engine_->IsReady()) {
+    std::cout << "[INFO] WeightChunkPrefetcher: using io_uring IO worker loop" << std::endl;
+    RunAsyncWorkerLoop();
+    return;
+  }
+#endif
+// std::cout << "[INFO] WeightChunkPrefetcher: using parallel pread IO worker loop" << std::endl;
+//   RunSyncWorkerLoop();
 }
 
 void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
@@ -531,10 +531,6 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
         io_job_queue_.pop_front();
       }
     }
-
-    // if (!jobs_to_submit.empty()) {
-    //   printf("WeightChunkPrefetcher: submitting %zu IO jobs\n", jobs_to_submit.size());
-    // }
 
     bool needs_blocking_drain = had_pending_before_wait;
     for (auto& job : jobs_to_submit) {
@@ -573,9 +569,7 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
         io_worker_cv_.notify_one();
         continue;
       }
-    //   std::cout << "[WeightChunkPrefetcher] Worker: submitted range io_order="
-    //             << range->io_order << " aligned_offset=" << request.aligned_offset
-    //             << " size=" << request.aligned_size << std::endl;
+
       needs_blocking_drain = true;
     }
 
@@ -614,10 +608,6 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
       MarkJobCompleted(job_snapshot, completion.success);
     }
 
-    // if (!completions.empty()) {
-    //   printf("WeightChunkPrefetcher: completed %zu IO jobs\n", completions.size());
-    // }
-
     bool queue_empty = false;
     {
       std::lock_guard<std::mutex> lock(io_worker_mutex_);
@@ -651,9 +641,7 @@ void WeightChunkPrefetcher::RunSyncWorkerLoop() {
     const bool success = group &&
                          ExecuteIO(job.direct_io_fd, job.buffer_base, group->total_aligned_size,
                                    static_cast<off_t>(group->start_aligned_offset));
-    // std::cout << "[WeightChunkPrefetcher] SyncWorker: completed group io_order="
-    //           << (group ? group->io_order : static_cast<size_t>(-1))
-    //           << " success=" << success << std::endl;
+
     MarkJobCompleted(job, success);
   }
 }

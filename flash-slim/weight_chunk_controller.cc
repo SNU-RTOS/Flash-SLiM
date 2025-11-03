@@ -77,11 +77,6 @@ void WeightChunkController::UpdateProviderMode(ProviderMode mode) {
 void WeightChunkController::UpdatePrefetcherMode(PrefetchMode mode) {
   if (prefetcher_) {
     prefetcher_->UpdatePrefetcherMode(mode);
-    const int mode_index = prefetcher_->PrefetchModeToIndex(mode);
-    if (mode_index >= 0 &&
-        mode_index < static_cast<int>(first_prefetch_per_mode_.size())) {
-      first_prefetch_per_mode_[mode_index] = true;
-    }
   } else {
     std::cerr << "[WeightChunkController] Prefetcher is nullptr\n";
   }
@@ -142,7 +137,7 @@ bool WeightChunkController::LoadPrefetchPlan(const std::string& path) {
   offset_to_weights_ptr_.clear();
   offset_to_chunk_info_.clear();
   record_chunk_index_ = 0;
-  first_prefetch_per_mode_.fill(true);
+  initial_prefetch_pending_ = true;
 
   return true;
 }
@@ -318,22 +313,23 @@ void WeightChunkController::UpdatePostInvokeHandler(ProviderMode mode) {
 }
 
 bool WeightChunkController::ScheduleNextGroup(const WeightChunkGroupInfo* current_group, int fd) {
-  if (!prefetcher_ || !current_group ||
-      prefetcher_->GetPrefetchMode() == PrefetchMode::UNINITIALIZED) {
-  std::cerr << "[WeightChunkController] Invalid state for scheduling next chunk group\n";
+
+  if (!prefetcher_ || !current_group ) {
+    std::cerr << "[WeightChunkController] Invalid state for scheduling next chunk group\n";
     return false;
   }
 
-  const WeightChunkGroupInfo* next_group =
-      prefetcher_->GetNextChunkGroup(prefetcher_->GetPrefetchMode(), current_group->io_order);
+  // 1. Get next chunk group info
+  PrefetchMode requested_mode = prefetcher_->GetPrefetchMode();
+  PrefetchMode next_mode = requested_mode;
+  const WeightChunkGroupInfo* next_group = prefetcher_->GetNextChunkGroup(requested_mode, current_group->io_order, &next_mode);
+  
   if (!next_group || next_group == current_group) {
+    // already loaded
     return true;
   }
 
-//   std::cout << "[WeightChunkController] ScheduleNextGroup: current_io_order="
-//             << current_group->io_order << " -> next_io_order=" << next_group->io_order
-//             << " (size=" << next_group->total_aligned_size << ")" << std::endl;
-
+  // check weight chunk buffer capacity
   if (next_group->total_aligned_size > weight_chunk_buffer_capacity_) {
     std::cerr << "[WeightChunkController] Next group (io_order=" << next_group->io_order
               << ") does not fit into the configured buffer span. aligned_size="
@@ -342,8 +338,8 @@ bool WeightChunkController::ScheduleNextGroup(const WeightChunkGroupInfo* curren
     return false;
   }
 
-  const size_t target_offset = ComputeInactiveSlotOffset(next_group->total_aligned_size);
-  if (target_offset == std::numeric_limits<size_t>::max()) {
+  const size_t target_slot_offset = ComputeInactiveSlotOffset(next_group->total_aligned_size);
+  if (target_slot_offset == std::numeric_limits<size_t>::max()) {
     std::cerr << "[WeightChunkController] Next group (io_order=" << next_group->io_order
               << ") does not fit into the configured buffer span.\n";
     return false;
@@ -352,15 +348,9 @@ bool WeightChunkController::ScheduleNextGroup(const WeightChunkGroupInfo* curren
   const int buffer_index = GetInactiveBufferIndex();
 
   WeightChunkBufferSlot& slot = buffer_slots_[buffer_index];
-  if (slot.io_order == next_group->io_order) {
-  // std::cout << "[WeightChunkController] ScheduleNextGroup: io_order="
-  //           << next_group->io_order << " already resident in buffer_index="
-    //           << buffer_index << std::endl;
-    return true;
-  }
-
-  slot.offset = target_offset;
+  slot.offset = target_slot_offset;
   slot.size = next_group->total_aligned_size;
+  
   void* buffer_base = GetWeightChunkBufferAddr(buffer_index);
   if (!buffer_base) {
     std::cerr << "[WeightChunkController] Invalid inactive buffer index " << buffer_index
@@ -376,6 +366,7 @@ bool WeightChunkController::ScheduleNextGroup(const WeightChunkGroupInfo* curren
   request.buffer_base = buffer_base;
   request.direct_io_fd = fd;
   request.buffer_index = buffer_index;
+  request.mode = next_mode;
 
   if (!prefetcher_->Submit(request)) {
     std::cerr << "[WeightChunkController] Next chunk group submit failed for io_order="
@@ -386,9 +377,6 @@ bool WeightChunkController::ScheduleNextGroup(const WeightChunkGroupInfo* curren
     return false;
   }
 
-//   std::cout << "[WeightChunkController] ScheduleNextGroup: submitted io_order="
-//             << next_group->io_order << " to buffer_index=" << buffer_index
-//             << " offset=" << target_offset << std::endl;
   slot.io_order = next_group->io_order;
 
   return true;
@@ -558,37 +546,21 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     return false;
   }
 
-  const WeightChunkGroupInfo* current_group = prefetcher_->GetChunkGroupByChunkIndex(
-      prefetch_mode, current_chunk_info->chunk_index);
+  const WeightChunkGroupInfo* current_group = prefetcher_->GetChunkGroupByChunkIndex(prefetch_mode, current_chunk_info->chunk_index);
   if (!current_group) {
     std::cerr << "[WeightChunkController] Failed to resolve chunk group for chunk_index="
               << current_chunk_info->chunk_index << "\n";
     return false;
   }
 
-  const bool is_first_chunk_in_group = !current_group->chunk_indices.empty() &&
-      current_group->chunk_indices.front() == current_chunk_info->chunk_index;
-
-  if (current_group->total_aligned_size == 0 ||
-      current_group->total_aligned_size > weight_chunk_buffer_capacity_) {
-    std::cerr << "[WeightChunkController] Chunk group size=" << current_group->total_aligned_size
-              << " exceeds allocated buffer span=" << weight_chunk_buffer_capacity_ << "\n";
-    return false;
-  }
 
   // 3. Ensure active buffer slot matches current group
   // if not, try to swap to the other buffer slot
-  int active_index = GetActiveBufferIndex();
-  if (buffer_slots_[active_index].io_order != current_group->io_order) {
-    const int other_index = GetInactiveBufferIndex();
-    if (buffer_slots_[other_index].io_order == current_group->io_order) {
-      UpdateActiveBufferIndex(other_index);
-      active_index = other_index;
-    }
+  if (buffer_slots_[active_weight_chunk_buffer_index_].io_order != current_group->io_order) {
+    SwitchActiveBufferIndex();
   }
-  
-  WeightChunkBufferSlot& active_slot = buffer_slots_[active_index];
-  active_slot.io_order = current_group->io_order;
+
+
 
   // 4. Get direct IO file descriptor
   const int fd = provider_->GetDirectIOFileDescriptor();
@@ -596,12 +568,13 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     return false;
   }
 
-  // 5. Submit prefetch request if first time for this mode
-  bool& first_prefetch = first_prefetch_per_mode_[prefetcher_->GetPrefetchModeIndex()];
-
-  if (first_prefetch) {  // Synchronously submit prefetch request and wait only for the first call
-    active_slot.offset = 0;
+  // 5. Submit prefetch request if first time 
+  if (initial_prefetch_pending_) {  // Synchronously submit prefetch request only for the very first call
+    WeightChunkBufferSlot& active_slot = buffer_slots_[active_weight_chunk_buffer_index_];
+    active_slot.io_order = current_group->io_order;
     active_slot.size = current_group->total_aligned_size;
+    active_slot.offset = 0;
+
     void* buffer_base = GetActiveWeightChunkBuffer();
 
     if (!buffer_base) {
@@ -615,6 +588,7 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     request.buffer_base = buffer_base;
     request.direct_io_fd = fd;
     request.buffer_index = active_weight_chunk_buffer_index_;
+    request.mode = prefetch_mode;
 
     if (!prefetcher_->Submit(request)) {
       std::cerr << "[WeightChunkController] Submit failed for group io_order="
@@ -622,9 +596,9 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
       return false;
     }
 
-    first_prefetch = false;
+    initial_prefetch_pending_ = false;
   } 
-    
+
   // WaitReady returns immediately if already ready
   if (!prefetcher_->WaitReady(current_chunk_info)) {
     std::cerr << "[WeightChunkController] WaitReady failed for chunk_index="
@@ -632,17 +606,18 @@ bool WeightChunkController::HandleRuntimePreInvoke(size_t offset) {
     return false;
   }
 
-  // 3. Update state and pointer
+  // 6. Update state and pointer
   UpdateWeightsPointer(offset, *current_chunk_info, *current_group);
 
-  // 4. Schedule next chunk to inactive buffer asynchronously
-  if (is_first_chunk_in_group) {
-    active_slot.size = current_group->total_aligned_size; // update size in case it was not set before
-    if (!ScheduleNextGroup(current_group, fd)) {
+  // Check if this is the first chunk in the group
+  const bool is_first_chunk_in_group = !current_group->chunk_indices.empty() &&
+      current_group->chunk_indices.front() == current_chunk_info->chunk_index;
+
+  // 7. Schedule next chunk to inactive buffer asynchronously
+  if (is_first_chunk_in_group && !ScheduleNextGroup(current_group, fd)) {
       std::cerr << "[WeightChunkController] ScheduleNextGroup failed after chunk_index="
                 << current_chunk_info->chunk_index << "\n";
       return false;
-    }
   }
 
   return true;
@@ -706,7 +681,7 @@ void WeightChunkController::TraceWeightsAddrImpl(void* addr, size_t offset) {
     std::cerr << "[WeightChunkController] addr is nullptr\n";
     return;
   }
-  
+
   const int mode_idx = prefetcher_->GetPrefetchModeIndex();
   if (mode_idx < 0) {
     return;
