@@ -40,8 +40,7 @@ struct WeightChunkInfo {
 };
 
 struct WeightChunkGroupInfo {
-  size_t range_index = std::numeric_limits<size_t>::max();
-  size_t io_order = 0;
+  size_t group_index = std::numeric_limits<size_t>::max();
   size_t start_origin_offset = 0;
   size_t start_aligned_offset = 0;
   size_t total_aligned_size = 0;
@@ -61,7 +60,7 @@ class WeightChunkPrefetcher {
   struct PrefetchPlan {
     std::unordered_map<size_t, size_t> offset_to_index;  // origin_offset -> index
     std::vector<WeightChunkInfo> chunks;                 // index -> chunk metadata
-    std::vector<WeightChunkGroupInfo> chunk_groups;        // io_order-sorted chunk groups
+  std::vector<WeightChunkGroupInfo> chunk_groups;        // group_index-sorted chunk groups
   };
 
   struct PrefetchRequest {

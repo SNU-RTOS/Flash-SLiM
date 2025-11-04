@@ -64,7 +64,7 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
     void* base = nullptr;
     size_t offset = 0;
     size_t size = 0;
-    size_t io_order = std::numeric_limits<size_t>::max();
+    size_t group_index = std::numeric_limits<size_t>::max();
   };
 
   void UpdatePreInvokeHandler(ProviderMode mode);
