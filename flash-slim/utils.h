@@ -16,27 +16,25 @@ limitations under the License.
 #ifndef FLASH_SLIM_UTILS_H_
 #define FLASH_SLIM_UTILS_H_
 
-#include <cstddef>
-#include <iomanip>
+#include <cerrno>
+#include <chrono>
 #include <cstddef>
 #include <cstring>
+#include <fstream>
+#include <functional>
+#include <iomanip>
+#include <map>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
-#include <chrono>
-#include <map>
-#include <sstream>
-#include <iomanip>
-#include <cerrno>
-#include <thread>
-#include <fstream>
+
 #include <fcntl.h>
-#include <unistd.h>
-#include <functional>
-#include <thread>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -72,28 +70,7 @@ limitations under the License.
 namespace flash_slim::util
 {
 
-    //DEPRECATED
-    // // Get current timestamp in nanoseconds since epoch
-    // int64_t getCurrentTimestampNs();
-
-    // // Format timestamp as JSON object with seconds and nanoseconds
-    // std::string formatTimestampJson(int64_t timestamp_ns, const std::string &event_type,
-    //                                 const std::string &component, int stage_idx = -1);
-
-    // // Log an event with timestamp in JSON format
-    // void logTimestampedEvent(const std::string &event_type, const std::string &component,
-    //                          int stage_idx = -1, std::ostream &out = std::cout);
-
-    // // Structured logging helper for detailed event information
-    // void logJsonEvent(const std::string &event_type, const std::string &component,
-    //                   const std::map<std::string, std::string> &attributes,
-    //                   int stage_idx = -1, std::ostream &out = std::cout);
-
-    // const char *TfLiteTypeToString(TfLiteType type);
-    // void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name);
-    // void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter);
-
-    //
+    // Detect which CPU cores the current process is allowed to run on (Linux-only)
     void detect_active_cores(std::vector<int> &cores);
 
     // Set the calling thread's affinity to the given CPU cores. Linux-only.
@@ -108,12 +85,16 @@ namespace flash_slim::util
     void run_thread_with_affinity_and_join(const std::function<void()> &fn,
                                            const std::vector<int> &cores);
 
-                                           
+    // Print current page cache size in kB (Linux-only)    
     void print_current_page_cache_kb();
 
+    // Drop page cache (Linux-only)
     int drop_page_cache();
 
+    int DetectKVCacheSequenceDimension(TfLiteTensor *kv_cache_tensor);
+
+    int CountTotalNodes(tflite::Interpreter *interpreter);
     
-} // namespace custom::util
+} // namespace flash_slim::util
 
 #endif // FLASH_SLIM_UTILS_H_

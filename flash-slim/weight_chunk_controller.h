@@ -4,10 +4,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <map>
-#include <memory>
 #include <limits>
-#include <optional>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -39,24 +37,36 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   void ReleaseWeightChunkBuffer();
   void SwitchActiveBufferIndex();
   void UpdateActiveBufferIndex(int index);
+  int GetActiveBufferIndex() const { return active_weight_chunk_buffer_index_; }
+  int GetInactiveBufferIndex() const { return 1 - active_weight_chunk_buffer_index_; }
 
   bool ResetBPFProbe();
-  
-  void* GetActiveWeightChunkBuffer() const override;
-  void* GetWeightChunkBufferAddr(int index) const override;
-  
-  void PreInvokeImpl(size_t offset) override;
-  void PostInvokeImpl(size_t offset) override;
-  void TraceWeightsAddrImpl(void* addr, size_t offset) override;
-  int FetchArgIntImpl() override;
-  
-  void RecordChunkAccess(size_t offset) override;
 
+  void RecordChunkAccess(size_t offset);
 
+  inline void* GetActiveWeightChunkBuffer() const override;
+  inline void* GetWeightChunkBufferAddr(int index) const override;
+  inline void* OffsetToAddrImpl(size_t offset) override;
+  inline void PreInvokeImpl(size_t offset) override;
+  inline void PostInvokeImpl(size_t offset) override;
+  inline void TraceWeightsAddrImpl(void* addr, size_t offset) override;
+  inline int FetchArgIntImpl() override;
+  
+  
  private:
   using PreInvokeHandler = bool (WeightChunkController::*)(size_t);
   using PostInvokeHandler = bool (WeightChunkController::*)();
-  
+
+  static constexpr const char* kPrefillMode = "PREFILL";
+  static constexpr const char* kDecodeMode = "DECODE";
+
+  struct WeightChunkBufferSlot {
+    void* base = nullptr;
+    size_t offset = 0;
+    size_t size = 0;
+    size_t io_order = std::numeric_limits<size_t>::max();
+  };
+
   void UpdatePreInvokeHandler(ProviderMode mode);
   bool HandlePreRunWarmUpPreInvoke(size_t offset);
   bool HandlePreRunProfilePreInvoke(size_t offset);
@@ -72,36 +82,41 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   // Helper to emit BPF probe for chunk completion
   void EmitBPFProbe(size_t offset);
   
-//   bool EnsureChunkReady(const weight_chunk_info_t* info, int buffer_index, int fd);
-  bool ScheduleNextRange(const PrefetchChunkRange* current_range, int fd);
-  int GetInactiveBufferIndex() const { return 1 - active_weight_chunk_buffer_index_; }
+  bool ScheduleNextGroup(const WeightChunkGroupInfo* current_group, int fd);
   size_t ComputeInactiveSlotOffset(size_t next_aligned_size) const;
   void ResetBufferSlots();
+  void UpdateWeightsPointer(size_t offset, const WeightChunkInfo& info,
+                            const WeightChunkGroupInfo& group);
+  size_t FindChunkRelativeOffset(const WeightChunkGroupInfo& group, size_t chunk_index) const;
   
-  void UpdateWeightsPointer(size_t offset, const weight_chunk_info_t& info,
-                            const PrefetchChunkRange& range);
-  size_t FindChunkRelativeOffset(const PrefetchChunkRange& range, size_t chunk_index) const;
-  
+  static inline size_t AlignTo(size_t value, size_t alignment) {
+    if (alignment == 0) {
+        return value;
+    }
+    const size_t remainder = value % alignment;
+    return remainder == 0 ? value : value + (alignment - remainder);
+ }
+
   tflite::xnnpack::StreamingWeightCacheProvider* provider_ = nullptr;
   std::unique_ptr<WeightChunkPrefetcher> prefetcher_ = nullptr;
   WeightChunkMetaDataWriter* writer_ = nullptr;
   PreInvokeHandler preinvoke_handler_ = &WeightChunkController::HandleDefaultPreInvoke;
   PostInvokeHandler postinvoke_handler_ = &WeightChunkController::HandleDefaultPostInvoke;
 
-  size_t chunk_index_ = 0;
+  size_t record_chunk_index_ = 0;
   size_t bpf_probe_prev_offset_ = 0;
+
   size_t weight_chunk_buffer_requirement_ = 0;
   size_t weight_chunk_buffer_capacity_ = 0;
+
   bool bpf_probe_first_call_ = true;
   int active_weight_chunk_buffer_index_ = 0;
   void* weight_chunk_buffer_base_ = nullptr;
-  std::array<bool, 2> first_prefetch_per_mode_{{true, true}};
-  std::array<void*, 2> weight_chunk_buffers_{nullptr, nullptr};
-  std::array<size_t, 2> buffer_offsets_{0, 0};
-  std::array<size_t, 2> buffer_sizes_{0, 0};
-  std::array<size_t, 2> buffer_range_ids_{{std::numeric_limits<size_t>::max(),
-                                           std::numeric_limits<size_t>::max()}};
-  std::unordered_map<size_t, weight_chunk_info_t> offset_to_chunk_info_;
+
+  bool initial_prefetch_pending_ = true;
+  std::array<WeightChunkBufferSlot, 2> buffer_slots_{};
+
+  std::unordered_map<size_t, WeightChunkInfo> offset_to_chunk_info_;
   std::unordered_map<size_t, std::array<void*, 2>> offset_to_weights_ptr_;
 };
 

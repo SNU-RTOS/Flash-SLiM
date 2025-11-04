@@ -1,41 +1,77 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, Protocol, Sequence, Optional
+from typing import Dict, Iterable, List, Mapping, Sequence, Optional
 
-from .__planner_data_structures__ import PrefetchPlan, PrefetchPlanEntry, WeightChunkInfo
-from .strategy_base import ChunkKey, PlanningContext, PlanningStrategy
+from .__planner_data_structures__ import WeightChunkInfo
+from .strategy_base import ChunkKey
+
 
 def sort_chunk_list(chunks: Sequence[WeightChunkInfo]) -> List[WeightChunkInfo]:
     return sorted(chunks, key=lambda c: (c.chunk_index))
 
+
 def print_chunk_list(chunks: Iterable[WeightChunkInfo]) -> None:
     for chunk in chunks:
-        print(f"  Chunk(index={chunk.chunk_index}, offset={chunk.aligned_offset}, size={chunk.aligned_size})")
+        print(
+            f"  Chunk(index={chunk.chunk_index}, offset={chunk.aligned_offset}, size={chunk.aligned_size})"
+        )
 
-def _compute_gap_bytes(existing: Sequence[WeightChunkInfo], candidate: WeightChunkInfo) -> int:
+
+def _compute_gap_bytes(
+    existing: Sequence[WeightChunkInfo], candidate: WeightChunkInfo
+) -> int:
     last = existing[-1]
     end_offset = last.aligned_offset + last.aligned_size
     if candidate.aligned_offset <= end_offset:
         return 0
     return candidate.aligned_offset - end_offset
 
+
 def sum_chunk_aligned_size(chunks: Iterable[WeightChunkInfo]) -> int:
     return sum(chunk.aligned_size for chunk in chunks)
 
-default_compute_ms = 0.0
 
 def sum_chunk_compute_time(
-        mode: str,
-        chunks: Iterable[WeightChunkInfo],
-        profile_stats: Mapping[ChunkKey, float],
-    ) -> float:
-        total = 0.0
-        for chunk in chunks:
-            key = (mode, chunk.chunk_index, chunk.origin_offset)
-            total += profile_stats.get(key, default_compute_ms)
-        return total
-    
+    mode: str,
+    chunks: Iterable[WeightChunkInfo],
+    profile_stats: Mapping[ChunkKey, float],
+    default_compute_ms: float = 0.0,
+) -> float:
+    total = 0.0
+    for chunk in chunks:
+        key = (mode, chunk.chunk_index, chunk.origin_offset)
+        total += profile_stats.get(key, default_compute_ms)
+    return total
+
+
+def build_chunk_payload(chunk: WeightChunkInfo) -> Dict[str, object]:
+    """Convert a chunk dataclass into the canonical payload dict."""
+    return {
+        "chunk_index": chunk.chunk_index,
+        "aligned_offset": chunk.aligned_offset,
+        "offset_adjust": chunk.offset_adjust,
+        "aligned_size": chunk.aligned_size,
+        "origin_offset": chunk.origin_offset,
+        "origin_size": chunk.origin_size,
+        "weights_id": chunk.weights_id,
+        "prefetch_mode": chunk.prefetch_mode,
+        "prefetch_mode_str": chunk.prefetch_mode_str,
+    }
+
+
+def resolve_chunk_payload(
+    chunk_lookup: Mapping[ChunkKey, Mapping[str, object]],
+    mode: str,
+    chunk: WeightChunkInfo,
+) -> Mapping[str, object]:
+    """Return a canonical chunk payload, falling back to the dataclass fields."""
+    key = (mode, chunk.chunk_index, chunk.origin_offset)
+    payload = chunk_lookup.get(key)
+    if payload is not None:
+        return payload
+    return build_chunk_payload(chunk)
+
+
 def _coerce_to_float(value: Optional[object], default: float) -> float:
     if isinstance(value, (int, float)):
         return float(value)
@@ -58,4 +94,3 @@ def _coerce_to_int(value: Optional[object], default: int) -> int:
         except ValueError:
             return default
     return default
-    

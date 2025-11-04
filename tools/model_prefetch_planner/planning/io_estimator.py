@@ -11,14 +11,27 @@ from typing import Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
 
 
 _LIBC = ctypes.CDLL(None, use_errno=True)
-_LIBC.posix_memalign.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t, ctypes.c_size_t]
+_LIBC.posix_memalign.argtypes = [
+    ctypes.POINTER(ctypes.c_void_p),
+    ctypes.c_size_t,
+    ctypes.c_size_t,
+]
 _LIBC.posix_memalign.restype = ctypes.c_int
 _LIBC.free.argtypes = [ctypes.c_void_p]
 _LIBC.free.restype = None
-_LIBC.pread.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_longlong]
+_LIBC.pread.argtypes = [
+    ctypes.c_int,
+    ctypes.c_void_p,
+    ctypes.c_size_t,
+    ctypes.c_longlong,
+]
 _LIBC.pread.restype = ctypes.c_ssize_t
 
-from .__planner_data_structures__ import PrefetchPlan, PrefetchPlanEntry, WeightChunkInfo
+from .__planner_data_structures__ import (
+    PrefetchPlan,
+    PrefetchPlanEntry,
+    WeightChunkInfo,
+)
 from .strategy_base import ChunkKey, PlanningContext, PlanningStrategy
 
 
@@ -98,7 +111,9 @@ class DirectIoTimeEstimator:
         if total_bytes <= 0:
             return 0.0
 
-        padded_bytes = self._align_up(max(total_bytes, self.block_size_bytes), self.block_size_bytes)
+        padded_bytes = self._align_up(
+            max(total_bytes, self.block_size_bytes), self.block_size_bytes
+        )
 
         if self.cache_results and padded_bytes in self._cache:
             return self._cache[padded_bytes]
@@ -137,7 +152,10 @@ class DirectIoTimeEstimator:
             segments = self._build_segments(size_bytes)
             start = time.perf_counter()
             with ThreadPoolExecutor(max_workers=len(segments)) as executor:
-                futures = [executor.submit(self._read_segment, fd, offset, length) for offset, length in segments]
+                futures = [
+                    executor.submit(self._read_segment, fd, offset, length)
+                    for offset, length in segments
+                ]
                 for future in futures:
                     future.result()
             end = time.perf_counter()
@@ -184,7 +202,9 @@ class DirectIoTimeEstimator:
     def _read_segment(self, fd: int, offset: int, length: int) -> None:
         block = self.block_size_bytes
         buf_ptr = ctypes.c_void_p()
-        result = _LIBC.posix_memalign(ctypes.byref(buf_ptr), self.buffer_alignment, block)
+        result = _LIBC.posix_memalign(
+            ctypes.byref(buf_ptr), self.buffer_alignment, block
+        )
         if result != 0:
             raise OSError(result, "posix_memalign failed")
         try:
@@ -192,7 +212,9 @@ class DirectIoTimeEstimator:
             end_offset = offset + length
             while current_offset < end_offset:
                 bytes_to_read = block
-                read_bytes = _LIBC.pread(fd, buf_ptr, bytes_to_read, ctypes.c_longlong(current_offset))
+                read_bytes = _LIBC.pread(
+                    fd, buf_ptr, bytes_to_read, ctypes.c_longlong(current_offset)
+                )
                 if read_bytes < 0:
                     err = ctypes.get_errno()
                     raise OSError(err, os.strerror(err))
@@ -209,4 +231,3 @@ class DirectIoTimeEstimator:
         if remainder == 0:
             return value
         return value + (alignment - remainder)
-

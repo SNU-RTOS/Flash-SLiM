@@ -14,7 +14,7 @@ ChunkKey = Tuple[str, int, int]
 class PlanningContext:
     metadata: Dict[str, object]
     weight_chunks: Mapping[str, List[WeightChunkInfo]]
-    chunk_lookup: Mapping[ChunkKey, Dict[str, object]]
+    chunk_lookup: Mapping[ChunkKey, Mapping[str, object]]
     profile_stats: Mapping[ChunkKey, float]
 
 

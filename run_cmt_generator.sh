@@ -222,6 +222,7 @@ run_with_single_prompt() {
             --model_dump_file_path "${MODEL_DIR}/${MODEL_NAME}_dump.log"
             --op_tensor_byte_stats
             --dump_tensor_details
+            --profile_steps 10
         )
     else
         local CMD=(
@@ -240,6 +241,7 @@ run_with_single_prompt() {
             --model_dump_file_path "${MODEL_DIR}/${MODEL_NAME}_dump.log"
             --op_tensor_byte_stats
             --dump_tensor_details
+            --profile_steps 10
         )
     fi
     
@@ -277,6 +279,19 @@ run_with_single_prompt() {
     #          "${MODEL_DIR}/${MODEL_NAME}_analysis_report.txt" \
     #          "${MODEL_DIR}/${MODEL_NAME}_analysis_data.json"
 
+    
+    # run prefetch_planner
+    python3 ./tools/model_prefetch_planner/prefetch_planner.py \
+        --cmt weight_chunks_metadata_table.json \
+        --output prefetch_plan_simple_${NUM_THREADS}_${TOKENS}.json \
+        --profile-pattern ${BPF_LOG_FILE_PATH} \
+        --strategy simple
+    
+    python3 ./tools/model_prefetch_planner/prefetch_planner.py \
+        --cmt weight_chunks_metadata_table.json \
+        --output prefetch_plan_rechunk_${NUM_THREADS}_${TOKENS}.json \
+        --profile-pattern ${BPF_LOG_FILE_PATH} \
+        --strategy rechunk
 }
 
 # =========================================================================== #
@@ -360,3 +375,5 @@ main() {
 
 # Run main function
 main "$@"
+
+

@@ -18,181 +18,6 @@ limitations under the License.
 
 namespace flash_slim::util
 {
-    // DEPRECATED
-    //  // --------------------------------------------------------------------------
-    //  // Helper functions to print tensor details.
-    //  // --------------------------------------------------------------------------
-    //  const char *TfLiteTypeToString(TfLiteType type)
-    //  {
-    //      switch (type)
-    //      {
-    //      case kTfLiteNoType:
-    //          return "NoType";
-    //      case kTfLiteFloat32:
-    //          return "Float32";
-    //      case kTfLiteInt32:
-    //          return "Int32";
-    //      case kTfLiteUInt8:
-    //          return "UInt8";
-    //      case kTfLiteInt64:
-    //          return "Int64";
-    //      case kTfLiteString:
-    //          return "String";
-    //      case kTfLiteBool:
-    //          return "Bool";
-    //      case kTfLiteInt16:
-    //          return "Int16";
-    //      case kTfLiteComplex64:
-    //          return "Complex64";
-    //      case kTfLiteInt8:
-    //          return "Int8";
-    //      case kTfLiteFloat16:
-    //          return "Float16";
-    //      case kTfLiteFloat64:
-    //          return "Float64";
-    //      case kTfLiteComplex128:
-    //          return "Complex128";
-    //      case kTfLiteUInt64:
-    //          return "UInt64";
-    //      case kTfLiteResource:
-    //          return "Resource";
-    //      case kTfLiteVariant:
-    //          return "Variant";
-    //      case kTfLiteUInt32:
-    //          return "UInt32";
-    //      default:
-    //          return "Unknown";
-    //      }
-    //  }
-
-    // void PrintTensorInfo(const TfLiteTensor *tensor, const char *tensor_name)
-    // {
-    //     if (tensor == nullptr)
-    //         return;
-    //     std::cout << "    - " << tensor_name
-    //               << " (Type: " << TfLiteTypeToString(tensor->type)
-    //               << ", Dims: [";
-    //     for (int i = 0; i < tensor->dims->size; ++i)
-    //     {
-    //         std::cout << tensor->dims->data[i] << (i == tensor->dims->size - 1 ? "" : ", ");
-    //     }
-    //     std::cout << "])\n";
-    // }
-
-    // // --------------------------------------------------------------------------
-    // // Prints information about all signature runners in the interpreter.
-    // // --------------------------------------------------------------------------
-    // void PrintSignatureRunnersInfo(tflite::Interpreter *interpreter)
-    // {
-    //     std::cout << "\n[INFO] Dumping Signature Runner Information...\n";
-    //     std::cout << "==================================================\n";
-
-    //     const auto &signature_keys = interpreter->signature_keys();
-    //     for (const auto *key : signature_keys)
-    //     {
-    //         tflite::SignatureRunner *runner = interpreter->GetSignatureRunner(key->c_str());
-    //         if (runner == nullptr)
-    //             continue;
-
-    //         std::cout << "Signature: \"" << *key << "\"\n";
-
-    //         // Print Inputs
-    //         std::cout << "  Inputs:\n";
-    //         const auto &inputs = runner->input_names();
-    //         for (const auto &input_name : inputs)
-    //         {
-    //             // std::cout << "    - " << input_name << ": "<< std::endl;
-    //             TfLiteTensor *input_tensor = runner->input_tensor(input_name);
-    //             PrintTensorInfo(input_tensor, input_name);
-    //         }
-
-    //         // Print Outputs
-    //         std::cout << "  Outputs:\n";
-    //         const auto &outputs = runner->output_names();
-    //         for (const auto &output_name : outputs)
-    //         {
-    //             // std::cout << "    - " << output_name << ": "<< std::endl;
-    //             TfLiteTensor *output_tensor = runner->input_tensor(output_name);
-    //             PrintTensorInfo(output_tensor, output_name);
-    //         }
-    //         std::cout << "--------------------------------------------------\n";
-    //     }
-    //     std::cout << "==================================================\n\n";
-    // }
-
-    // //
-    // // 현재 시간을 나노초 단위로 반환
-    // int64_t getCurrentTimestampNs()
-    // {
-    //     auto now = std::chrono::high_resolution_clock::now();
-    //     return std::chrono::duration_cast<std::chrono::nanoseconds>(
-    //                now.time_since_epoch())
-    //         .count();
-    // }
-
-    // // 타임스탬프를 JSON 형식으로 포맷팅
-    // std::string formatTimestampJson(int64_t timestamp_ns, const std::string &event_type,
-    //                                 const std::string &component, int stage_idx)
-    // {
-    //     // 나노초 단위 타임스탬프를 초와 나노초 부분으로 분리
-    //     int64_t seconds = timestamp_ns / 1000000000;
-    //     int64_t nanos = timestamp_ns % 1000000000;
-
-    //     std::stringstream ss;
-    //     ss << "{";
-    //     ss << "\"timestamp\": {\"seconds\": " << seconds << ", \"nanos\": " << nanos << "}, ";
-    //     ss << "\"event\": \"" << event_type << "\", ";
-    //     ss << "\"component\": \"" << component << "\"";
-
-    //     if (stage_idx >= 0)
-    //     {
-    //         ss << ", \"stage_idx\": " << stage_idx;
-    //     }
-
-    //     ss << "}";
-    //     return ss.str();
-    // }
-
-    // // 타임스탬프된 이벤트 로깅
-    // void logTimestampedEvent(const std::string &event_type, const std::string &component,
-    //                          int stage_idx, std::ostream &out)
-    // {
-    //     int64_t timestamp = getCurrentTimestampNs();
-    //     out << formatTimestampJson(timestamp, event_type, component, stage_idx) << std::endl;
-    // }
-
-    // // 더 자세한 속성을 가진 JSON 이벤트 로깅
-    // void logJsonEvent(const std::string &event_type, const std::string &component,
-    //                   const std::map<std::string, std::string> &attributes,
-    //                   int stage_idx, std::ostream &out)
-    // {
-    //     int64_t timestamp = getCurrentTimestampNs();
-
-    //     // 나노초 단위 타임스탬프를 초와 나노초 부분으로 분리
-    //     int64_t seconds = timestamp / 1000000000;
-    //     int64_t nanos = timestamp % 1000000000;
-
-    //     std::stringstream ss;
-    //     ss << "{";
-    //     ss << "\"timestamp\": {\"seconds\": " << seconds << ", \"nanos\": " << nanos << "}, ";
-    //     ss << "\"event\": \"" << event_type << "\", ";
-    //     ss << "\"component\": \"" << component << "\"";
-
-    //     if (stage_idx >= 0)
-    //     {
-    //         ss << ", \"stage_idx\": " << stage_idx;
-    //     }
-
-    //     // 추가 속성들 추가
-    //     for (const auto &attr : attributes)
-    //     {
-    //         ss << ", \"" << attr.first << "\": \"" << attr.second << "\"";
-    //     }
-
-    //     ss << "}";
-    //     out << ss.str() << std::endl;
-    // }
-
     // Function to detect which cores the process is actually running on
     void detect_active_cores(std::vector<int> &cores)
     {
@@ -349,4 +174,70 @@ namespace flash_slim::util
 
         return 0;
     }
-} // namespace custom::util
+
+
+       //* ============= Utility Functions ============ */
+    // --------------------------------------------------------------------------
+    // Helper function to detect the sequence dimension in KV cache tensor
+    // --------------------------------------------------------------------------
+    int DetectKVCacheSequenceDimension(TfLiteTensor *kv_cache_tensor)
+    {
+        if (kv_cache_tensor == nullptr || kv_cache_tensor->dims == nullptr)
+        {
+            return -1;
+        }
+
+        int num_dims = kv_cache_tensor->dims->size;
+        if (num_dims < 2)
+        {
+            return -1;
+        }
+
+        // Print tensor dimensions for debugging
+        std::cout << "[INFO] KV Cache tensor dims: [";
+        for (int i = 0; i < num_dims; ++i)
+        {
+            std::cout << kv_cache_tensor->dims->data[i] << (i == num_dims - 1 ? "" : ", ");
+        }
+        std::cout << "]\n";
+
+        // Check different known patterns
+        if (num_dims == 4)
+        {
+            // Pattern 1: [batch, seq_len, num_heads, head_dim] - e.g., [1, 1280, 3, 64]
+            if (kv_cache_tensor->dims->data[1] > 100 && kv_cache_tensor->dims->data[2] < 20)
+            {
+                std::cout << "[INFO] Detected pattern [batch, seq_len, num_heads, head_dim]\n";
+                return 1; // sequence dimension is at index 1
+            }
+            // Pattern 2: [batch, batch, seq_len, hidden_dim,] - e.g., [1, 1, 1280, 256,]
+            else if (kv_cache_tensor->dims->data[1] == 1 && kv_cache_tensor->dims->data[2] > 100)
+            {
+                std::cout << "[INFO] Detected pattern [batch, batch, seq_len, hidden_dim,]\n";
+                return 2; // sequence dimension is at index 2
+            }
+        }
+
+        // Default fallback: assume sequence dimension is at index 1
+        std::cout << "[INFO] Using default: sequence dimension at index 1\n";
+        return 1;
+    }
+
+    // --------------------------------------------------------------------------
+    // Counts the total number of nodes across all subgraphs in the interpreter
+    // --------------------------------------------------------------------------
+    int CountTotalNodes(tflite::Interpreter *interpreter)
+    {
+        int total_nodes = 0;
+        if (!interpreter)
+            return 0;
+
+        for (int i = 0; i < interpreter->subgraphs_size(); ++i)
+        {
+            total_nodes += static_cast<int>(interpreter->subgraph(i)->nodes_size());
+            // std::cout << "[INFO] Subgraph " << i
+            //           << " has " << interpreter->subgraph(i)->nodes_size() << " nodes." << std::endl;
+        }
+        return total_nodes;
+    }
+} // namespace flash_slim::util
