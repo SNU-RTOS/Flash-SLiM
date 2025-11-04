@@ -15,25 +15,13 @@
 #include <unistd.h>
 #include <vector>
 
-#if defined(__linux__)
 #include <pthread.h>
-#endif
 
 #include "tflite/minimal_logging.h"
 #include "weight_chunk_prefetcher.h"
 
 namespace flash_slim {
 namespace streaming {
-
-
-static constexpr unsigned kDefaultRingDepth = 64;
-static constexpr size_t kDefaultSubreadBytes = 512 * 1024;
-
-// static constexpr unsigned kDefaultRingDepth = 128;
-// static constexpr size_t kDefaultSubreadBytes = 4 * 1024 * 1024;
-
-// static constexpr unsigned kDefaultRingDepth = 128;
-// static constexpr size_t kDefaultSubreadBytes = 2 * 1024 * 1024;
 
 static constexpr uint32_t kPlanIndexShift = 30;
 static constexpr size_t kPlanIndexMask = (static_cast<size_t>(1) << kPlanIndexShift) - static_cast<size_t>(1);
@@ -50,55 +38,20 @@ static inline size_t DecodeRangeIndex(size_t encoded) {
   return encoded & kPlanIndexMask;
 }
 
-static constexpr size_t kMinBlockSize = 512 * 1024;
-static constexpr size_t kMaxThreads = 4;
-
-static inline bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
-
-  if (fd < 0 || buffer == nullptr || size == 0) {
-    return false;
-  }
-
-  if (size < kMinBlockSize * 2) {
-    const ssize_t bytes_read = pread(fd, buffer, size, offset);
-    return bytes_read > 0 && static_cast<size_t>(bytes_read) == size;
-  }
-
-  const size_t num_threads = std::min(kMaxThreads, size / kMinBlockSize);
-  const size_t block_size = size / num_threads;
-  const size_t remainder = size % num_threads;
-
-  std::vector<std::future<bool>> futures;
-  futures.reserve(num_threads);
-
-  for (size_t i = 0; i < num_threads; ++i) {
-    const size_t current_block_size = block_size + (i < remainder ? 1 : 0);
-    const size_t block_offset = i * block_size + std::min(i, remainder);
-
-    uint8_t* block_buffer = static_cast<uint8_t*>(buffer) + block_offset;
-    const off_t block_file_offset = offset + block_offset;
-
-    futures.emplace_back(std::async(std::launch::async, [=]() -> bool {
-      const ssize_t bytes_read = pread(fd, block_buffer, current_block_size, block_file_offset);
-      return bytes_read > 0 && static_cast<size_t>(bytes_read) == current_block_size;
-    }));
-  }
-
-  bool all_success = true;
-  for (auto& future : futures) {
-    if (!future.get()) {
-      all_success = false;
-    }
-  }
-
-  return all_success;
-}
-
+/** =============== WeightChunkPrefetcher Class =============== */
 WeightChunkPrefetcher::~WeightChunkPrefetcher() { StopWorker(); }
-
 
 std::string WeightChunkPrefetcher::GetPrefetchModeString() const {
   return std::string(PrefetchModeName(prefetch_mode_));
+}
+
+
+void WeightChunkPrefetcher::ConfigureIOEngine(unsigned ring_depth, size_t subread_bytes,
+                                               size_t min_block_size, size_t max_threads) {
+  ring_depth_ = ring_depth;
+  subread_bytes_ = subread_bytes;
+  min_block_size_ = min_block_size;
+  max_threads_ = max_threads;
 }
 
 void WeightChunkPrefetcher::ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1,
@@ -117,9 +70,8 @@ void WeightChunkPrefetcher::SetWorkerThreadAffinity(const std::vector<int>& core
 }
 
 void WeightChunkPrefetcher::ApplyWorkerAffinity() {
-#if defined(__linux__)
   std::lock_guard<std::mutex> lock(io_worker_mutex_);
-  if (io_worker_cores_.empty() || !io_worker_thread_.joinable()) {
+  if (io_worker_cores_.empty()) {
     return;
   }
 
@@ -130,14 +82,22 @@ void WeightChunkPrefetcher::ApplyWorkerAffinity() {
       CPU_SET(static_cast<unsigned long>(core), &set);
     }
   }
-  const int rc = pthread_setaffinity_np(io_worker_thread_.native_handle(), sizeof(set), &set);
-  if (rc != 0) {
-    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                    "WeightChunkPrefetcher: failed to set worker affinity (errno=%d)", rc);
+  
+  if (io_submission_thread_.joinable()) {
+    const int rc1 = pthread_setaffinity_np(io_submission_thread_.native_handle(), sizeof(set), &set);
+    if (rc1 != 0) {
+      TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                      "WeightChunkPrefetcher: failed to set submission thread affinity (errno=%d)", rc1);
+    }
   }
-#else
-  (void)io_worker_cores_;
-#endif
+  
+  if (io_completion_thread_.joinable()) {
+    const int rc2 = pthread_setaffinity_np(io_completion_thread_.native_handle(), sizeof(set), &set);
+    if (rc2 != 0) {
+      TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                      "WeightChunkPrefetcher: failed to set completion thread affinity (errno=%d)", rc2);
+    }
+  }
 }
 
 void WeightChunkPrefetcher::StartWorker() {
@@ -169,23 +129,34 @@ void WeightChunkPrefetcher::StartWorker() {
     return;
   }
 
-#if defined(__linux__)
   if (!io_engine_) {
     io_engine_ = std::make_unique<WeightChunkIOEngine>();
   }
   if (io_engine_ && !io_engine_->IsReady()) {
     printf("[INFO] Initializing io_uring engine for WeightChunkPrefetcher...\n");
-    if (!io_engine_->Initialize(kDefaultRingDepth, kDefaultSubreadBytes, buffer0, size0, buffer1,
-                                size1)) {
+    if (!io_engine_->Initialize(ring_depth_, 
+                                subread_bytes_, 
+                                buffer0, size0, 
+                                buffer1, size1)) {
       TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
                       "WeightChunkPrefetcher: failed to initialize io_uring engine; using sync IO");
     }
   }
-#endif
 
-  io_worker_thread_ = std::thread([this]() {
-    WorkerLoop();
-  });
+  if (io_engine_ && io_engine_->IsReady()) {
+    std::cout << "[INFO] WeightChunkPrefetcher: starting io_uring submission and completion threads" << std::endl;
+    io_submission_thread_ = std::thread([this]() {
+      RunIoUringSubmissionLoop();
+    });
+    io_completion_thread_ = std::thread([this]() {
+      RunIoUringCompletionLoop();
+    });
+  } else {
+    std::cout << "[INFO] WeightChunkPrefetcher: starting parallel pread worker thread" << std::endl;
+    io_submission_thread_ = std::thread([this]() {
+      RunParallelPreadWorkerLoop();
+    });
+  }
 
   ApplyWorkerAffinity();
 }
@@ -202,17 +173,18 @@ void WeightChunkPrefetcher::StopWorker() {
   }
   io_worker_cv_.notify_all();
 
-  if (io_worker_thread_.joinable()) {
-    io_worker_thread_.join();
+  if (io_submission_thread_.joinable()) {
+    io_submission_thread_.join();
+  }
+  if (io_completion_thread_.joinable()) {
+    io_completion_thread_.join();
   }
 
   io_worker_stop_requested_.store(false, std::memory_order_relaxed);
 
-#if defined(__linux__)
   if (io_engine_) {
     io_engine_->Shutdown();
   }
-#endif
 
   ResetChunkStates();
 }
@@ -302,51 +274,34 @@ bool WeightChunkPrefetcher::WaitReady(const WeightChunkInfo* chunk_info) {
   return success;
 }
 
-void WeightChunkPrefetcher::WorkerLoop() {
-#if defined(__linux__)
-  if (io_engine_ && io_engine_->IsReady()) {
-    std::cout << "[INFO] WeightChunkPrefetcher: using io_uring IO worker loop" << std::endl;
-    RunAsyncWorkerLoop();
-    return;
-  }
-#endif
-// std::cout << "[INFO] WeightChunkPrefetcher: using parallel pread IO worker loop" << std::endl;
-//   RunSyncWorkerLoop();
-}
-
-void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
+void WeightChunkPrefetcher::RunIoUringSubmissionLoop() {
   while (true) {
     std::vector<PrefetchJob> jobs_to_submit;
     bool stop_requested = false;
-    bool had_pending_before_wait = false;
-
+    
     {
       std::unique_lock<std::mutex> lock(io_worker_mutex_);
       io_worker_cv_.wait(lock, [this]() {
-        if (io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty()) {
-          return true;
-        }
-        return io_engine_ && io_engine_->HasPending();
+        return io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty();
       });
 
       stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
-      had_pending_before_wait = io_engine_ && io_engine_->HasPending();
-
+      
+      if (stop_requested && io_job_queue_.empty()) {
+        break;
+      }
+      
+      // Batch: 한 번에 모든 job을 가져옴
       while (!io_job_queue_.empty()) {
         jobs_to_submit.push_back(std::move(io_job_queue_.front()));
         io_job_queue_.pop_front();
       }
-    }
+    } // lock released here
 
-    bool needs_blocking_drain = had_pending_before_wait;
+    // Submit jobs without holding the mutex
     for (auto& job : jobs_to_submit) {
       const WeightChunkGroupInfo* group = job.chunk_group;
-      if (!group) {
-        MarkJobCompleted(job, false);
-        continue;
-      }
-
-      if (job.buffer_index < 0) {
+      if (!group || job.buffer_index < 0) {
         MarkJobCompleted(job, false);
         continue;
       }
@@ -367,36 +322,37 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
 
       const bool submitted = io_engine_->Submit(request);
       if (!submitted) {
-        {
-          std::lock_guard<std::mutex> requeue_lock(io_worker_mutex_);
-          io_job_queue_.push_front(std::move(job));
-        }
-        needs_blocking_drain = true;
-        io_worker_cv_.notify_one();
-        continue;
+        // Requeue만 한 번에 처리
+        std::lock_guard<std::mutex> requeue_lock(io_worker_mutex_);
+        io_job_queue_.push_front(std::move(job));
       }
-
-      needs_blocking_drain = true;
     }
+    
+    // Notify only once after all submissions
+    if (!jobs_to_submit.empty()) {
+      io_worker_cv_.notify_one();
+    }
+  }
+}
 
+void WeightChunkPrefetcher::RunIoUringCompletionLoop() {
+  while (true) {
     std::vector<WeightChunkIOEngine::Completion> completions;
-    bool queue_empty_after_submit = false;
-    {
-      std::lock_guard<std::mutex> lock(io_worker_mutex_);
-      queue_empty_after_submit = io_job_queue_.empty();
-    }
-    const bool wait_for_events = stop_requested || needs_blocking_drain ||
-                                 (queue_empty_after_submit && io_engine_ && io_engine_->HasPending());
-    io_engine_->DrainCompletions(&completions, wait_for_events);
+    
+    bool stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
+    bool has_pending = io_engine_ && io_engine_->HasPending();
+
+    const bool should_wait = !stop_requested || has_pending;
+    io_engine_->DrainCompletions(&completions, should_wait);
 
     for (const auto& completion : completions) {
-      PrefetchJob job_snapshot;
       const int plan_index = DecodePlanIndex(completion.range_index);
       if (plan_index < 0 || plan_index >= 2 || !has_plan_[plan_index]) {
         TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
                         "WeightChunkPrefetcher: invalid completion plan index=%d", plan_index);
         continue;
       }
+      
       const size_t range_index = DecodeRangeIndex(completion.range_index);
       const auto& plan = prefetch_plans_[plan_index];
       if (range_index >= plan.chunk_groups.size()) {
@@ -405,28 +361,35 @@ void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
                         range_index);
         continue;
       }
+      
       const auto mode = IndexToPrefetchMode(plan_index);
       if (!mode.has_value()) {
         continue;
       }
+      
+      PrefetchJob job_snapshot;
       job_snapshot.chunk_group = &plan.chunk_groups[range_index];
       job_snapshot.mode = *mode;
       MarkJobCompleted(job_snapshot, completion.success);
     }
 
+    // Check exit condition
+    stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
+    has_pending = io_engine_ && io_engine_->HasPending();
+    
     bool queue_empty = false;
     {
       std::lock_guard<std::mutex> lock(io_worker_mutex_);
       queue_empty = io_job_queue_.empty();
     }
 
-    if (stop_requested && queue_empty && !(io_engine_ && io_engine_->HasPending())) {
+    if (stop_requested && queue_empty && !has_pending) {
       break;
     }
   }
 }
 
-void WeightChunkPrefetcher::RunSyncWorkerLoop() {
+void WeightChunkPrefetcher::RunParallelPreadWorkerLoop() {
   while (true) {
     PrefetchJob job;
     {
@@ -445,7 +408,7 @@ void WeightChunkPrefetcher::RunSyncWorkerLoop() {
 
     const WeightChunkGroupInfo* group = job.chunk_group;
     const bool success = group &&
-                         ExecuteIO(job.direct_io_fd, job.buffer_base, group->total_aligned_size,
+                         ExecuteParallelPread(job.direct_io_fd, job.buffer_base, group->total_aligned_size,
                                    static_cast<off_t>(group->start_aligned_offset));
 
     MarkJobCompleted(job, success);
@@ -543,7 +506,7 @@ void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool succes
     const auto* info = GetChunkInfoByIndex(group->chunk_indices.front());
     const size_t origin_offset = info ? info->origin_offset : 0;
     const size_t chunk_index = info ? info->chunk_index : group->chunk_indices.front();
-  TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
           "WeightChunkPrefetcher: prefetch failed (group_index=%zu, chunk_index=%zu, "
           "origin_offset=%zu)",
           group->group_index, chunk_index, origin_offset);
@@ -774,6 +737,46 @@ const WeightChunkGroupInfo* WeightChunkPrefetcher::GetNextChunkGroup(
   return &plan.chunk_groups.front();
 }
 
+
+bool WeightChunkPrefetcher::ExecuteParallelPread(int fd, void* buffer, size_t size, off_t offset) {
+  if (fd < 0 || buffer == nullptr || size == 0) {
+    return false;
+  }
+
+  if (size < min_block_size_ * 2) {
+    const ssize_t bytes_read = pread(fd, buffer, size, offset);
+    return bytes_read > 0 && static_cast<size_t>(bytes_read) == size;
+  }
+
+  const size_t num_threads = std::min(max_threads_, size / min_block_size_);
+  const size_t block_size = size / num_threads;
+  const size_t remainder = size % num_threads;
+
+  std::vector<std::future<bool>> futures;
+  futures.reserve(num_threads);
+
+  for (size_t i = 0; i < num_threads; ++i) {
+    const size_t current_block_size = block_size + (i < remainder ? 1 : 0);
+    const size_t block_offset = i * block_size + std::min(i, remainder);
+
+    uint8_t* block_buffer = static_cast<uint8_t*>(buffer) + block_offset;
+    const off_t block_file_offset = offset + block_offset;
+
+    futures.emplace_back(std::async(std::launch::async, [=]() -> bool {
+      const ssize_t bytes_read = pread(fd, block_buffer, current_block_size, block_file_offset);
+      return bytes_read > 0 && static_cast<size_t>(bytes_read) == current_block_size;
+    }));
+  }
+
+  bool all_success = true;
+  for (auto& future : futures) {
+    if (!future.get()) {
+      all_success = false;
+    }
+  }
+
+  return all_success;
+}
 
 
 }  // namespace streaming

@@ -93,7 +93,6 @@ namespace flash_slim::util
     void run_thread_with_affinity_and_join(const std::function<void()> &fn,
                                            const std::vector<int> &cores)
     {
-#if defined(__linux__)
         std::thread t([fn, &cores]()
                       {
             if (!cores.empty())
@@ -102,10 +101,6 @@ namespace flash_slim::util
             }
             fn(); });
         t.join();
-#else
-        // Fallback on non-Linux: just run synchronously on the calling thread.
-        fn();
-#endif
     }
 
     // --------------------------------------------------------------------------

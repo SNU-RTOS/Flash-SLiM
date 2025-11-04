@@ -87,6 +87,7 @@ class WeightChunkPrefetcher {
   WeightChunkPrefetcher() = default;
   ~WeightChunkPrefetcher();
   
+  void ConfigureIOEngine(unsigned ring_depth, size_t subread_bytes, size_t min_block_size, size_t max_threads);
 
   void ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1, size_t size1);
 
@@ -171,14 +172,21 @@ class WeightChunkPrefetcher {
   
  private:
   static constexpr int kPrefetchPlanCount = 2;
+  
+  unsigned ring_depth_ = 64;
+  size_t subread_bytes_ = 512 * 1024;
+  size_t min_block_size_ = 512 * 1024;
+  size_t max_threads_ = 4;
+
   using PrefetchJob = PrefetchRequest;
 
   void ApplyWorkerAffinity();
   void ResetRuntimeState();
   void MarkJobCompleted(const PrefetchJob& job, bool success);
-  void WorkerLoop();
-  void RunAsyncWorkerLoop();
-  void RunSyncWorkerLoop();
+  void RunIoUringSubmissionLoop();
+  void RunIoUringCompletionLoop();
+  void RunParallelPreadWorkerLoop();
+  bool ExecuteParallelPread(int fd, void* buffer, size_t size, off_t offset);
   std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
   std::shared_ptr<ChunkGroupIOState> GetChunkGroupIOState(PrefetchMode mode, size_t group_index);
   void ResetChunkStates();
@@ -200,7 +208,8 @@ class WeightChunkPrefetcher {
   std::mutex chunk_io_state_mutex_;
   std::mutex group_io_state_mutex_;
   std::deque<PrefetchJob> io_job_queue_;
-  std::thread io_worker_thread_;
+  std::thread io_submission_thread_;
+  std::thread io_completion_thread_;
   std::mutex io_worker_mutex_;
   std::atomic<bool> io_worker_running_{false};
   std::atomic<bool> io_worker_stop_requested_{false};
