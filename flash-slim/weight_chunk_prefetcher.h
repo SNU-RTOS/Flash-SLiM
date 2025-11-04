@@ -27,7 +27,6 @@
 namespace flash_slim {
 namespace streaming {
 
-
 using ProviderMode = tflite::xnnpack::StreamingWeightCacheProvider::ProviderMode;
 
 struct WeightChunkInfo {
@@ -71,6 +70,19 @@ class WeightChunkPrefetcher {
     int direct_io_fd = -1;
     int buffer_index = -1;
     PrefetchMode mode = PrefetchMode::UNINITIALIZED;
+  };
+
+  struct ChunkIOState {
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool in_flight = false;
+    bool ready = false;
+    bool success = false;
+  };
+
+  struct ChunkGroupIOState {
+    std::mutex mutex;
+    bool in_flight = false;
   };
 
   WeightChunkPrefetcher() = default;
@@ -160,26 +172,7 @@ class WeightChunkPrefetcher {
   
  private:
   static constexpr int kPrefetchPlanCount = 2;
-  struct PrefetchJob {
-    const WeightChunkGroupInfo* chunk_group = nullptr;
-    void* buffer_base = nullptr;
-    int direct_io_fd = -1;
-    int buffer_index = -1;
-    PrefetchMode mode = PrefetchMode::UNINITIALIZED;
-  };
-
-  struct ChunkIOState {
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool in_flight = false;
-    bool ready = false;
-    bool success = false;
-  };
-
-  struct ChunkGroupIOState {
-    std::mutex mutex;
-    bool in_flight = false;
-  };
+  using PrefetchJob = PrefetchRequest;
 
   void ApplyWorkerAffinity();
   void ResetRuntimeState();
@@ -189,6 +182,7 @@ class WeightChunkPrefetcher {
   void RunSyncWorkerLoop();
   std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
   std::shared_ptr<ChunkGroupIOState> GetChunkGroupIOState(PrefetchMode mode, size_t group_index);
+  void ResetChunkStates();
 
   PrefetchMode prefetch_mode_ = PrefetchMode::UNINITIALIZED;
 

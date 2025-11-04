@@ -50,7 +50,6 @@ static inline size_t DecodeRangeIndex(size_t encoded) {
   return encoded & kPlanIndexMask;
 }
 
-
 static constexpr size_t kMinBlockSize = 512 * 1024;
 static constexpr size_t kMaxThreads = 4;
 
@@ -97,6 +96,11 @@ static inline bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
 
 WeightChunkPrefetcher::~WeightChunkPrefetcher() { StopWorker(); }
 
+
+std::string WeightChunkPrefetcher::GetPrefetchModeString() const {
+  return std::string(PrefetchModeName(prefetch_mode_));
+}
+
 void WeightChunkPrefetcher::ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1,
                                                size_t size1) {
   std::lock_guard<std::mutex> lock(io_config_mutex_);
@@ -112,212 +116,29 @@ void WeightChunkPrefetcher::SetWorkerThreadAffinity(const std::vector<int>& core
     io_worker_cores_ = cores;
 }
 
-void WeightChunkPrefetcher::SetPrefetchPlan(
-  PrefetchMode mode, std::unordered_map<size_t, size_t>&& offset_to_index,
-  std::vector<WeightChunkInfo>&& chunks,
-  std::vector<WeightChunkGroupInfo>&& chunk_groups) {
-
-  const int idx = PrefetchModeToIndex(mode);
-
-  if (idx < 0) {
+void WeightChunkPrefetcher::ApplyWorkerAffinity() {
+#if defined(__linux__)
+  std::lock_guard<std::mutex> lock(io_worker_mutex_);
+  if (io_worker_cores_.empty() || !io_worker_thread_.joinable()) {
     return;
   }
 
-  auto& plan = prefetch_plans_[idx];
-  plan.offset_to_index = std::move(offset_to_index);
-  plan.chunks = std::move(chunks);
-  plan.chunk_groups = std::move(chunk_groups);
-
-  std::sort(plan.chunk_groups.begin(), plan.chunk_groups.end(),
-            [](const WeightChunkGroupInfo& lhs, const WeightChunkGroupInfo& rhs) {
-              return lhs.io_order < rhs.io_order;
-            });
-
-  for (size_t group_index = 0; group_index < plan.chunk_groups.size(); ++group_index) {
-    auto& group = plan.chunk_groups[group_index];
-    if (group_index > kPlanIndexMask) {
-      TFLITE_LOG_PROD(
-          tflite::TFLITE_LOG_WARNING,
-          "WeightChunkPrefetcher: group index %zu exceeds encoding capacity (%zu). Results may be "
-          "undefined.",
-          group_index, kPlanIndexMask);
-    }
-    if (group.io_order != group_index) {
-      TFLITE_LOG_PROD(
-          tflite::TFLITE_LOG_WARNING,
-          "WeightChunkPrefetcher: adjusting io_order from %zu to %zu to maintain contiguity.",
-          group.io_order, group_index);
-      group.io_order = group_index;
-    }
-    group.range_index = group_index;
-  }
-
-  has_plan_[idx] = true;
-  index_to_group_io_states_[idx].clear();
-  ResetRuntimeState();
-}
-
-bool WeightChunkPrefetcher::HasPrefetchPlan(PrefetchMode mode) const {
-  const int idx = PrefetchModeToIndex(mode);
-  return idx >= 0 && has_plan_[idx];
-}
-
-const WeightChunkPrefetcher::PrefetchPlan* WeightChunkPrefetcher::GetPrefetchPlan( PrefetchMode mode) const {
-  const int idx = PrefetchModeToIndex(mode);
-  if (idx < 0 || !has_plan_[idx]) {
-    return nullptr;
-  }
-  return &prefetch_plans_[idx];
-}
-
-void WeightChunkPrefetcher::BuildIndexToChunksFromPlans() {
-  size_t max_index = 0;
-  bool seen_any = false;
-  for (int i = 0; i < 2; ++i) {
-    if (!has_plan_[i]) {
-      continue;
-    }
-    for (const auto& chunk : prefetch_plans_[i].chunks) {
-      if (!seen_any || chunk.chunk_index > max_index) {
-        max_index = chunk.chunk_index;
-      }
-      seen_any = true;
+  cpu_set_t set;
+  CPU_ZERO(&set);
+  for (int core : io_worker_cores_) {
+    if (core >= 0) {
+      CPU_SET(static_cast<unsigned long>(core), &set);
     }
   }
-
-  if (!seen_any) {
-    index_to_chunks_.clear();
-    return;
+  const int rc = pthread_setaffinity_np(io_worker_thread_.native_handle(), sizeof(set), &set);
+  if (rc != 0) {
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                    "WeightChunkPrefetcher: failed to set worker affinity (errno=%d)", rc);
   }
-
-  WeightChunkInfo tmp_chunk;
-  tmp_chunk.chunk_index = SIZE_MAX;
-  tmp_chunk.origin_offset = 0;
-  tmp_chunk.origin_size = 0;
-  tmp_chunk.aligned_offset = 0;
-  tmp_chunk.aligned_size = 0;
-  tmp_chunk.offset_adjust = 0;
-  tmp_chunk.weights_id = 0;
-
-  index_to_chunks_.assign(max_index + 1, tmp_chunk);
-
-  for (int i = 0; i < 2; ++i) {
-    if (!has_plan_[i]) {
-      continue;
-    }
-    for (const auto& chunk : prefetch_plans_[i].chunks) {
-      const size_t idx = chunk.chunk_index;
-      auto& destination = index_to_chunks_[idx];
-      if (destination.chunk_index == SIZE_MAX) {
-        destination = chunk;
-      } else if (destination.origin_offset != chunk.origin_offset) {
-        TFLITE_LOG_PROD(
-            tflite::TFLITE_LOG_WARNING,
-            "WeightChunkPrefetcher::BuildIndexToChunksFromPlans: conflict for "
-            "chunk_index=%zu: existing origin_offset=%zu, new origin_offset=%zu."
-            " Keeping existing.",
-            idx, destination.origin_offset, chunk.origin_offset);
-      }
-    }
-  }
+#else
+  (void)io_worker_cores_;
+#endif
 }
-
-std::string WeightChunkPrefetcher::GetPrefetchModeString() const {
-  return std::string(PrefetchModeName(prefetch_mode_));
-}
-
-const WeightChunkInfo* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode mode,
-                                                                 size_t offset) const {
-  const int idx = PrefetchModeToIndex(mode);
-  if (idx < 0 || !has_plan_[idx]) {
-    return nullptr;
-  }
-
-  const auto& plan = prefetch_plans_[idx];
-  const auto it = plan.offset_to_index.find(offset);
-  if (it == plan.offset_to_index.end()) {
-    return nullptr;
-  }
-
-  const size_t index = it->second;
-  if (index >= index_to_chunks_.size()) {
-    return nullptr;
-  }
-
-  const auto& candidate = index_to_chunks_[index];
-  if (candidate.chunk_index == std::numeric_limits<size_t>::max()) {
-    return nullptr;
-  }
-  return &candidate;
-}
-
-const WeightChunkInfo* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chunk_index) const {
-  if (chunk_index >= index_to_chunks_.size()) {
-    return nullptr;
-  }
-
-  const auto& info = index_to_chunks_[chunk_index];
-  if (info.chunk_index == std::numeric_limits<size_t>::max()) {
-    return nullptr;
-  }
-
-  return &info;
-}
-
-const WeightChunkGroupInfo* WeightChunkPrefetcher::GetChunkGroupByChunkIndex(
-    PrefetchMode mode, size_t chunk_index) const {
-  const int plan_idx = PrefetchModeToIndex(mode);
-  if (plan_idx < 0 || !has_plan_[plan_idx]) {
-    return nullptr;
-  }
-  const auto& plan = prefetch_plans_[plan_idx];
-  for (size_t i = 0; i < plan.chunk_groups.size(); ++i) {
-    const auto& group = plan.chunk_groups[i];
-    if (std::find(group.chunk_indices.begin(), group.chunk_indices.end(), chunk_index) !=
-        group.chunk_indices.end()) {
-      return &plan.chunk_groups[i];
-    }
-  }
-
-  TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                  "WeightChunkPrefetcher: chunk_index=%zu not found in group list for mode %d",
-                  chunk_index, plan_idx);
-  return nullptr;
-}
-
-
-const WeightChunkGroupInfo* WeightChunkPrefetcher::GetNextChunkGroup(
-    PrefetchMode mode, size_t current_io_order, PrefetchMode* next_mode) const {
-
-  const int plan_idx = PrefetchModeToIndex(mode);
-  if (plan_idx < 0 || !has_plan_[plan_idx]) {
-    return nullptr;
-  }
-
-  const auto& plan = prefetch_plans_[plan_idx];
-    if (plan.chunk_groups.empty()) {
-    return nullptr;
-  }
-
-  const size_t next_index = current_io_order + 1;
-  const size_t group_count = plan.chunk_groups.size();
-  const size_t target_io_order = next_index % group_count;
-
-  if (mode == PrefetchMode::PREFILL && next_index >= group_count) {  
-    const auto& decode_plan = prefetch_plans_[PrefetchModeToIndex(PrefetchMode::DECODE)];
-    *next_mode = PrefetchMode::DECODE;
-    return &decode_plan.chunk_groups.front();
-  } else if (target_io_order < plan.chunk_groups.size() &&
-    plan.chunk_groups[target_io_order].io_order == target_io_order) {
-    *next_mode = mode;
-    return &plan.chunk_groups[target_io_order];
-  } else {
-    std::cerr<<"[GetNextChunkGroup] Invalid target_io_order = " << target_io_order << "\n";
-    return nullptr;
-  }
-  
-}
-
 
 void WeightChunkPrefetcher::StartWorker() {
   bool expected = false;
@@ -393,22 +214,7 @@ void WeightChunkPrefetcher::StopWorker() {
   }
 #endif
 
-  {
-    std::lock_guard<std::mutex> states_lock(chunk_io_state_mutex_);
-    for (auto& kv : index_to_chunk_io_states_) {
-      const auto& state = kv.second;
-      if (!state) {
-        continue;
-      }
-      {
-        std::lock_guard<std::mutex> lock(state->mutex);
-        state->in_flight = false;
-        state->ready = false;
-        state->success = false;
-      }
-      state->cv.notify_all();
-    }
-  }
+  ResetChunkStates();
 }
 
 bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
@@ -646,30 +452,6 @@ void WeightChunkPrefetcher::RunSyncWorkerLoop() {
   }
 }
 
-void WeightChunkPrefetcher::ApplyWorkerAffinity() {
-#if defined(__linux__)
-  std::lock_guard<std::mutex> lock(io_worker_mutex_);
-  if (io_worker_cores_.empty() || !io_worker_thread_.joinable()) {
-    return;
-  }
-
-  cpu_set_t set;
-  CPU_ZERO(&set);
-  for (int core : io_worker_cores_) {
-    if (core >= 0) {
-      CPU_SET(static_cast<unsigned long>(core), &set);
-    }
-  }
-  const int rc = pthread_setaffinity_np(io_worker_thread_.native_handle(), sizeof(set), &set);
-  if (rc != 0) {
-    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                    "WeightChunkPrefetcher: failed to set worker affinity (errno=%d)", rc);
-  }
-#else
-  (void)io_worker_cores_;
-#endif
-}
-
 std::shared_ptr<WeightChunkPrefetcher::ChunkIOState> WeightChunkPrefetcher::GetChunkIOState(size_t chunk_index) {
   std::lock_guard<std::mutex> lock(chunk_io_state_mutex_);
   auto it = index_to_chunk_io_states_.find(chunk_index);
@@ -697,6 +479,23 @@ std::shared_ptr<WeightChunkPrefetcher::ChunkGroupIOState> WeightChunkPrefetcher:
   return it->second;
 }
 
+void WeightChunkPrefetcher::ResetChunkStates() {
+  std::lock_guard<std::mutex> states_lock(chunk_io_state_mutex_);
+  for (auto& kv : index_to_chunk_io_states_) {
+    const auto& state = kv.second;
+    if (!state) {
+      continue;
+    }
+    {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      state->in_flight = false;
+      state->ready = false;
+      state->success = false;
+    }
+    state->cv.notify_all();
+  }
+}
+
 void WeightChunkPrefetcher::ResetRuntimeState() {
   {
     std::lock_guard<std::mutex> lock(io_worker_mutex_);
@@ -708,20 +507,7 @@ void WeightChunkPrefetcher::ResetRuntimeState() {
       states.clear();
     }
   }
-  std::lock_guard<std::mutex> states_lock(chunk_io_state_mutex_);
-  for (auto& kv : index_to_chunk_io_states_) {
-    const auto& state = kv.second;
-    if (!state) {
-      continue;
-    }
-    {
-      std::lock_guard<std::mutex> state_lock(state->mutex);
-      state->in_flight = false;
-      state->ready = false;
-      state->success = false;
-    }
-    state->cv.notify_all();
-  }
+  ResetChunkStates();
 }
 
 void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool success) {
@@ -763,6 +549,210 @@ void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool succes
                     group->io_order, chunk_index, origin_offset);
   }
 }
+
+void WeightChunkPrefetcher::SetPrefetchPlan(
+  PrefetchMode mode, std::unordered_map<size_t, size_t>&& offset_to_index,
+  std::vector<WeightChunkInfo>&& chunks,
+  std::vector<WeightChunkGroupInfo>&& chunk_groups) {
+
+  const int idx = PrefetchModeToIndex(mode);
+
+  if (idx < 0) {
+    return;
+  }
+
+  auto& plan = prefetch_plans_[idx];
+  plan.offset_to_index = std::move(offset_to_index);
+  plan.chunks = std::move(chunks);
+  plan.chunk_groups = std::move(chunk_groups);
+
+  std::sort(plan.chunk_groups.begin(), plan.chunk_groups.end(),
+            [](const WeightChunkGroupInfo& lhs, const WeightChunkGroupInfo& rhs) {
+              return lhs.io_order < rhs.io_order;
+            });
+
+  for (size_t group_index = 0; group_index < plan.chunk_groups.size(); ++group_index) {
+    auto& group = plan.chunk_groups[group_index];
+    if (group_index > kPlanIndexMask) {
+      TFLITE_LOG_PROD(
+          tflite::TFLITE_LOG_WARNING,
+          "WeightChunkPrefetcher: group index %zu exceeds encoding capacity (%zu). Results may be "
+          "undefined.",
+          group_index, kPlanIndexMask);
+    }
+    if (group.io_order != group_index) {
+      TFLITE_LOG_PROD(
+          tflite::TFLITE_LOG_WARNING,
+          "WeightChunkPrefetcher: adjusting io_order from %zu to %zu to maintain contiguity.",
+          group.io_order, group_index);
+      group.io_order = group_index;
+    }
+    group.range_index = group_index;
+  }
+
+  has_plan_[idx] = true;
+  index_to_group_io_states_[idx].clear();
+  ResetRuntimeState();
+}
+
+bool WeightChunkPrefetcher::HasPrefetchPlan(PrefetchMode mode) const {
+  const int idx = PrefetchModeToIndex(mode);
+  return idx >= 0 && has_plan_[idx];
+}
+
+const WeightChunkPrefetcher::PrefetchPlan* WeightChunkPrefetcher::GetPrefetchPlan( PrefetchMode mode) const {
+  const int idx = PrefetchModeToIndex(mode);
+  if (idx < 0 || !has_plan_[idx]) {
+    return nullptr;
+  }
+  return &prefetch_plans_[idx];
+}
+
+void WeightChunkPrefetcher::BuildIndexToChunksFromPlans() {
+  size_t max_index = 0;
+  bool seen_any = false;
+  for (int i = 0; i < 2; ++i) {
+    if (!has_plan_[i]) {
+      continue;
+    }
+    for (const auto& chunk : prefetch_plans_[i].chunks) {
+      if (!seen_any || chunk.chunk_index > max_index) {
+        max_index = chunk.chunk_index;
+      }
+      seen_any = true;
+    }
+  }
+
+  if (!seen_any) {
+    index_to_chunks_.clear();
+    return;
+  }
+
+  WeightChunkInfo tmp_chunk;
+  tmp_chunk.chunk_index = SIZE_MAX;
+  tmp_chunk.origin_offset = 0;
+  tmp_chunk.origin_size = 0;
+  tmp_chunk.aligned_offset = 0;
+  tmp_chunk.aligned_size = 0;
+  tmp_chunk.offset_adjust = 0;
+  tmp_chunk.weights_id = 0;
+
+  index_to_chunks_.assign(max_index + 1, tmp_chunk);
+
+  for (int i = 0; i < 2; ++i) {
+    if (!has_plan_[i]) {
+      continue;
+    }
+    for (const auto& chunk : prefetch_plans_[i].chunks) {
+      const size_t idx = chunk.chunk_index;
+      auto& destination = index_to_chunks_[idx];
+      if (destination.chunk_index == SIZE_MAX) {
+        destination = chunk;
+      } else if (destination.origin_offset != chunk.origin_offset) {
+        TFLITE_LOG_PROD(
+            tflite::TFLITE_LOG_WARNING,
+            "WeightChunkPrefetcher::BuildIndexToChunksFromPlans: conflict for "
+            "chunk_index=%zu: existing origin_offset=%zu, new origin_offset=%zu."
+            " Keeping existing.",
+            idx, destination.origin_offset, chunk.origin_offset);
+      }
+    }
+  }
+}
+
+const WeightChunkInfo* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode mode,
+                                                                 size_t offset) const {
+  const int idx = PrefetchModeToIndex(mode);
+  if (idx < 0 || !has_plan_[idx]) {
+    return nullptr;
+  }
+
+  const auto& plan = prefetch_plans_[idx];
+  const auto it = plan.offset_to_index.find(offset);
+  if (it == plan.offset_to_index.end()) {
+    return nullptr;
+  }
+
+  const size_t index = it->second;
+  if (index >= index_to_chunks_.size()) {
+    return nullptr;
+  }
+
+  const auto& candidate = index_to_chunks_[index];
+  if (candidate.chunk_index == std::numeric_limits<size_t>::max()) {
+    return nullptr;
+  }
+  return &candidate;
+}
+
+const WeightChunkInfo* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chunk_index) const {
+  if (chunk_index >= index_to_chunks_.size()) {
+    return nullptr;
+  }
+
+  const auto& info = index_to_chunks_[chunk_index];
+  if (info.chunk_index == std::numeric_limits<size_t>::max()) {
+    return nullptr;
+  }
+
+  return &info;
+}
+
+const WeightChunkGroupInfo* WeightChunkPrefetcher::GetChunkGroupByChunkIndex(
+    PrefetchMode mode, size_t chunk_index) const {
+  const int plan_idx = PrefetchModeToIndex(mode);
+  if (plan_idx < 0 || !has_plan_[plan_idx]) {
+    return nullptr;
+  }
+  const auto& plan = prefetch_plans_[plan_idx];
+  for (size_t i = 0; i < plan.chunk_groups.size(); ++i) {
+    const auto& group = plan.chunk_groups[i];
+    if (std::find(group.chunk_indices.begin(), group.chunk_indices.end(), chunk_index) !=
+        group.chunk_indices.end()) {
+      return &plan.chunk_groups[i];
+    }
+  }
+
+  TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+                  "WeightChunkPrefetcher: chunk_index=%zu not found in group list for mode %d",
+                  chunk_index, plan_idx);
+  return nullptr;
+}
+
+
+const WeightChunkGroupInfo* WeightChunkPrefetcher::GetNextChunkGroup(
+    PrefetchMode mode, size_t current_io_order, PrefetchMode* next_mode) const {
+
+  const int plan_idx = PrefetchModeToIndex(mode);
+  if (plan_idx < 0 || !has_plan_[plan_idx]) {
+    return nullptr;
+  }
+
+  const auto& plan = prefetch_plans_[plan_idx];
+    if (plan.chunk_groups.empty()) {
+    return nullptr;
+  }
+
+  const size_t next_index = current_io_order + 1;
+  const size_t group_count = plan.chunk_groups.size();
+  const size_t target_io_order = next_index % group_count;
+
+  if (mode == PrefetchMode::PREFILL && next_index >= group_count) {  
+    const auto& decode_plan = prefetch_plans_[PrefetchModeToIndex(PrefetchMode::DECODE)];
+    *next_mode = PrefetchMode::DECODE;
+    return &decode_plan.chunk_groups.front();
+  } else if (target_io_order < plan.chunk_groups.size() &&
+    plan.chunk_groups[target_io_order].io_order == target_io_order) {
+    *next_mode = mode;
+    return &plan.chunk_groups[target_io_order];
+  } else {
+    std::cerr<<"[GetNextChunkGroup] Invalid target_io_order = " << target_io_order << "\n";
+    return nullptr;
+  }
+  
+}
+
+
 
 }  // namespace streaming
 }  // namespace flash_slim
