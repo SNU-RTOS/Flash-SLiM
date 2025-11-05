@@ -276,7 +276,7 @@ bool WeightChunkPrefetcher::WaitReady(const WeightChunkInfo* chunk_info) {
 
 void WeightChunkPrefetcher::RunIoUringSubmissionLoop() {
   while (true) {
-    std::vector<PrefetchJob> jobs_to_submit;
+    PrefetchJob job;
     bool stop_requested = false;
     
     {
@@ -291,45 +291,38 @@ void WeightChunkPrefetcher::RunIoUringSubmissionLoop() {
         break;
       }
       
-      // Batch: 한 번에 모든 job을 가져옴
-      while (!io_job_queue_.empty()) {
-        jobs_to_submit.push_back(std::move(io_job_queue_.front()));
+      if (!io_job_queue_.empty()) {
+        job = std::move(io_job_queue_.front());
         io_job_queue_.pop_front();
-      }
-    } // lock released here
-
-    // Submit jobs without holding the mutex
-    for (auto& job : jobs_to_submit) {
-      const WeightChunkGroupInfo* group = job.chunk_group;
-      if (!group || job.buffer_index < 0) {
-        MarkJobCompleted(job, false);
+      } else {
         continue;
-      }
-
-      const int plan_index = PrefetchModeToIndex(job.mode);
-      if (plan_index < 0) {
-        MarkJobCompleted(job, false);
-        continue;
-      }
-
-      WeightChunkIOEngine::IORequest request;
-      request.range_index = EncodeRangeId(plan_index, group->group_index);
-      request.aligned_offset = group->start_aligned_offset;
-      request.aligned_size = group->total_aligned_size;
-      request.buffer_base = job.buffer_base;
-      request.direct_io_fd = job.direct_io_fd;
-      request.buffer_index = job.buffer_index;
-
-      const bool submitted = io_engine_->Submit(request);
-      if (!submitted) {
-        // Requeue만 한 번에 처리
-        std::lock_guard<std::mutex> requeue_lock(io_worker_mutex_);
-        io_job_queue_.push_front(std::move(job));
       }
     }
-    
-    // Notify only once after all submissions
-    if (!jobs_to_submit.empty()) {
+
+    const WeightChunkGroupInfo* group = job.chunk_group;
+    if (!group || job.buffer_index < 0) {
+      MarkJobCompleted(job, false);
+      continue;
+    }
+
+    const int plan_index = PrefetchModeToIndex(job.mode);
+    if (plan_index < 0) {
+      MarkJobCompleted(job, false);
+      continue;
+    }
+
+    WeightChunkIOEngine::IORequest request;
+    request.range_index = EncodeRangeId(plan_index, group->group_index);
+    request.aligned_offset = group->start_aligned_offset;
+    request.aligned_size = group->total_aligned_size;
+    request.buffer_base = job.buffer_base;
+    request.direct_io_fd = job.direct_io_fd;
+    request.buffer_index = job.buffer_index;
+
+    const bool submitted = io_engine_->Submit(request);
+    if (!submitted) {
+      std::lock_guard<std::mutex> requeue_lock(io_worker_mutex_);
+      io_job_queue_.push_front(std::move(job));
       io_worker_cv_.notify_one();
     }
   }
@@ -339,8 +332,16 @@ void WeightChunkPrefetcher::RunIoUringCompletionLoop() {
   while (true) {
     std::vector<WeightChunkIOEngine::Completion> completions;
     
-    bool stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
-    bool has_pending = io_engine_ && io_engine_->HasPending();
+    bool stop_requested = false;
+    bool has_pending = false;
+    bool queue_empty = false;
+    
+    {
+      std::lock_guard<std::mutex> lock(io_worker_mutex_);
+      stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
+      has_pending = io_engine_ && io_engine_->HasPending();
+      queue_empty = io_job_queue_.empty();
+    }
 
     const bool should_wait = !stop_requested || has_pending;
     io_engine_->DrainCompletions(&completions, should_wait);
@@ -373,13 +374,10 @@ void WeightChunkPrefetcher::RunIoUringCompletionLoop() {
       MarkJobCompleted(job_snapshot, completion.success);
     }
 
-    // Check exit condition
-    stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
-    has_pending = io_engine_ && io_engine_->HasPending();
-    
-    bool queue_empty = false;
     {
       std::lock_guard<std::mutex> lock(io_worker_mutex_);
+      stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
+      has_pending = io_engine_ && io_engine_->HasPending();
       queue_empty = io_job_queue_.empty();
     }
 
