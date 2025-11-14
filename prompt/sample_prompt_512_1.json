@@ -2,11 +2,10 @@
   {
     "tokens": 512,
     "prompt": [
-      "[Prompt] Write the story following with a poetic and cinematic narrative style.",
+      "[Prompt] Write the following story with a poetic and cinematic narrative style.",
       "And maintain the descriptive, atmospheric tone of cyberpunk and sci-fi noir.",
       "Use vivid imagery and sensory details to create a rich, immersive experience.",
       "Incorporate elements of mystery, intrigue, and a sense of wonder about the future.",
-        "Explore themes of technology, humanity.",
       "---------------------------------------------------------------",
       "[Chapter 1: Neon Dreams]",
       "City at night, neon lights blaze brightly, reflecting on wet streets below.",
