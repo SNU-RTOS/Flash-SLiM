@@ -57,6 +57,12 @@ class WeightChunkPrefetcher {
     UNINITIALIZED,
   };
 
+  enum class IOEngineType {
+    IO_URING,
+    PARALLEL_PREAD,
+    UNINITIALIZED,
+  };
+
   struct PrefetchPlan {
     std::unordered_map<size_t, size_t> offset_to_index;  // origin_offset -> index
     std::vector<WeightChunkInfo> chunks;                 // index -> chunk metadata
@@ -87,7 +93,13 @@ class WeightChunkPrefetcher {
   WeightChunkPrefetcher() = default;
   ~WeightChunkPrefetcher();
   
-  void ConfigureIOEngine(unsigned ring_depth, size_t subread_bytes, size_t min_block_size, size_t max_threads);
+  // Configure IO Engine type and parameters
+  void ConfigureIOEngine(
+    const std::string& io_engine_mode_str,
+    unsigned iouring_ring_depth, size_t iouring_subread_bytes,
+    size_t pread_min_block_size, size_t pread_max_threads);
+
+  IOEngineType GetIOEngineType() const { return io_engine_type_; }
 
   void ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1, size_t size1);
 
@@ -173,18 +185,30 @@ class WeightChunkPrefetcher {
  private:
   static constexpr int kPrefetchPlanCount = 2;
   
-  unsigned ring_depth_ = 64;
-  size_t subread_bytes_ = 512 * 1024;
-  size_t min_block_size_ = 512 * 1024;
-  size_t max_threads_ = 4;
+  // IO Engine configuration
+  IOEngineType io_engine_type_ = IOEngineType::UNINITIALIZED;
+  
+  // io_uring specific parameters
+  unsigned iouring_ring_depth_ = 64;
+  size_t iouring_subread_bytes_ = 512 * 1024;
+  
+  // parallel_pread specific parameters
+  size_t pread_min_block_size_ = 512 * 1024;
+  size_t pread_max_threads_ = 4;
 
   using PrefetchJob = PrefetchRequest;
 
   void ApplyWorkerAffinity();
   void ResetRuntimeState();
   void MarkJobCompleted(const PrefetchJob& job, bool success);
+  
+  // io_uring specific methods
+  void StartIoUringWorker();
   void RunIoUringSubmissionLoop();
   void RunIoUringCompletionLoop();
+  
+  // parallel_pread specific methods
+  void StartParallelPreadWorker();
   void RunParallelPreadWorkerLoop();
   bool ExecuteParallelPread(int fd, void* buffer, size_t size, off_t offset);
   std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
@@ -200,29 +224,29 @@ class WeightChunkPrefetcher {
   std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_io_states_;
   std::array<std::unordered_map<size_t, std::shared_ptr<ChunkGroupIOState>>, kPrefetchPlanCount> index_to_group_io_states_;
   
+  // io_uring specific members
   std::unique_ptr<WeightChunkIOEngine> io_engine_;
   std::array<void*, 2> io_registered_buffers_{nullptr, nullptr};
   std::array<size_t, 2> io_registered_buffer_sizes_{0, 0};
   bool io_buffers_configured_ = false;
-  std::mutex io_config_mutex_;
-  std::mutex chunk_io_state_mutex_;
-  std::mutex group_io_state_mutex_;
+  
+  // Worker state
   std::deque<PrefetchJob> io_job_queue_;
   std::thread io_submission_thread_;
-  std::thread io_completion_thread_;
-  
-  // Mutex 분리: 각 목적별 전용 mutex
-  std::mutex io_job_queue_mutex_;           // Job queue 보호
-  std::mutex io_engine_state_mutex_;        // io_engine_ HasPending() 동기화
-  std::mutex io_worker_affinity_mutex_;     // CPU affinity 설정 보호
+  std::thread io_completion_thread_;  // Only used by io_uring
+  std::vector<int> io_worker_cores_;
   
   std::atomic<bool> io_worker_running_{false};
   std::atomic<bool> io_worker_stop_requested_{false};
   
-  std::condition_variable io_submission_cv_;   // Submission loop 전용
-  std::condition_variable io_completion_cv_;   // Completion loop 전용
+  // Simplified mutex design: 3 mutexes only
+  mutable std::mutex state_mutex_;        // Protects all shared state (chunks, groups, config, affinity)
+  std::mutex queue_mutex_;                // Protects job queue only
+  std::mutex engine_mutex_;               // Protects io_engine_ operations (io_uring only)
   
-  std::vector<int> io_worker_cores_;
+  std::condition_variable io_submission_cv_;   // Submission loop 전용
+  std::condition_variable io_completion_cv_;   // Completion loop 전용 (io_uring only)
+  
 };
 
 using PrefetchMode = WeightChunkPrefetcher::PrefetchMode;
