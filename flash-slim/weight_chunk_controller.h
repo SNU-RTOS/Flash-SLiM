@@ -82,12 +82,11 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   // Helper to emit BPF probe for chunk completion
   void EmitBPFProbe(size_t offset);
   
-  bool ScheduleNextGroup(const WeightChunkGroupInfo* current_group, int fd);
+  bool ScheduleNextGroup(const WeightChunkGroupInfo* current_group, int fd, int mode_idx);
   size_t ComputeInactiveSlotOffset(size_t next_aligned_size) const;
   void ResetBufferSlots();
   void UpdateWeightsPointer(size_t offset, const WeightChunkInfo& info,
-                            const WeightChunkGroupInfo& group);
-  size_t FindChunkRelativeOffset(const WeightChunkGroupInfo& group, size_t chunk_index) const;
+                            const WeightChunkGroupInfo& group, int mode_idx);
   
   static inline size_t AlignTo(size_t value, size_t alignment) {
     if (alignment == 0) {

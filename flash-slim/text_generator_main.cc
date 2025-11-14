@@ -104,6 +104,7 @@ int main(int argc, char *argv[])
 
     // Configure IO engine parameters from flags
     weight_chunk_prefetcher->ConfigureIOEngine(
+        static_cast<std::string>(absl::GetFlag(FLAGS_io_engine)),
         static_cast<unsigned>(absl::GetFlag(FLAGS_io_ring_depth)),
         static_cast<size_t>(absl::GetFlag(FLAGS_io_subread_bytes)),
         static_cast<size_t>(absl::GetFlag(FLAGS_io_min_block_size)),

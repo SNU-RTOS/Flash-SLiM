@@ -1,6 +1,7 @@
 #include "weight_chunk_io_engine.h"
 
 #include <algorithm>
+#include <atomic>
 #include <limits>
 
 #include <cerrno>
@@ -234,11 +235,16 @@ bool WeightChunkIOEngine::SubmitInternal(const IORequest& request) {
     return false;
   }
 
-  if (io_uring_submit(&ring_) < 0) {
+  // Submit to io_uring and ensure inflight_ is updated BEFORE returning
+  const int submit_result = io_uring_submit(&ring_);
+  if (submit_result < 0) {
     inflight_.erase(range_index);
     return false;
   }
 
+  // Memory barrier to ensure inflight_ update is visible to other threads
+  std::atomic_thread_fence(std::memory_order_release);
+  
   return true;
 }
 
