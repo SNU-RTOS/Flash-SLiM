@@ -93,3 +93,7 @@ utils
 memo.txt
 CLAUDE.md
 dump_llm_nodes
+
+# ── Miscellaneous ─────────────────────────────────────────────────────────────
+*.json
+*.log

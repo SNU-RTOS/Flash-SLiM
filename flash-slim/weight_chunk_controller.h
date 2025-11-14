@@ -44,8 +44,8 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
 
   void RecordChunkAccess(size_t offset);
 
-  inline void* GetActiveWeightChunkBuffer() const override;
   inline void* GetWeightChunkBufferAddr(int index) const override;
+  inline void* GetActiveWeightChunkBuffer() const override;
   inline void* OffsetToAddrImpl(size_t offset) override;
   inline void PreInvokeImpl(size_t offset) override;
   inline void PostInvokeImpl(size_t offset) override;
@@ -64,7 +64,7 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
     void* base = nullptr;
     size_t offset = 0;
     size_t size = 0;
-    size_t io_order = std::numeric_limits<size_t>::max();
+    size_t group_index = std::numeric_limits<size_t>::max();
   };
 
   void UpdatePreInvokeHandler(ProviderMode mode);
@@ -82,12 +82,11 @@ class WeightChunkController : public tflite::xnnpack::WeightChunkControllerInter
   // Helper to emit BPF probe for chunk completion
   void EmitBPFProbe(size_t offset);
   
-  bool ScheduleNextGroup(const WeightChunkGroupInfo* current_group, int fd);
+  bool ScheduleNextGroup(const WeightChunkGroupInfo* current_group, int fd, int mode_idx);
   size_t ComputeInactiveSlotOffset(size_t next_aligned_size) const;
   void ResetBufferSlots();
   void UpdateWeightsPointer(size_t offset, const WeightChunkInfo& info,
-                            const WeightChunkGroupInfo& group);
-  size_t FindChunkRelativeOffset(const WeightChunkGroupInfo& group, size_t chunk_index) const;
+                            const WeightChunkGroupInfo& group, int mode_idx);
   
   static inline size_t AlignTo(size_t value, size_t alignment) {
     if (alignment == 0) {

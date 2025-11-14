@@ -381,11 +381,11 @@ namespace flash_slim
                     WeightChunkGroupInfo group;
                     try
                     {
-                        group.io_order = static_cast<size_t>(std::stoull(it.key()));
+                        group.group_index = static_cast<size_t>(std::stoull(it.key()));
                     }
                     catch (const std::exception &)
                     {
-                        std::cerr << "[JsonPrefetchPlanLoader] Warning: invalid io_order key \"" << it.key()
+                        std::cerr << "[JsonPrefetchPlanLoader] Warning: invalid group_index key \"" << it.key()
                                   << "\" for mode " << mode << std::endl;
                         continue;
                     }
@@ -430,24 +430,24 @@ namespace flash_slim
                 }
 
                 std::sort(groups.begin(), groups.end(), [](const WeightChunkGroupInfo &lhs, const WeightChunkGroupInfo &rhs) {
-                    return lhs.io_order < rhs.io_order;
+                    return lhs.group_index < rhs.group_index;
                 });
 
                 if (!groups.empty())
                 {
-                    if (groups.front().io_order != 0)
+                    if (groups.front().group_index != 0)
                     {
                         std::cerr << "[JsonPrefetchPlanLoader] Invalid prefetch plan for mode " << mode
-                                  << ": io_order values must start at 0" << std::endl;
+                                  << ": group_index values must start at 0" << std::endl;
                         return false;
                     }
                     for (size_t idx = 1; idx < groups.size(); ++idx)
                     {
-                        if (groups[idx].io_order != groups[idx - 1].io_order + 1)
+                        if (groups[idx].group_index != groups[idx - 1].group_index + 1)
                         {
                             std::cerr << "[JsonPrefetchPlanLoader] Invalid prefetch plan for mode " << mode
-                                      << ": io_order=" << groups[idx].io_order
-                                      << " is not contiguous after " << groups[idx - 1].io_order << std::endl;
+                                      << ": group_index=" << groups[idx].group_index
+                                      << " is not contiguous after " << groups[idx - 1].group_index << std::endl;
                             return false;
                         }
                     }
@@ -455,7 +455,7 @@ namespace flash_slim
 
                 for (size_t group_index = 0; group_index < groups.size(); ++group_index)
                 {
-                    groups[group_index].range_index = group_index;
+                    groups[group_index].group_index = group_index;
                 }
             }
 
@@ -594,9 +594,9 @@ namespace flash_slim
             return it->second;
         }
 
-        ModeChunkPlan JsonPrefetchPlanLoader::BuildModeChunkPlan(const std::string &mode) const
+        JsonPrefetchPlanLoader::ModeChunkPlan JsonPrefetchPlanLoader::BuildModeChunkPlan(const std::string &mode) const
         {
-            ModeChunkPlan plan;
+            JsonPrefetchPlanLoader::ModeChunkPlan plan;
             auto chunks_it = weight_chunks_.find(mode);
             if (chunks_it != weight_chunks_.end())
             {
@@ -652,7 +652,7 @@ namespace flash_slim
                         if (chunk_it == chunk_index_to_vector_index.end())
                         {
                             std::cerr << "[JsonPrefetchPlanLoader] Warning: chunk_index " << chunk_index
-                                      << " referenced by io_order " << group.io_order
+                                          << " referenced by group_index " << group.group_index
                                       << " not found in weight_chunks for mode " << mode << std::endl;
                             continue;
                         }
@@ -677,8 +677,8 @@ namespace flash_slim
                     }
                     else if (max_extent > 0 && group.total_aligned_size < max_extent)
                     {
-                        std::cerr << "[JsonPrefetchPlanLoader] Warning: total_aligned_size for io_order "
-                                  << group.io_order << " (" << group.total_aligned_size
+                        std::cerr << "[JsonPrefetchPlanLoader] Warning: total_aligned_size for group_index "
+                                  << group.group_index << " (" << group.total_aligned_size
                                   << ") smaller than derived extent (" << max_extent
                                   << "). Using derived value.\n";
                         group.total_aligned_size = max_extent;

@@ -27,8 +27,11 @@
 namespace flash_slim {
 namespace streaming {
 
-
 using ProviderMode = tflite::xnnpack::StreamingWeightCacheProvider::ProviderMode;
+
+// Forward declaration
+struct WeightChunkInfo;
+struct WeightChunkGroupInfo;
 
 struct WeightChunkInfo {
     size_t chunk_index;
@@ -38,16 +41,21 @@ struct WeightChunkInfo {
     size_t origin_offset;
     size_t origin_size;
     size_t weights_id;
+    
+    // Group reference per mode (PREFILL=0, DECODE=1)
+    std::array<const WeightChunkGroupInfo*, 2> group_per_mode{nullptr, nullptr};
 };
 
 struct WeightChunkGroupInfo {
-  size_t range_index = std::numeric_limits<size_t>::max();
-  size_t io_order = 0;
+  size_t group_index = std::numeric_limits<size_t>::max();
   size_t start_origin_offset = 0;
   size_t start_aligned_offset = 0;
   size_t total_aligned_size = 0;
   std::vector<size_t> chunk_indices;
   std::vector<size_t> chunk_relative_offsets;
+  
+  // Reverse index: chunk_index -> relative_offset (O(1) lookup optimization)
+  std::unordered_map<size_t, size_t> chunk_to_relative_offset;
 };
 
 class WeightChunkPrefetcher {
@@ -59,10 +67,16 @@ class WeightChunkPrefetcher {
     UNINITIALIZED,
   };
 
+  enum class IOEngineType {
+    IO_URING,
+    PARALLEL_PREAD,
+    UNINITIALIZED,
+  };
+
   struct PrefetchPlan {
     std::unordered_map<size_t, size_t> offset_to_index;  // origin_offset -> index
     std::vector<WeightChunkInfo> chunks;                 // index -> chunk metadata
-    std::vector<WeightChunkGroupInfo> chunk_groups;        // io_order-sorted chunk groups
+  std::vector<WeightChunkGroupInfo> chunk_groups;        // group_index-sorted chunk groups
   };
 
   struct PrefetchRequest {
@@ -73,9 +87,28 @@ class WeightChunkPrefetcher {
     PrefetchMode mode = PrefetchMode::UNINITIALIZED;
   };
 
+  struct ChunkIOState {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::atomic<bool> in_flight{false};
+    std::atomic<bool> ready{false};
+    bool success = false;
+  };
+
+  struct ChunkGroupIOState {
+    std::atomic<bool> in_flight{false};
+  };
+
   WeightChunkPrefetcher() = default;
   ~WeightChunkPrefetcher();
   
+  // Configure IO Engine type and parameters
+  void ConfigureIOEngine(
+    const std::string& io_engine_mode_str,
+    unsigned iouring_ring_depth, size_t iouring_subread_bytes,
+    size_t pread_min_block_size, size_t pread_max_threads);
+
+  IOEngineType GetIOEngineType() const { return io_engine_type_; }
 
   void ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1, size_t size1);
 
@@ -151,44 +184,51 @@ class WeightChunkPrefetcher {
 
   const std::vector<WeightChunkInfo>& GetIndexToChunks() const { return index_to_chunks_; }
 
+  // Lookup chunk info by offset (performs mode->index conversion internally)
   const WeightChunkInfo* LookupChunkInfo(PrefetchMode mode, size_t offset) const;
+  
+  // Optimized overload: accepts pre-computed mode_idx to avoid redundant conversion
+  const WeightChunkInfo* LookupChunkInfoByOffset(int mode_idx, size_t offset) const;
 
   const WeightChunkInfo* GetChunkInfoByIndex(size_t chunk_index) const;
-  const WeightChunkGroupInfo* GetChunkGroupByChunkIndex(PrefetchMode mode, size_t chunk_index) const;
   const WeightChunkGroupInfo* GetNextChunkGroup(PrefetchMode mode, size_t current_io_order,
                                                PrefetchMode* next_mode) const;
   
  private:
   static constexpr int kPrefetchPlanCount = 2;
-  struct PrefetchJob {
-    const WeightChunkGroupInfo* chunk_group = nullptr;
-    void* buffer_base = nullptr;
-    int direct_io_fd = -1;
-    int buffer_index = -1;
-    PrefetchMode mode = PrefetchMode::UNINITIALIZED;
-  };
+  
+  // IO Engine configuration
+  IOEngineType io_engine_type_ = IOEngineType::UNINITIALIZED;
+  
+  // io_uring specific parameters
+  unsigned iouring_ring_depth_ = 64;
+  size_t iouring_subread_bytes_ = 512 * 1024;
+  
+  // parallel_pread specific parameters
+  size_t pread_min_block_size_ = 512 * 1024;
+  size_t pread_max_threads_ = 4;
 
-  struct ChunkIOState {
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool in_flight = false;
-    bool ready = false;
-    bool success = false;
-  };
-
-  struct ChunkGroupIOState {
-    std::mutex mutex;
-    bool in_flight = false;
-  };
+  using PrefetchJob = PrefetchRequest;
 
   void ApplyWorkerAffinity();
   void ResetRuntimeState();
   void MarkJobCompleted(const PrefetchJob& job, bool success);
-  void WorkerLoop();
-  void RunAsyncWorkerLoop();
-  void RunSyncWorkerLoop();
+  
+  // State pre-allocation for lock-free runtime access
+  void PreallocateIOStates(int plan_idx);
+  
+  // io_uring specific methods
+  void StartIoUringWorker();
+  void RunIoUringSubmissionLoop();
+  void RunIoUringCompletionLoop();
+  
+  // parallel_pread specific methods
+  void StartParallelPreadWorker();
+  void RunParallelPreadWorkerLoop();
+  bool ExecuteParallelPread(int fd, void* buffer, size_t size, off_t offset);
   std::shared_ptr<ChunkIOState> GetChunkIOState(size_t chunk_index);
   std::shared_ptr<ChunkGroupIOState> GetChunkGroupIOState(PrefetchMode mode, size_t group_index);
+  void ResetChunkStates();
 
   PrefetchMode prefetch_mode_ = PrefetchMode::UNINITIALIZED;
 
@@ -196,23 +236,33 @@ class WeightChunkPrefetcher {
   std::array<bool, kPrefetchPlanCount> has_plan_{{false, false}};
   
   std::vector<WeightChunkInfo> index_to_chunks_;
+  
   std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_io_states_;
   std::array<std::unordered_map<size_t, std::shared_ptr<ChunkGroupIOState>>, kPrefetchPlanCount> index_to_group_io_states_;
   
+  // io_uring specific members
   std::unique_ptr<WeightChunkIOEngine> io_engine_;
   std::array<void*, 2> io_registered_buffers_{nullptr, nullptr};
   std::array<size_t, 2> io_registered_buffer_sizes_{0, 0};
   bool io_buffers_configured_ = false;
-  std::mutex io_config_mutex_;
-  std::mutex chunk_io_state_mutex_;
-  std::mutex group_io_state_mutex_;
+  
+  // Worker state
   std::deque<PrefetchJob> io_job_queue_;
-  std::thread io_worker_thread_;
-  std::mutex io_worker_mutex_;
+  std::thread io_submission_thread_;
+  std::thread io_completion_thread_;  // Only used by io_uring
+  std::vector<int> io_worker_cores_;
+  
   std::atomic<bool> io_worker_running_{false};
   std::atomic<bool> io_worker_stop_requested_{false};
-  std::condition_variable io_worker_cv_;
-  std::vector<int> io_worker_cores_;
+  
+  // Simplified mutex design: 3 mutexes only
+  mutable std::mutex state_mutex_;        // Protects all shared state (chunks, groups, config, affinity)
+  std::mutex queue_mutex_;                // Protects job queue only
+  std::mutex engine_mutex_;               // Protects io_engine_ operations (io_uring only)
+  
+  std::condition_variable io_submission_cv_;   // Submission loop 전용
+  std::condition_variable io_completion_cv_;   // Completion loop 전용 (io_uring only)
+  
 };
 
 using PrefetchMode = WeightChunkPrefetcher::PrefetchMode;

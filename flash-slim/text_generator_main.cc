@@ -26,6 +26,10 @@ ABSL_FLAG(std::string, csv_profile_output_path, "", "Path to save the profiling 
 ABSL_FLAG(std::string, prefetch_plan_path, "prefetch_plan.json", "Path to the weight chunk prefetch plan JSON file.");
 // TODO : add io_engine selection logic
 ABSL_FLAG(std::string, io_engine, "io_uring", "IO engine to use for weight chunk prefetching. Options: 'io_uring', 'pread'.");
+ABSL_FLAG(int, io_ring_depth, 64, "io_uring ring depth for weight chunk prefetching. Defaults to 64.");
+ABSL_FLAG(int, io_subread_bytes, 524288, "io_uring subread size in bytes for weight chunk prefetching. Defaults to 512KB (524288).");
+ABSL_FLAG(int, io_min_block_size, 524288, "Minimum block size in bytes for parallel pread. Defaults to 512KB (524288).");
+ABSL_FLAG(int, io_max_threads, 4, "Maximum number of threads for parallel pread. Defaults to 4.");
 
 
 #ifdef USE_WEIGHT_STREAMING    
@@ -97,6 +101,15 @@ int main(int argc, char *argv[])
     std::unique_ptr<StreamingWeightCacheProvider> weight_cache_provider = std::make_unique<StreamingWeightCacheProvider>();
     std::unique_ptr<WeightChunkController> weight_chunk_controller = std::make_unique<WeightChunkController>(weight_cache_provider.get());
     std::unique_ptr<WeightChunkPrefetcher> weight_chunk_prefetcher = std::make_unique<WeightChunkPrefetcher>();
+
+    // Configure IO engine parameters from flags
+    weight_chunk_prefetcher->ConfigureIOEngine(
+        static_cast<std::string>(absl::GetFlag(FLAGS_io_engine)),
+        static_cast<unsigned>(absl::GetFlag(FLAGS_io_ring_depth)),
+        static_cast<size_t>(absl::GetFlag(FLAGS_io_subread_bytes)),
+        static_cast<size_t>(absl::GetFlag(FLAGS_io_min_block_size)),
+        static_cast<size_t>(absl::GetFlag(FLAGS_io_max_threads))
+    );
 
     weight_cache_provider->OpenDirectIOFileDescriptor(absl::GetFlag(FLAGS_weight_cache_path));
     weight_chunk_controller->UpdateProviderMode(StreamingWeightCacheProvider::ProviderMode::RUNTIME);

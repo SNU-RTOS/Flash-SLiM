@@ -1,11 +1,10 @@
 #include "weight_chunk_io_engine.h"
 
 #include <algorithm>
+#include <atomic>
 #include <limits>
 
-#if defined(__linux__)
 #include <cerrno>
-#endif
 
 #include "tflite/minimal_logging.h"
 
@@ -21,7 +20,6 @@ bool WeightChunkIOEngine::Initialize(unsigned ring_depth, size_t subread_bytes, 
   ring_depth_ = ring_depth == 0 ? 16 : ring_depth;
   subread_bytes_ = subread_bytes == 0 ? 1024 * 1024 : subread_bytes;
 
-#if defined(__linux__)
   if (ready_) {
     Shutdown();
   }
@@ -60,14 +58,10 @@ bool WeightChunkIOEngine::Initialize(unsigned ring_depth, size_t subread_bytes, 
 
   ready_ = true;
   return true;
-#else
-  ready_ = false;
-  return false;
-#endif
+
 }
 
 void WeightChunkIOEngine::Shutdown() {
-#if defined(__linux__)
   if (ready_) {
     CollectCompletions(false);
     if (buffers_registered_) {
@@ -78,7 +72,6 @@ void WeightChunkIOEngine::Shutdown() {
     }
     io_uring_queue_exit(&ring_);
   }
-#endif
   ready_ = false;
   inflight_.clear();
   pending_completions_.clear();
@@ -91,7 +84,6 @@ bool WeightChunkIOEngine::HasPending() const {
 }
 
 bool WeightChunkIOEngine::Submit(const IORequest& request) {
-#if defined(__linux__)
   if (!ready_) {
     return false;
   }
@@ -137,10 +129,7 @@ bool WeightChunkIOEngine::Submit(const IORequest& request) {
 
   CollectCompletions(false);
   return true;
-#else
-  (void)request;
-  return false;
-#endif
+
 }
 
 void WeightChunkIOEngine::DrainCompletions(std::vector<Completion>* completions,
@@ -149,16 +138,12 @@ void WeightChunkIOEngine::DrainCompletions(std::vector<Completion>* completions,
     return;
   }
 
-#if defined(__linux__)
   if (ready_) {
     if (wait_for_events && pending_completions_.empty() && !inflight_.empty()) {
       CollectCompletions(true);
     }
     CollectCompletions(false);
   }
-#else
-  (void)wait_for_events;
-#endif
 
   while (!pending_completions_.empty()) {
     completions->push_back(pending_completions_.front());
@@ -167,16 +152,12 @@ void WeightChunkIOEngine::DrainCompletions(std::vector<Completion>* completions,
 }
 
 void WeightChunkIOEngine::Reset() {
-#if defined(__linux__)
   if (ready_) {
     CollectCompletions(false);
   }
-#endif
-  inflight_.clear();
-  pending_completions_.clear();
+
 }
 
-#if defined(__linux__)
 
 uint64_t WeightChunkIOEngine::PackTag(uint32_t chunk_index, uint16_t epoch,
                                       uint16_t sub_index) {
@@ -254,11 +235,16 @@ bool WeightChunkIOEngine::SubmitInternal(const IORequest& request) {
     return false;
   }
 
-  if (io_uring_submit(&ring_) < 0) {
+  // Submit to io_uring and ensure inflight_ is updated BEFORE returning
+  const int submit_result = io_uring_submit(&ring_);
+  if (submit_result < 0) {
     inflight_.erase(range_index);
     return false;
   }
 
+  // Memory barrier to ensure inflight_ update is visible to other threads
+  std::atomic_thread_fence(std::memory_order_release);
+  
   return true;
 }
 
@@ -346,7 +332,6 @@ bool WeightChunkIOEngine::ValidateRequestBuffer(const IORequest& request) const 
   return true;
 }
 
-#endif  // defined(__linux__)
 
 }  // namespace streaming
 }  // namespace flash_slim

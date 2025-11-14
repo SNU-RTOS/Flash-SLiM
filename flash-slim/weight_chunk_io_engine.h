@@ -13,9 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
-#if defined(__linux__)
 #include <liburing.h>
-#endif
 
 #include "tflite/delegates/xnnpack/streaming_weight_cache.h"
 
@@ -63,14 +61,12 @@ class WeightChunkIOEngine {
     bool error = false;
   };
 
-#if defined(__linux__)
   static uint64_t PackTag(uint32_t chunk_index, uint16_t epoch, uint16_t sub_index);
   static void UnpackTag(uint64_t tag, uint32_t* chunk_index, uint16_t* epoch, uint16_t* sub_index);
 
   bool SubmitInternal(const IORequest& request);
   void CollectCompletions(bool wait_for_one);
   void ProcessCqe(struct io_uring_cqe* cqe);
-#endif
 
   struct RegisteredBuffer {
     void* base = nullptr;
@@ -83,9 +79,7 @@ class WeightChunkIOEngine {
   unsigned ring_depth_ = 32;
   size_t subread_bytes_ = 256 * 1024;
 
-#if defined(__linux__)
   struct io_uring ring_ {};
-#endif
 
   std::array<RegisteredBuffer, 2> registered_buffers_{};
   bool buffers_registered_ = false;

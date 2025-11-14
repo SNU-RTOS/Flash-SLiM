@@ -39,6 +39,15 @@ class PrefetchPlanner:
         base_dir = os.path.dirname(self.cmt_path) or os.getcwd()
         return os.path.join(base_dir, path)
 
+    def _resolve_buffer_size(self) -> int:
+        key = "weight_chunk_buffer_size"
+        if key in self.metadata:
+            return _coerce_to_int(self.metadata.get(key), 0)
+        return 0
+
+    def _resolve_default_compute_ms(self) -> float:
+        return _coerce_to_float(self.metadata.get("default_compute_ms"), 0.0)
+
     def load_cmt(self) -> None:
         print(
             f"[PrefetchPlanner] Loading Weight Chunk Metadata Table from: {self.cmt_path}"
@@ -171,45 +180,26 @@ class PrefetchPlanner:
             json.dump(plan.to_dict(), sink, indent=2)
         print(f"[PrefetchPlanner] Prefetch plan saved to {output_path}")
 
+    def create_strategy(self, strategy_id: str) -> PlanningStrategy:
+        normalized = strategy_id.lower()
+        if normalized == "simple":
+            return SimplePlanningStrategy()
 
-def _resolve_buffer_size(planner: PrefetchPlanner) -> int:
-    # Support multiple possible metadata keys (legacy and current)
-    key = "weight_chunk_buffer_size"
-    if key in planner.metadata:
-        return _coerce_to_int(planner.metadata.get(key), 0)
-    return 0
-
-
-def _resolve_default_compute_ms(planner: PrefetchPlanner) -> float:
-    return _coerce_to_float(planner.metadata.get("default_compute_ms"), 0.0)
-
-
-def create_strategy(
-    args: argparse.Namespace, planner: PrefetchPlanner
-) -> PlanningStrategy:
-    strategy_id = args.strategy.lower()
-
-    if strategy_id == "simple":
-        return SimplePlanningStrategy()
-
-    if strategy_id == "rechunk":
-        buffer_size = _resolve_buffer_size(planner)
-
-        if buffer_size <= 0:
-            raise ValueError(
-                "Re-chunk strategy requires a positive max_buffer_size in metadata"
+        if normalized == "rechunk":
+            buffer_size = self._resolve_buffer_size()
+            if buffer_size <= 0:
+                raise ValueError(
+                    "Re-chunk strategy requires a positive max_buffer_size in metadata"
+                )
+            fallback_estimator = BandwidthIoTimeEstimator(bandwidth_bytes_per_sec=1e9)
+            io_estimator = DirectIoTimeEstimator(fallback=fallback_estimator)
+            return RechunkPlanningStrategy(
+                max_buffer_size=buffer_size,
+                io_estimator=io_estimator,
+                default_compute_ms=self._resolve_default_compute_ms(),
             )
 
-        fallback_estimator = BandwidthIoTimeEstimator(bandwidth_bytes_per_sec=1e9)
-        io_estimator = DirectIoTimeEstimator(fallback=fallback_estimator)
-
-        return RechunkPlanningStrategy(
-            max_buffer_size=buffer_size,
-            io_estimator=io_estimator,
-            default_compute_ms=_resolve_default_compute_ms(planner),
-        )
-
-    raise ValueError(f"Unknown planning strategy: {args.strategy}")
+        raise ValueError(f"Unknown planning strategy: {strategy_id}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -246,7 +236,7 @@ def run_prefetch_planner(args: argparse.Namespace) -> PrefetchPlan:
     planner.load_profile_logs(args.profile_pattern)
 
     context = planner.build_context()
-    strategy = create_strategy(args, planner)
+    strategy = planner.create_strategy(args.strategy)
 
     print("[PrefetchPlanner] Building prefetch plan...")
     plan = strategy.build(context)
@@ -254,9 +244,11 @@ def run_prefetch_planner(args: argparse.Namespace) -> PrefetchPlan:
     planner.save_prefetch_plan(plan, args.output)
     return plan
 
+
 def main() -> None:
     args = parse_args()
     run_prefetch_planner(args)
+
 
 if __name__ == "__main__":
     main()

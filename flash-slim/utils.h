@@ -49,12 +49,10 @@ limitations under the License.
 #include "tflite/signature_runner.h"
 
 
-#if defined(__linux__)
 #include <pthread.h>
 #include <sched.h>
 #include <errno.h>
 #include <string.h>
-#endif
 
 
 // A minimal check macro.

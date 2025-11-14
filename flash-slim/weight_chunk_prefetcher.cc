@@ -15,25 +15,13 @@
 #include <unistd.h>
 #include <vector>
 
-#if defined(__linux__)
 #include <pthread.h>
-#endif
 
 #include "tflite/minimal_logging.h"
 #include "weight_chunk_prefetcher.h"
 
 namespace flash_slim {
 namespace streaming {
-
-
-static constexpr unsigned kDefaultRingDepth = 64;
-static constexpr size_t kDefaultSubreadBytes = 512 * 1024;
-
-// static constexpr unsigned kDefaultRingDepth = 128;
-// static constexpr size_t kDefaultSubreadBytes = 4 * 1024 * 1024;
-
-// static constexpr unsigned kDefaultRingDepth = 128;
-// static constexpr size_t kDefaultSubreadBytes = 2 * 1024 * 1024;
 
 static constexpr uint32_t kPlanIndexShift = 30;
 static constexpr size_t kPlanIndexMask = (static_cast<size_t>(1) << kPlanIndexShift) - static_cast<size_t>(1);
@@ -50,22 +38,352 @@ static inline size_t DecodeRangeIndex(size_t encoded) {
   return encoded & kPlanIndexMask;
 }
 
+/** =============== WeightChunkPrefetcher Class =============== */
+WeightChunkPrefetcher::~WeightChunkPrefetcher() { StopWorker(); }
 
-static constexpr size_t kMinBlockSize = 512 * 1024;
-static constexpr size_t kMaxThreads = 4;
+std::string WeightChunkPrefetcher::GetPrefetchModeString() const {
+  return std::string(PrefetchModeName(prefetch_mode_));
+}
 
-static inline bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
 
+// ============================================================================
+// Configuration Methods
+// ============================================================================
+void WeightChunkPrefetcher::ConfigureIOEngine(
+    const std::string& io_engine_mode_str,
+    unsigned iouring_ring_depth, size_t iouring_subread_bytes,
+    size_t pread_min_block_size, size_t pread_max_threads) {
+
+  if (io_engine_mode_str == "io_uring") {
+    io_engine_type_ = IOEngineType::IO_URING;
+    iouring_ring_depth_ = iouring_ring_depth;
+    iouring_subread_bytes_ = iouring_subread_bytes;
+    
+    std::cout << "[WeightChunkPrefetcher] Configured IO Engine - io_uring"
+              << "\n    iouring_ring_depth=" << iouring_ring_depth_
+              << "\n    iouring_subread_bytes=" << iouring_subread_bytes_ << std::endl;
+
+  } else if (io_engine_mode_str == "parallel_pread") {
+    io_engine_type_ = IOEngineType::PARALLEL_PREAD;
+    pread_min_block_size_ = pread_min_block_size;
+    pread_max_threads_ = pread_max_threads;
+    
+    std::cout << "[WeightChunkPrefetcher] Configured IO Engine - parallel_pread"
+              << "\n    pread_min_block_size=" << pread_min_block_size_
+              << "\n    pread_max_threads=" << pread_max_threads_ << std::endl;
+              
+  } else {
+    std::cout << "[ERROR] WeightChunkPrefetcher: unknown IO engine mode '" 
+              << io_engine_mode_str << "'; exiting." << std::endl;
+    exit(1);
+  }
+}
+
+void WeightChunkPrefetcher::ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1,
+                                               size_t size1) {
+  // Note: This is only required for io_uring mode
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  io_registered_buffers_[0] = buffer0;
+  io_registered_buffer_sizes_[0] = size0;
+  io_registered_buffers_[1] = buffer1;
+  io_registered_buffer_sizes_[1] = size1;
+  io_buffers_configured_ = buffer0 != nullptr && buffer1 != nullptr && size0 > 0 && size1 > 0;
+}
+
+void WeightChunkPrefetcher::SetWorkerThreadAffinity(const std::vector<int>& cores) {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  io_worker_cores_ = cores;
+}
+
+void WeightChunkPrefetcher::ApplyWorkerAffinity() {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  if (io_worker_cores_.empty()) {
+    return;
+  }
+
+  cpu_set_t set;
+  CPU_ZERO(&set);
+  for (int core : io_worker_cores_) {
+    if (core >= 0) {
+      CPU_SET(static_cast<unsigned long>(core), &set);
+    }
+  }
+  
+  if (io_submission_thread_.joinable()) {
+    pthread_setaffinity_np(io_submission_thread_.native_handle(), sizeof(set), &set);
+  }
+  
+  if (io_engine_type_ == IOEngineType::IO_URING && io_completion_thread_.joinable()) {
+    pthread_setaffinity_np(io_completion_thread_.native_handle(), sizeof(set), &set);
+  }
+}
+
+// ============================================================================
+// Worker Management Methods
+// ============================================================================
+
+void WeightChunkPrefetcher::StartWorker() {
+  bool expected = false;
+  if (!io_worker_running_.compare_exchange_strong(expected, true)) {
+    return;  // already running
+  }
+
+  io_worker_stop_requested_.store(false, std::memory_order_relaxed);
+
+  // Dispatch based on configured IO engine type
+  if (io_engine_type_ == IOEngineType::IO_URING) {
+    StartIoUringWorker();
+  } else if (io_engine_type_ == IOEngineType::PARALLEL_PREAD) {
+    StartParallelPreadWorker();
+  } else {
+    io_worker_running_.store(false, std::memory_order_relaxed);
+    std::cout << "[ERROR] WeightChunkPrefetcher: IO engine type not configured; call ConfigureIOEngine() first" << std::endl;
+    return;
+  }
+
+  ApplyWorkerAffinity();
+}
+
+void WeightChunkPrefetcher::StopWorker() {
+  if (!io_worker_running_.exchange(false)) {
+    return;
+  }
+
+  io_worker_stop_requested_.store(true, std::memory_order_relaxed);
+  
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    io_job_queue_.clear();
+  }
+  
+  io_submission_cv_.notify_all();
+  if (io_engine_type_ == IOEngineType::IO_URING) {
+    io_completion_cv_.notify_all();
+  }
+
+  if (io_submission_thread_.joinable()) io_submission_thread_.join();
+  if (io_completion_thread_.joinable()) io_completion_thread_.join();
+
+  io_worker_stop_requested_.store(false, std::memory_order_relaxed);
+
+  if (io_engine_type_ == IOEngineType::IO_URING && io_engine_) {
+    io_engine_->Shutdown();
+  }
+
+  ResetChunkStates();
+}
+
+
+// * IO Engine Implementations * //
+
+// ============================================================================
+// io_uring Implementation
+// ============================================================================
+
+void WeightChunkPrefetcher::StartIoUringWorker() {
+  void* buffer0 = nullptr;
+  void* buffer1 = nullptr;
+  size_t size0 = 0;
+  size_t size1 = 0;
+  bool configured = false;
+  
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    buffer0 = io_registered_buffers_[0];
+    buffer1 = io_registered_buffers_[1];
+    size0 = io_registered_buffer_sizes_[0];
+    size1 = io_registered_buffer_sizes_[1];
+    configured = io_buffers_configured_;
+  }
+
+  if (!configured) {
+    io_worker_running_.store(false, std::memory_order_relaxed);
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO,
+                    "WeightChunkPrefetcher: IO buffers not configured");
+    return;
+  }
+
+  if (!io_engine_) {
+    io_engine_ = std::make_unique<WeightChunkIOEngine>();
+  }
+
+  if (io_engine_ && !io_engine_->IsReady()) {
+    std::cout << "[INFO] Initializing io_uring engine..." << std::endl;
+    if (!io_engine_->Initialize(iouring_ring_depth_, iouring_subread_bytes_, 
+                                buffer0, size0, buffer1, size1)) {
+      std::cout << "[ERROR] Failed to initialize io_uring engine" << std::endl;
+      io_worker_running_.store(false, std::memory_order_relaxed);
+      return;
+    }
+  }
+
+  if (io_engine_ && io_engine_->IsReady()) {
+    std::cout << "[INFO] Starting io_uring submission and completion threads" << std::endl;
+    io_submission_thread_ = std::thread([this]() { RunIoUringSubmissionLoop(); });
+    io_completion_thread_ = std::thread([this]() { RunIoUringCompletionLoop(); });
+  } else {
+    io_worker_running_.store(false, std::memory_order_relaxed);
+  }
+}
+
+void WeightChunkPrefetcher::RunIoUringSubmissionLoop() {
+  while (true) {
+    PrefetchJob job;
+    
+    {
+      std::unique_lock<std::mutex> lock(queue_mutex_);
+      io_submission_cv_.wait(lock, [this]() {
+        return io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty();
+      });
+
+      if (io_worker_stop_requested_.load(std::memory_order_relaxed) && io_job_queue_.empty()) {
+        break;
+      }
+      
+      if (io_job_queue_.empty()) continue;
+      
+      job = std::move(io_job_queue_.front());
+      io_job_queue_.pop_front();
+    }
+
+    const WeightChunkGroupInfo* group = job.chunk_group;
+    if (!group || job.buffer_index < 0) {
+      MarkJobCompleted(job, false);
+      continue;
+    }
+
+    const int plan_index = PrefetchModeToIndex(job.mode);
+    if (plan_index < 0) {
+      MarkJobCompleted(job, false);
+      continue;
+    }
+
+    WeightChunkIOEngine::IORequest request;
+    request.range_index = EncodeRangeId(plan_index, group->group_index);
+    request.aligned_offset = group->start_aligned_offset;
+    request.aligned_size = group->total_aligned_size;
+    request.buffer_base = job.buffer_base;
+    request.direct_io_fd = job.direct_io_fd;
+    request.buffer_index = job.buffer_index;
+
+    bool submitted = false;
+    {
+      std::lock_guard<std::mutex> lock(engine_mutex_);
+      submitted = io_engine_->Submit(request);
+      if (submitted) {
+        io_completion_cv_.notify_one();
+      }
+    }
+    
+    if (!submitted) {
+      std::lock_guard<std::mutex> lock(queue_mutex_);
+      io_job_queue_.push_front(std::move(job));
+    }
+  }
+}
+
+void WeightChunkPrefetcher::RunIoUringCompletionLoop() {
+  while (true) {
+    std::vector<WeightChunkIOEngine::Completion> completions;
+    
+    bool has_pending = false;
+    bool queue_empty = false;
+    
+    {
+      std::unique_lock<std::mutex> lock(engine_mutex_);
+      
+      io_completion_cv_.wait_for(lock, std::chrono::milliseconds(5), [this]() {
+        return io_worker_stop_requested_.load(std::memory_order_relaxed) || 
+               (io_engine_ && io_engine_->HasPending());
+      });
+      
+      if (io_worker_stop_requested_.load(std::memory_order_relaxed)) {
+        std::lock_guard<std::mutex> q_lock(queue_mutex_);
+        if (io_job_queue_.empty() && (!io_engine_ || !io_engine_->HasPending())) {
+          break;
+        }
+      }
+      
+      has_pending = io_engine_ && io_engine_->HasPending();
+    }
+    
+    if (!has_pending) continue;
+    
+    if (io_engine_) {
+      io_engine_->DrainCompletions(&completions, true);
+    }
+
+    for (const auto& completion : completions) {
+      const int plan_index = DecodePlanIndex(completion.range_index);
+      if (plan_index < 0 || plan_index >= 2 || !has_plan_[plan_index]) {
+        continue;
+      }
+      
+      const size_t range_index = DecodeRangeIndex(completion.range_index);
+      const auto& plan = prefetch_plans_[plan_index];
+      if (range_index >= plan.chunk_groups.size()) {
+        continue;
+      }
+      
+      const auto mode = IndexToPrefetchMode(plan_index);
+      if (!mode.has_value()) {
+        continue;
+      }
+      
+      PrefetchJob job_snapshot;
+      job_snapshot.chunk_group = &plan.chunk_groups[range_index];
+      job_snapshot.mode = *mode;
+      MarkJobCompleted(job_snapshot, completion.success);
+    }
+  }
+}
+
+// ============================================================================
+// parallel_pread Implementation
+// ============================================================================
+
+void WeightChunkPrefetcher::StartParallelPreadWorker() {
+  std::cout << "[INFO] Starting parallel pread worker thread" << std::endl;
+  io_submission_thread_ = std::thread([this]() { RunParallelPreadWorkerLoop(); });
+}
+
+void WeightChunkPrefetcher::RunParallelPreadWorkerLoop() {
+  while (true) {
+    PrefetchJob job;
+    {
+      std::unique_lock<std::mutex> lock(queue_mutex_);
+      io_submission_cv_.wait(lock, [this]() {
+        return io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty();
+      });
+
+      if (io_worker_stop_requested_.load(std::memory_order_relaxed) && io_job_queue_.empty()) {
+        break;
+      }
+
+      job = std::move(io_job_queue_.front());
+      io_job_queue_.pop_front();
+    }
+
+    const WeightChunkGroupInfo* group = job.chunk_group;
+    const bool success = group && ExecuteParallelPread(
+        job.direct_io_fd, job.buffer_base, group->total_aligned_size,
+        static_cast<off_t>(group->start_aligned_offset));
+
+    MarkJobCompleted(job, success);
+  }
+}
+
+bool WeightChunkPrefetcher::ExecuteParallelPread(int fd, void* buffer, size_t size, off_t offset) {
   if (fd < 0 || buffer == nullptr || size == 0) {
     return false;
   }
 
-  if (size < kMinBlockSize * 2) {
+  if (size < pread_min_block_size_ * 2) {
     const ssize_t bytes_read = pread(fd, buffer, size, offset);
     return bytes_read > 0 && static_cast<size_t>(bytes_read) == size;
   }
 
-  const size_t num_threads = std::min(kMaxThreads, size / kMinBlockSize);
+  const size_t num_threads = std::min(pread_max_threads_, size / pread_min_block_size_);
   const size_t block_size = size / num_threads;
   const size_t remainder = size % num_threads;
 
@@ -95,22 +413,9 @@ static inline bool ExecuteIO(int fd, void* buffer, size_t size, off_t offset) {
   return all_success;
 }
 
-WeightChunkPrefetcher::~WeightChunkPrefetcher() { StopWorker(); }
-
-void WeightChunkPrefetcher::ConfigureIOBuffers(void* buffer0, size_t size0, void* buffer1,
-                                               size_t size1) {
-  std::lock_guard<std::mutex> lock(io_config_mutex_);
-  io_registered_buffers_[0] = buffer0;
-  io_registered_buffer_sizes_[0] = size0;
-  io_registered_buffers_[1] = buffer1;
-  io_registered_buffer_sizes_[1] = size1;
-  io_buffers_configured_ = buffer0 != nullptr && buffer1 != nullptr && size0 > 0 && size1 > 0;
-}
-
-void WeightChunkPrefetcher::SetWorkerThreadAffinity(const std::vector<int>& cores) {
-    std::lock_guard<std::mutex> lock(io_worker_mutex_);
-    io_worker_cores_ = cores;
-}
+// ============================================================================
+// Prefetch Plan Management Methods
+// ============================================================================
 
 void WeightChunkPrefetcher::SetPrefetchPlan(
   PrefetchMode mode, std::unordered_map<size_t, size_t>&& offset_to_index,
@@ -130,7 +435,7 @@ void WeightChunkPrefetcher::SetPrefetchPlan(
 
   std::sort(plan.chunk_groups.begin(), plan.chunk_groups.end(),
             [](const WeightChunkGroupInfo& lhs, const WeightChunkGroupInfo& rhs) {
-              return lhs.io_order < rhs.io_order;
+              return lhs.group_index < rhs.group_index;
             });
 
   for (size_t group_index = 0; group_index < plan.chunk_groups.size(); ++group_index) {
@@ -142,20 +447,33 @@ void WeightChunkPrefetcher::SetPrefetchPlan(
           "undefined.",
           group_index, kPlanIndexMask);
     }
-    if (group.io_order != group_index) {
+    if (group.group_index != group_index) {
       TFLITE_LOG_PROD(
           tflite::TFLITE_LOG_WARNING,
-          "WeightChunkPrefetcher: adjusting io_order from %zu to %zu to maintain contiguity.",
-          group.io_order, group_index);
-      group.io_order = group_index;
+          "WeightChunkPrefetcher: adjusting group_index from %zu to %zu to maintain contiguity.",
+          group.group_index, group_index);
+      group.group_index = group_index;
     }
-    group.range_index = group_index;
+    
+    // Build reverse index within group: chunk_index -> relative_offset
+    group.chunk_to_relative_offset.clear();
+    for (size_t i = 0; i < group.chunk_indices.size(); ++i) {
+      if (i < group.chunk_relative_offsets.size()) {
+        group.chunk_to_relative_offset[group.chunk_indices[i]] = group.chunk_relative_offsets[i];
+      }
+    }
   }
 
   has_plan_[idx] = true;
   index_to_group_io_states_[idx].clear();
+  
+  // Pre-allocate all IO states for lock-free runtime access
+  PreallocateIOStates(idx);
+  
   ResetRuntimeState();
 }
+
+
 
 bool WeightChunkPrefetcher::HasPrefetchPlan(PrefetchMode mode) const {
   const int idx = PrefetchModeToIndex(mode);
@@ -205,7 +523,11 @@ void WeightChunkPrefetcher::BuildIndexToChunksFromPlans() {
     if (!has_plan_[i]) {
       continue;
     }
-    for (const auto& chunk : prefetch_plans_[i].chunks) {
+    
+    auto& plan = prefetch_plans_[i];
+    
+    // First pass: copy chunk data
+    for (const auto& chunk : plan.chunks) {
       const size_t idx = chunk.chunk_index;
       auto& destination = index_to_chunks_[idx];
       if (destination.chunk_index == SIZE_MAX) {
@@ -219,16 +541,179 @@ void WeightChunkPrefetcher::BuildIndexToChunksFromPlans() {
             idx, destination.origin_offset, chunk.origin_offset);
       }
     }
+    
+    // Second pass: set group pointers
+    for (const auto& group : plan.chunk_groups) {
+      for (const size_t chunk_index : group.chunk_indices) {
+        if (chunk_index < index_to_chunks_.size()) {
+          index_to_chunks_[chunk_index].group_per_mode[i] = &group;
+        }
+      }
+    }
   }
 }
 
-std::string WeightChunkPrefetcher::GetPrefetchModeString() const {
-  return std::string(PrefetchModeName(prefetch_mode_));
+
+// ============================================================================
+// State Management Methods
+// ============================================================================
+
+std::shared_ptr<WeightChunkPrefetcher::ChunkIOState> WeightChunkPrefetcher::GetChunkIOState(size_t chunk_index) {
+  // Lock-free read for pre-allocated states (hot path)
+  // Safe because index_to_chunk_io_states_ is not modified after PreallocateIOStates()
+  auto it = index_to_chunk_io_states_.find(chunk_index);
+  if (it != index_to_chunk_io_states_.end()) {
+    return it->second;
+  }
+  
+  // Cold path: state not pre-allocated, need lock for insertion
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  // Double-check after acquiring lock (another thread might have inserted)
+  it = index_to_chunk_io_states_.find(chunk_index);
+  if (it != index_to_chunk_io_states_.end()) {
+    return it->second;
+  }
+  
+  // Create on-demand (should rarely happen if pre-allocation works)
+  auto& state = index_to_chunk_io_states_[chunk_index];
+  state = std::make_shared<ChunkIOState>();
+  return state;
 }
+
+std::shared_ptr<WeightChunkPrefetcher::ChunkGroupIOState> WeightChunkPrefetcher::GetChunkGroupIOState(
+    PrefetchMode mode, size_t group_index) {
+  const int plan_idx = PrefetchModeToIndex(mode);
+  if (plan_idx < 0 || plan_idx >= static_cast<int>(index_to_group_io_states_.size())) {
+    static auto dummy = std::make_shared<ChunkGroupIOState>();
+    return dummy;
+  }
+  
+  // Lock-free read for pre-allocated states (hot path)
+  // Safe because index_to_group_io_states_ is not modified after PreallocateIOStates()
+  auto& states_map = index_to_group_io_states_[plan_idx];
+  auto it = states_map.find(group_index);
+  if (it != states_map.end()) {
+    return it->second;
+  }
+  
+  // Cold path: state not pre-allocated, need lock for insertion
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  // Double-check after acquiring lock
+  it = states_map.find(group_index);
+  if (it != states_map.end()) {
+    return it->second;
+  }
+  
+  // Create on-demand
+  auto& state = states_map[group_index];
+  state = std::make_shared<ChunkGroupIOState>();
+  return state;
+}
+
+
+void WeightChunkPrefetcher::PreallocateIOStates(int plan_idx) {
+  if (plan_idx < 0 || plan_idx >= kPrefetchPlanCount) {
+    return;
+  }
+  
+  const auto& plan = prefetch_plans_[plan_idx];
+  
+  // Pre-allocate chunk IO states
+  for (const auto& chunk : plan.chunks) {
+    if (index_to_chunk_io_states_.find(chunk.chunk_index) == index_to_chunk_io_states_.end()) {
+      index_to_chunk_io_states_[chunk.chunk_index] = std::make_shared<ChunkIOState>();
+    }
+  }
+  
+  // Pre-allocate group IO states
+  for (const auto& group : plan.chunk_groups) {
+    if (index_to_group_io_states_[plan_idx].find(group.group_index) == 
+        index_to_group_io_states_[plan_idx].end()) {
+      index_to_group_io_states_[plan_idx][group.group_index] = std::make_shared<ChunkGroupIOState>();
+    }
+  }
+}
+
+void WeightChunkPrefetcher::ResetRuntimeState() {
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    io_job_queue_.clear();
+  }
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    for (auto& states : index_to_group_io_states_) {
+      states.clear();
+    }
+  }
+  ResetChunkStates();
+}
+
+void WeightChunkPrefetcher::ResetChunkStates() {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  for (auto& [_, state] : index_to_chunk_io_states_) {
+    if (!state) continue;
+    {
+      std::lock_guard<std::mutex> s_lock(state->mutex);
+      state->in_flight = false;
+      state->ready = false;
+      state->success = false;
+    }
+    state->cv.notify_all();
+  }
+}
+
+// ============================================================================
+// Job Completion Methods
+// ============================================================================
+void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool success) {
+  const WeightChunkGroupInfo* group = job.chunk_group;
+  if (!group) {
+    return;
+  }
+
+  // Update chunk states atomically (lock-free)
+  for (const size_t chunk_index : group->chunk_indices) {
+    auto state = GetChunkIOState(chunk_index);
+    if (!state) {
+      continue;
+    }
+    {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      state->success = success;
+    }
+    state->ready.store(true, std::memory_order_release);
+    state->in_flight.store(false, std::memory_order_release);
+    state->cv.notify_all();
+  }
+
+  // Update group state atomically (lock-free)
+  auto group_state = GetChunkGroupIOState(job.mode, group->group_index);
+  if (group_state) {
+    group_state->in_flight.store(false, std::memory_order_release);
+  }
+
+  if (!success && !group->chunk_indices.empty()) {
+    const auto* info = GetChunkInfoByIndex(group->chunk_indices.front());
+    const size_t origin_offset = info ? info->origin_offset : 0;
+    const size_t chunk_index = info ? info->chunk_index : group->chunk_indices.front();
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
+          "WeightChunkPrefetcher: prefetch failed (group_index=%zu, chunk_index=%zu, "
+          "origin_offset=%zu)",
+          group->group_index, chunk_index, origin_offset);
+  }
+}
+
+// ============================================================================
+// Controller Methods
+// ============================================================================
 
 const WeightChunkInfo* WeightChunkPrefetcher::LookupChunkInfo(PrefetchMode mode,
                                                                  size_t offset) const {
   const int idx = PrefetchModeToIndex(mode);
+  return LookupChunkInfoByOffset(idx, offset);
+}
+
+const WeightChunkInfo* WeightChunkPrefetcher::LookupChunkInfoByOffset(int idx, size_t offset) const {
   if (idx < 0 || !has_plan_[idx]) {
     return nullptr;
   }
@@ -264,30 +749,10 @@ const WeightChunkInfo* WeightChunkPrefetcher::GetChunkInfoByIndex(size_t chunk_i
   return &info;
 }
 
-const WeightChunkGroupInfo* WeightChunkPrefetcher::GetChunkGroupByChunkIndex(
-    PrefetchMode mode, size_t chunk_index) const {
-  const int plan_idx = PrefetchModeToIndex(mode);
-  if (plan_idx < 0 || !has_plan_[plan_idx]) {
-    return nullptr;
-  }
-  const auto& plan = prefetch_plans_[plan_idx];
-  for (size_t i = 0; i < plan.chunk_groups.size(); ++i) {
-    const auto& group = plan.chunk_groups[i];
-    if (std::find(group.chunk_indices.begin(), group.chunk_indices.end(), chunk_index) !=
-        group.chunk_indices.end()) {
-      return &plan.chunk_groups[i];
-    }
-  }
-
-  TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                  "WeightChunkPrefetcher: chunk_index=%zu not found in group list for mode %d",
-                  chunk_index, plan_idx);
-  return nullptr;
-}
 
 
 const WeightChunkGroupInfo* WeightChunkPrefetcher::GetNextChunkGroup(
-    PrefetchMode mode, size_t current_io_order, PrefetchMode* next_mode) const {
+    PrefetchMode mode, size_t current_group_index, PrefetchMode* next_mode) const {
 
   const int plan_idx = PrefetchModeToIndex(mode);
   if (plan_idx < 0 || !has_plan_[plan_idx]) {
@@ -295,473 +760,127 @@ const WeightChunkGroupInfo* WeightChunkPrefetcher::GetNextChunkGroup(
   }
 
   const auto& plan = prefetch_plans_[plan_idx];
-    if (plan.chunk_groups.empty()) {
+  if (plan.chunk_groups.empty()) {
     return nullptr;
   }
 
-  const size_t next_index = current_io_order + 1;
   const size_t group_count = plan.chunk_groups.size();
-  const size_t target_io_order = next_index % group_count;
+  const size_t next_index = current_group_index + 1;
 
-  if (mode == PrefetchMode::PREFILL && next_index >= group_count) {  
-    const auto& decode_plan = prefetch_plans_[PrefetchModeToIndex(PrefetchMode::DECODE)];
-    *next_mode = PrefetchMode::DECODE;
-    return &decode_plan.chunk_groups.front();
-  } else if (target_io_order < plan.chunk_groups.size() &&
-    plan.chunk_groups[target_io_order].io_order == target_io_order) {
-    *next_mode = mode;
-    return &plan.chunk_groups[target_io_order];
-  } else {
-    std::cerr<<"[GetNextChunkGroup] Invalid target_io_order = " << target_io_order << "\n";
-    return nullptr;
+  // Check if we need to transition from PREFILL to DECODE
+  if (mode == PrefetchMode::PREFILL && next_index >= group_count) {
+    // Decode index is always 1 (no need for PrefetchModeToIndex call)
+    constexpr int decode_idx = 1;
+    if (has_plan_[decode_idx]) {
+      const auto& decode_plan = prefetch_plans_[decode_idx];
+      if (!decode_plan.chunk_groups.empty()) {
+        if (next_mode) {
+          *next_mode = PrefetchMode::DECODE;
+        }
+        return &decode_plan.chunk_groups.front();
+      }
+    }
+    // If no decode plan, wrap around to first group
+    if (next_mode) {
+      *next_mode = mode;
+    }
+    return &plan.chunk_groups.front();
   }
+
+  // Normal case: next group within same mode
+  const size_t target_index = next_index % group_count;
   
-}
-
-
-void WeightChunkPrefetcher::StartWorker() {
-  bool expected = false;
-  if (!io_worker_running_.compare_exchange_strong(expected, true)) {
-    return;  // already running
-  }
-
-  io_worker_stop_requested_.store(false, std::memory_order_relaxed);
-
-  void* buffer0 = nullptr;
-  void* buffer1 = nullptr;
-  size_t size0 = 0;
-  size_t size1 = 0;
-  bool configured = false;
-  {
-    std::lock_guard<std::mutex> lock(io_config_mutex_);
-    buffer0 = io_registered_buffers_[0];
-    buffer1 = io_registered_buffers_[1];
-    size0 = io_registered_buffer_sizes_[0];
-    size1 = io_registered_buffer_sizes_[1];
-    configured = io_buffers_configured_;
-  }
-
-  if (!configured) {
-    io_worker_running_.store(false, std::memory_order_relaxed);
-    TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO,
-                    "WeightChunkPrefetcher: IO buffers not configured; worker start deferred");
-    return;
-  }
-
-#if defined(__linux__)
-  if (!io_engine_) {
-    io_engine_ = std::make_unique<WeightChunkIOEngine>();
-  }
-  if (io_engine_ && !io_engine_->IsReady()) {
-    printf("[INFO] Initializing io_uring engine for WeightChunkPrefetcher...\n");
-    if (!io_engine_->Initialize(kDefaultRingDepth, kDefaultSubreadBytes, buffer0, size0, buffer1,
-                                size1)) {
-      TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                      "WeightChunkPrefetcher: failed to initialize io_uring engine; using sync IO");
+  // Fast path: groups are contiguous and sorted by group_index
+  if (target_index < plan.chunk_groups.size() &&
+      plan.chunk_groups[target_index].group_index == target_index) {
+    if (next_mode) {
+      *next_mode = mode;
     }
-  }
-#endif
-
-  io_worker_thread_ = std::thread([this]() {
-    WorkerLoop();
-  });
-
-  ApplyWorkerAffinity();
-}
-
-void WeightChunkPrefetcher::StopWorker() {
-  if (!io_worker_running_.exchange(false)) {
-    return;  // not running
+    return &plan.chunk_groups[target_index];
   }
 
-  {
-    std::lock_guard<std::mutex> lock(io_worker_mutex_);
-    io_worker_stop_requested_.store(true, std::memory_order_relaxed);
-    io_job_queue_.clear();
-  }
-  io_worker_cv_.notify_all();
-
-  if (io_worker_thread_.joinable()) {
-    io_worker_thread_.join();
-  }
-
-  io_worker_stop_requested_.store(false, std::memory_order_relaxed);
-
-#if defined(__linux__)
-  if (io_engine_) {
-    io_engine_->Shutdown();
-  }
-#endif
-
-  {
-    std::lock_guard<std::mutex> states_lock(chunk_io_state_mutex_);
-    for (auto& kv : index_to_chunk_io_states_) {
-      const auto& state = kv.second;
-      if (!state) {
-        continue;
-      }
-      {
-        std::lock_guard<std::mutex> lock(state->mutex);
-        state->in_flight = false;
-        state->ready = false;
-        state->success = false;
-      }
-      state->cv.notify_all();
+  // Slow path: binary search for non-contiguous groups
+  auto it = std::lower_bound(
+      plan.chunk_groups.begin(), plan.chunk_groups.end(), target_index,
+      [](const WeightChunkGroupInfo& group, size_t idx) {
+        return group.group_index < idx;
+      });
+  
+  if (it != plan.chunk_groups.end() && it->group_index == target_index) {
+    if (next_mode) {
+      *next_mode = mode;
     }
+    return &*it;
   }
+
+  // Fallback: wrap to first group (should rarely happen)
+  if (next_mode) {
+    *next_mode = mode;
+  }
+  return &plan.chunk_groups.front();
 }
+
 
 bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
   const WeightChunkGroupInfo* group = request.chunk_group;
-  if (!request.buffer_base || request.direct_io_fd < 0 || request.buffer_index < 0 || !group ||
-      group->chunk_indices.empty()) {
+  if (!request.buffer_base || request.direct_io_fd < 0 || request.buffer_index < 0 || 
+      !group || group->chunk_indices.empty()) {
     return false;
   }
 
-  PrefetchMode mode = request.mode;
-  if (mode == PrefetchMode::UNINITIALIZED) {
-    mode = prefetch_mode_;
-  }
+  PrefetchMode mode = request.mode == PrefetchMode::UNINITIALIZED ? prefetch_mode_ : request.mode;
   const int plan_idx = PrefetchModeToIndex(mode);
   if (plan_idx < 0 || !has_plan_[plan_idx]) {
     return false;
   }
 
-  {
-    std::lock_guard<std::mutex> lock(io_worker_mutex_);
-    auto group_state = GetChunkGroupIOState(mode, group->range_index);
-    {
-      std::lock_guard<std::mutex> group_lock(group_state->mutex);
-      if (group_state->in_flight) {
-        return true;
-      }
-      group_state->in_flight = true;
-    }
-
-    std::vector<std::shared_ptr<ChunkIOState>> chunk_states;
-    chunk_states.reserve(group->chunk_indices.size());
-    for (const size_t chunk_index : group->chunk_indices) {
-      chunk_states.push_back(GetChunkIOState(chunk_index));
-    }
-
-    bool already_inflight = false;
-    for (auto& state : chunk_states) {
-      std::lock_guard<std::mutex> state_lock(state->mutex);
-      if (state->in_flight) {
-        already_inflight = true;
-        break;
-      }
-    }
-
-    if (already_inflight) {
-      std::lock_guard<std::mutex> group_lock(group_state->mutex);
-      group_state->in_flight = false;
-      return true;
-    }
-
-    for (auto& state : chunk_states) {
-      std::lock_guard<std::mutex> state_lock(state->mutex);
-      state->in_flight = true;
-      state->ready = false;
-      state->success = false;
-    }
-
-    {
-      PrefetchJob job;
-      job.chunk_group = group;
-      job.buffer_base = request.buffer_base;
-      job.direct_io_fd = request.direct_io_fd;
-      job.buffer_index = request.buffer_index;
-      job.mode = mode;
-      io_job_queue_.push_back(std::move(job));
-    }
+  // Fast path: atomic check if already in flight
+  auto group_state = GetChunkGroupIOState(mode, group->group_index);
+  bool expected = false;
+  if (!group_state->in_flight.compare_exchange_strong(expected, true, 
+                                                       std::memory_order_acq_rel)) {
+    return true;  // Already in flight
   }
 
-  io_worker_cv_.notify_one();
+  // Mark all chunks as in_flight using atomics (no lock needed for flags)
+  for (const size_t chunk_index : group->chunk_indices) {
+    auto state = GetChunkIOState(chunk_index);
+    state->in_flight.store(true, std::memory_order_release);
+    state->ready.store(false, std::memory_order_release);
+    // success is non-atomic, only written under lock in MarkJobCompleted
+  }
+
+  // Enqueue job (only place we need lock)
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    PrefetchJob job;
+    job.chunk_group = group;
+    job.buffer_base = request.buffer_base;
+    job.direct_io_fd = request.direct_io_fd;
+    job.buffer_index = request.buffer_index;
+    job.mode = mode;
+    io_job_queue_.push_back(std::move(job));
+  }
+
+  io_submission_cv_.notify_one();
   return true;
 }
 
 bool WeightChunkPrefetcher::WaitReady(const WeightChunkInfo* chunk_info) {
- 
   if (!chunk_info) {
     return false;
   }
 
   auto state = GetChunkIOState(chunk_info->chunk_index);
   std::unique_lock<std::mutex> lock(state->mutex);
-  state->cv.wait(lock, [&]() { return state->ready || !state->in_flight; });
-  const bool success = state->success;
-  state->ready = false;
-  state->in_flight = false;
-  return success;
-}
-
-void WeightChunkPrefetcher::WorkerLoop() {
-#if defined(__linux__)
-  if (io_engine_ && io_engine_->IsReady()) {
-    std::cout << "[INFO] WeightChunkPrefetcher: using io_uring IO worker loop" << std::endl;
-    RunAsyncWorkerLoop();
-    return;
-  }
-#endif
-// std::cout << "[INFO] WeightChunkPrefetcher: using parallel pread IO worker loop" << std::endl;
-//   RunSyncWorkerLoop();
-}
-
-void WeightChunkPrefetcher::RunAsyncWorkerLoop() {
-  while (true) {
-    std::vector<PrefetchJob> jobs_to_submit;
-    bool stop_requested = false;
-    bool had_pending_before_wait = false;
-
-    {
-      std::unique_lock<std::mutex> lock(io_worker_mutex_);
-      io_worker_cv_.wait(lock, [this]() {
-        if (io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty()) {
-          return true;
-        }
-        return io_engine_ && io_engine_->HasPending();
-      });
-
-      stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
-      had_pending_before_wait = io_engine_ && io_engine_->HasPending();
-
-      while (!io_job_queue_.empty()) {
-        jobs_to_submit.push_back(std::move(io_job_queue_.front()));
-        io_job_queue_.pop_front();
-      }
-    }
-
-    bool needs_blocking_drain = had_pending_before_wait;
-    for (auto& job : jobs_to_submit) {
-      const WeightChunkGroupInfo* group = job.chunk_group;
-      if (!group) {
-        MarkJobCompleted(job, false);
-        continue;
-      }
-
-      if (job.buffer_index < 0) {
-        MarkJobCompleted(job, false);
-        continue;
-      }
-
-      const int plan_index = PrefetchModeToIndex(job.mode);
-      if (plan_index < 0) {
-        MarkJobCompleted(job, false);
-        continue;
-      }
-
-      WeightChunkIOEngine::IORequest request;
-      request.range_index = EncodeRangeId(plan_index, group->range_index);
-      request.aligned_offset = group->start_aligned_offset;
-      request.aligned_size = group->total_aligned_size;
-      request.buffer_base = job.buffer_base;
-      request.direct_io_fd = job.direct_io_fd;
-      request.buffer_index = job.buffer_index;
-
-      const bool submitted = io_engine_->Submit(request);
-      if (!submitted) {
-        {
-          std::lock_guard<std::mutex> requeue_lock(io_worker_mutex_);
-          io_job_queue_.push_front(std::move(job));
-        }
-        needs_blocking_drain = true;
-        io_worker_cv_.notify_one();
-        continue;
-      }
-
-      needs_blocking_drain = true;
-    }
-
-    std::vector<WeightChunkIOEngine::Completion> completions;
-    bool queue_empty_after_submit = false;
-    {
-      std::lock_guard<std::mutex> lock(io_worker_mutex_);
-      queue_empty_after_submit = io_job_queue_.empty();
-    }
-    const bool wait_for_events = stop_requested || needs_blocking_drain ||
-                                 (queue_empty_after_submit && io_engine_ && io_engine_->HasPending());
-    io_engine_->DrainCompletions(&completions, wait_for_events);
-
-    for (const auto& completion : completions) {
-      PrefetchJob job_snapshot;
-      const int plan_index = DecodePlanIndex(completion.range_index);
-      if (plan_index < 0 || plan_index >= 2 || !has_plan_[plan_index]) {
-        TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                        "WeightChunkPrefetcher: invalid completion plan index=%d", plan_index);
-        continue;
-      }
-      const size_t range_index = DecodeRangeIndex(completion.range_index);
-      const auto& plan = prefetch_plans_[plan_index];
-      if (range_index >= plan.chunk_groups.size()) {
-        TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                        "WeightChunkPrefetcher: missing chunk group metadata for group_index=%zu",
-                        range_index);
-        continue;
-      }
-      const auto mode = IndexToPrefetchMode(plan_index);
-      if (!mode.has_value()) {
-        continue;
-      }
-      job_snapshot.chunk_group = &plan.chunk_groups[range_index];
-      job_snapshot.mode = *mode;
-      MarkJobCompleted(job_snapshot, completion.success);
-    }
-
-    bool queue_empty = false;
-    {
-      std::lock_guard<std::mutex> lock(io_worker_mutex_);
-      queue_empty = io_job_queue_.empty();
-    }
-
-    if (stop_requested && queue_empty && !(io_engine_ && io_engine_->HasPending())) {
-      break;
-    }
-  }
-}
-
-void WeightChunkPrefetcher::RunSyncWorkerLoop() {
-  while (true) {
-    PrefetchJob job;
-    {
-      std::unique_lock<std::mutex> lock(io_worker_mutex_);
-      io_worker_cv_.wait(lock, [this]() {
-        return io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty();
-      });
-
-      if (io_worker_stop_requested_.load(std::memory_order_relaxed) && io_job_queue_.empty()) {
-        break;
-      }
-
-      job = std::move(io_job_queue_.front());
-      io_job_queue_.pop_front();
-    }
-
-    const WeightChunkGroupInfo* group = job.chunk_group;
-    const bool success = group &&
-                         ExecuteIO(job.direct_io_fd, job.buffer_base, group->total_aligned_size,
-                                   static_cast<off_t>(group->start_aligned_offset));
-
-    MarkJobCompleted(job, success);
-  }
-}
-
-void WeightChunkPrefetcher::ApplyWorkerAffinity() {
-#if defined(__linux__)
-  std::lock_guard<std::mutex> lock(io_worker_mutex_);
-  if (io_worker_cores_.empty() || !io_worker_thread_.joinable()) {
-    return;
-  }
-
-  cpu_set_t set;
-  CPU_ZERO(&set);
-  for (int core : io_worker_cores_) {
-    if (core >= 0) {
-      CPU_SET(static_cast<unsigned long>(core), &set);
-    }
-  }
-  const int rc = pthread_setaffinity_np(io_worker_thread_.native_handle(), sizeof(set), &set);
-  if (rc != 0) {
-    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                    "WeightChunkPrefetcher: failed to set worker affinity (errno=%d)", rc);
-  }
-#else
-  (void)io_worker_cores_;
-#endif
-}
-
-std::shared_ptr<WeightChunkPrefetcher::ChunkIOState> WeightChunkPrefetcher::GetChunkIOState(size_t chunk_index) {
-  std::lock_guard<std::mutex> lock(chunk_io_state_mutex_);
-  auto it = index_to_chunk_io_states_.find(chunk_index);
-  if (it == index_to_chunk_io_states_.end() || !(it->second)) {
-    auto state = std::make_shared<ChunkIOState>();
-    it = index_to_chunk_io_states_.emplace(chunk_index, std::move(state)).first;
-  }
-  return it->second;
-}
-
-std::shared_ptr<WeightChunkPrefetcher::ChunkGroupIOState> WeightChunkPrefetcher::GetChunkGroupIOState(
-    PrefetchMode mode, size_t group_index) {
-  std::lock_guard<std::mutex> lock(group_io_state_mutex_);
-  const int plan_idx = PrefetchModeToIndex(mode);
-  if (plan_idx < 0 || plan_idx >= static_cast<int>(index_to_group_io_states_.size())) {
-    static auto dummy = std::make_shared<ChunkGroupIOState>();
-    return dummy;
-  }
-  auto& map = index_to_group_io_states_[plan_idx];
-  auto it = map.find(group_index);
-  if (it == map.end() || !(it->second)) {
-    auto state = std::make_shared<ChunkGroupIOState>();
-    it = map.emplace(group_index, std::move(state)).first;
-  }
-  return it->second;
-}
-
-void WeightChunkPrefetcher::ResetRuntimeState() {
-  {
-    std::lock_guard<std::mutex> lock(io_worker_mutex_);
-    io_job_queue_.clear();
-  }
-  {
-    std::lock_guard<std::mutex> lock(group_io_state_mutex_);
-    for (auto& states : index_to_group_io_states_) {
-      states.clear();
-    }
-  }
-  std::lock_guard<std::mutex> states_lock(chunk_io_state_mutex_);
-  for (auto& kv : index_to_chunk_io_states_) {
-    const auto& state = kv.second;
-    if (!state) {
-      continue;
-    }
-    {
-      std::lock_guard<std::mutex> state_lock(state->mutex);
-      state->in_flight = false;
-      state->ready = false;
-      state->success = false;
-    }
-    state->cv.notify_all();
-  }
-}
-
-void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool success) {
-  const WeightChunkGroupInfo* group = job.chunk_group;
-  if (!group) {
-    return;
-  }
-
-//   std::cout << "[WeightChunkPrefetcher] MarkJobCompleted: io_order=" << group->io_order
-//             << " success=" << success << std::endl;
-
-  for (const size_t chunk_index : group->chunk_indices) {
-    auto state = GetChunkIOState(chunk_index);
-    if (!state) {
-      continue;
-    }
-    {
-      std::lock_guard<std::mutex> lock(state->mutex);
-      state->success = success;
-      state->ready = true;
-      state->in_flight = false;
-    }
-    state->cv.notify_all();
-  }
-
-  auto group_state = GetChunkGroupIOState(job.mode, group->range_index);
-  if (group_state) {
-    std::lock_guard<std::mutex> group_lock(group_state->mutex);
-    group_state->in_flight = false;
-  }
-
-  if (!success && !group->chunk_indices.empty()) {
-    const auto* info = GetChunkInfoByIndex(group->chunk_indices.front());
-    const size_t origin_offset = info ? info->origin_offset : 0;
-    const size_t chunk_index = info ? info->chunk_index : group->chunk_indices.front();
-    TFLITE_LOG_PROD(tflite::TFLITE_LOG_WARNING,
-                    "WeightChunkPrefetcher: prefetch failed (group_io_order=%zu, chunk_index=%zu, "
-                    "origin_offset=%zu)",
-                    group->io_order, chunk_index, origin_offset);
-  }
+  state->cv.wait(lock, [&]() { 
+    return state->ready.load(std::memory_order_acquire) || 
+           !state->in_flight.load(std::memory_order_acquire); 
+  });
+  
+  // Return success status without resetting flags
+  // Flags will be reset by next Submit() call
+  return state->success;
 }
 
 }  // namespace streaming

@@ -15,12 +15,6 @@
 namespace flash_slim::streaming
 {
 
-    struct ModeChunkPlan
-    {
-    std::vector<WeightChunkInfo> chunks;
-    std::unordered_map<size_t, size_t> offset_to_index;
-    std::vector<WeightChunkGroupInfo> io_order_groups;
-    };
 
     //* ==================== Interfaces ==================== */
     class WeightChunkMetaDataWriter
@@ -35,6 +29,7 @@ namespace flash_slim::streaming
 
     class PrefetchPlanLoader
     {
+
     public:
         virtual ~PrefetchPlanLoader() = default;
         virtual bool LoadFromFile(const std::string &plan_file_path) = 0;
@@ -81,6 +76,13 @@ namespace flash_slim::streaming
     class JsonPrefetchPlanLoader : public flash_slim::streaming::PrefetchPlanLoader
     {
     public:
+        struct ModeChunkPlan
+        {
+            std::vector<WeightChunkInfo> chunks;
+            std::unordered_map<size_t, size_t> offset_to_index;
+            std::vector<WeightChunkGroupInfo> io_order_groups;
+        };
+
         JsonPrefetchPlanLoader();
         ~JsonPrefetchPlanLoader() override;
 
