@@ -150,6 +150,7 @@ void WeightChunkController::AllocWeightChunkBuffer(size_t size) {
   const size_t alignment = provider_->GetDirectIOBufferSectorSize();
   const size_t aligned_size = AlignTo(size, alignment);
 
+  // Reuse existing buffer if sufficient
   if (weight_chunk_buffer_capacity_ >= aligned_size &&
       weight_chunk_buffer_base_) {
     weight_chunk_buffer_requirement_ = size;
@@ -165,11 +166,15 @@ void WeightChunkController::AllocWeightChunkBuffer(size_t size) {
     return;
   }
 
+  //else, allocate new buffer
+
+  // Release existing buffer
   if (prefetcher_) {
     prefetcher_->StopWorker();
   }
   ReleaseWeightChunkBuffer();
 
+  // Allocate new buffer
   void* buffer = nullptr;
   if (posix_memalign(&buffer, alignment, aligned_size) != 0) {
     std::perror("WeightChunkController::AllocWeightChunkBuffer posix_memalign");

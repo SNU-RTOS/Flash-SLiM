@@ -229,26 +229,23 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
     return false;
   }
 
-  // Check if already in flight
+  // Fast path: atomic check if already in flight
   auto group_state = GetChunkGroupIOState(mode, group->group_index);
-  {
-    std::lock_guard<std::mutex> lock(group_state->mutex);
-    if (group_state->in_flight) {
-      return true;
-    }
-    group_state->in_flight = true;
+  bool expected = false;
+  if (!group_state->in_flight.compare_exchange_strong(expected, true, 
+                                                       std::memory_order_acq_rel)) {
+    return true;  // Already in flight
   }
 
-  // Mark all chunks as in_flight
+  // Mark all chunks as in_flight using atomics (no lock needed for flags)
   for (const size_t chunk_index : group->chunk_indices) {
     auto state = GetChunkIOState(chunk_index);
-    std::lock_guard<std::mutex> lock(state->mutex);
-    state->in_flight = true;
-    state->ready = false;
-    state->success = false;
+    state->in_flight.store(true, std::memory_order_release);
+    state->ready.store(false, std::memory_order_release);
+    // success is non-atomic, only written under lock in MarkJobCompleted
   }
 
-  // Enqueue job
+  // Enqueue job (only place we need lock)
   {
     std::lock_guard<std::mutex> lock(queue_mutex_);
     PrefetchJob job;
@@ -265,17 +262,19 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
 }
 
 bool WeightChunkPrefetcher::WaitReady(const WeightChunkInfo* chunk_info) {
- 
   if (!chunk_info) {
     return false;
   }
 
   auto state = GetChunkIOState(chunk_info->chunk_index);
   std::unique_lock<std::mutex> lock(state->mutex);
-  state->cv.wait(lock, [&]() { return state->ready || !state->in_flight; });
+  state->cv.wait(lock, [&]() { 
+    return state->ready.load(std::memory_order_acquire) || 
+           !state->in_flight.load(std::memory_order_acquire); 
+  });
   const bool success = state->success;
-  state->ready = false;
-  state->in_flight = false;
+  state->ready.store(false, std::memory_order_release);
+  state->in_flight.store(false, std::memory_order_release);
   return success;
 }
 
@@ -530,6 +529,7 @@ void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool succes
     return;
   }
 
+  // Update chunk states atomically (lock-free)
   for (const size_t chunk_index : group->chunk_indices) {
     auto state = GetChunkIOState(chunk_index);
     if (!state) {
@@ -538,16 +538,16 @@ void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool succes
     {
       std::lock_guard<std::mutex> lock(state->mutex);
       state->success = success;
-      state->ready = true;
-      state->in_flight = false;
     }
+    state->ready.store(true, std::memory_order_release);
+    state->in_flight.store(false, std::memory_order_release);
     state->cv.notify_all();
   }
 
+  // Update group state atomically (lock-free)
   auto group_state = GetChunkGroupIOState(job.mode, group->group_index);
   if (group_state) {
-    std::lock_guard<std::mutex> group_lock(group_state->mutex);
-    group_state->in_flight = false;
+    group_state->in_flight.store(false, std::memory_order_release);
   }
 
   if (!success && !group->chunk_indices.empty()) {

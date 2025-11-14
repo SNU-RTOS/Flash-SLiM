@@ -80,14 +80,13 @@ class WeightChunkPrefetcher {
   struct ChunkIOState {
     std::mutex mutex;
     std::condition_variable cv;
-    bool in_flight = false;
-    bool ready = false;
+    std::atomic<bool> in_flight{false};
+    std::atomic<bool> ready{false};
     bool success = false;
   };
 
   struct ChunkGroupIOState {
-    std::mutex mutex;
-    bool in_flight = false;
+    std::atomic<bool> in_flight{false};
   };
 
   WeightChunkPrefetcher() = default;
