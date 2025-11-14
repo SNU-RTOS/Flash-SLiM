@@ -184,10 +184,13 @@ class WeightChunkPrefetcher {
 
   const std::vector<WeightChunkInfo>& GetIndexToChunks() const { return index_to_chunks_; }
 
+  // Lookup chunk info by offset (performs mode->index conversion internally)
   const WeightChunkInfo* LookupChunkInfo(PrefetchMode mode, size_t offset) const;
+  
+  // Optimized overload: accepts pre-computed mode_idx to avoid redundant conversion
+  const WeightChunkInfo* LookupChunkInfoByOffset(int mode_idx, size_t offset) const;
 
   const WeightChunkInfo* GetChunkInfoByIndex(size_t chunk_index) const;
-  const WeightChunkGroupInfo* GetChunkGroupByChunkIndex(PrefetchMode mode, size_t chunk_index) const;
   const WeightChunkGroupInfo* GetNextChunkGroup(PrefetchMode mode, size_t current_io_order,
                                                PrefetchMode* next_mode) const;
   
