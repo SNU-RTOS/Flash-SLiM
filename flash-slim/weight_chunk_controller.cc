@@ -460,14 +460,12 @@ void WeightChunkController::UpdateWeightsPointer(size_t offset, const WeightChun
 
 size_t WeightChunkController::FindChunkRelativeOffset(const WeightChunkGroupInfo& group,
                                                       size_t chunk_index) const {
-  for (size_t i = 0; i < group.chunk_indices.size(); ++i) {
-    if (group.chunk_indices[i] == chunk_index) {
-      if (i < group.chunk_relative_offsets.size()) {
-        return group.chunk_relative_offsets[i];
-      }
-      break;
-    }
+  // O(1) hash lookup using reverse index
+  const auto it = group.chunk_to_relative_offset.find(chunk_index);
+  if (it != group.chunk_to_relative_offset.end()) {
+    return it->second;
   }
+  
   std::cerr << "[WeightChunkController] Warning: relative offset not found for chunk_index="
             << chunk_index << " in group_index=" << group.group_index << std::endl;
   return 0;

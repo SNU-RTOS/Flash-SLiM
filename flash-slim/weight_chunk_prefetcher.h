@@ -29,6 +29,10 @@ namespace streaming {
 
 using ProviderMode = tflite::xnnpack::StreamingWeightCacheProvider::ProviderMode;
 
+// Forward declaration
+struct WeightChunkInfo;
+struct WeightChunkGroupInfo;
+
 struct WeightChunkInfo {
     size_t chunk_index;
     size_t aligned_offset;
@@ -37,6 +41,9 @@ struct WeightChunkInfo {
     size_t origin_offset;
     size_t origin_size;
     size_t weights_id;
+    
+    // Group reference per mode (PREFILL=0, DECODE=1)
+    std::array<const WeightChunkGroupInfo*, 2> group_per_mode{nullptr, nullptr};
 };
 
 struct WeightChunkGroupInfo {
@@ -46,6 +53,9 @@ struct WeightChunkGroupInfo {
   size_t total_aligned_size = 0;
   std::vector<size_t> chunk_indices;
   std::vector<size_t> chunk_relative_offsets;
+  
+  // Reverse index: chunk_index -> relative_offset (O(1) lookup optimization)
+  std::unordered_map<size_t, size_t> chunk_to_relative_offset;
 };
 
 class WeightChunkPrefetcher {
@@ -201,6 +211,9 @@ class WeightChunkPrefetcher {
   void ResetRuntimeState();
   void MarkJobCompleted(const PrefetchJob& job, bool success);
   
+  // State pre-allocation for lock-free runtime access
+  void PreallocateIOStates(int plan_idx);
+  
   // io_uring specific methods
   void StartIoUringWorker();
   void RunIoUringSubmissionLoop();
@@ -220,6 +233,7 @@ class WeightChunkPrefetcher {
   std::array<bool, kPrefetchPlanCount> has_plan_{{false, false}};
   
   std::vector<WeightChunkInfo> index_to_chunks_;
+  
   std::unordered_map<size_t, std::shared_ptr<ChunkIOState>> index_to_chunk_io_states_;
   std::array<std::unordered_map<size_t, std::shared_ptr<ChunkGroupIOState>>, kPrefetchPlanCount> index_to_group_io_states_;
   
