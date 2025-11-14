@@ -65,12 +65,12 @@ void WeightChunkPrefetcher::ConfigureIOBuffers(void* buffer0, size_t size0, void
 }
 
 void WeightChunkPrefetcher::SetWorkerThreadAffinity(const std::vector<int>& cores) {
-    std::lock_guard<std::mutex> lock(io_worker_mutex_);
+    std::lock_guard<std::mutex> lock(io_worker_affinity_mutex_);
     io_worker_cores_ = cores;
 }
 
 void WeightChunkPrefetcher::ApplyWorkerAffinity() {
-  std::lock_guard<std::mutex> lock(io_worker_mutex_);
+  std::lock_guard<std::mutex> lock(io_worker_affinity_mutex_);
   if (io_worker_cores_.empty()) {
     return;
   }
@@ -166,12 +166,16 @@ void WeightChunkPrefetcher::StopWorker() {
     return;  // not running
   }
 
+  io_worker_stop_requested_.store(true, std::memory_order_relaxed);
+  
   {
-    std::lock_guard<std::mutex> lock(io_worker_mutex_);
-    io_worker_stop_requested_.store(true, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(io_job_queue_mutex_);
     io_job_queue_.clear();
   }
-  io_worker_cv_.notify_all();
+  
+  // 두 스레드 모두 깨움
+  io_submission_cv_.notify_all();
+  io_completion_cv_.notify_all();
 
   if (io_submission_thread_.joinable()) {
     io_submission_thread_.join();
@@ -206,7 +210,6 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
   }
 
   {
-    std::lock_guard<std::mutex> lock(io_worker_mutex_);
     auto group_state = GetChunkGroupIOState(mode, group->group_index);
     {
       std::lock_guard<std::mutex> group_lock(group_state->mutex);
@@ -245,6 +248,7 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
     }
 
     {
+      std::lock_guard<std::mutex> queue_lock(io_job_queue_mutex_);
       PrefetchJob job;
       job.chunk_group = group;
       job.buffer_base = request.buffer_base;
@@ -255,7 +259,7 @@ bool WeightChunkPrefetcher::Submit(const PrefetchRequest& request) {
     }
   }
 
-  io_worker_cv_.notify_one();
+  io_submission_cv_.notify_one();
   return true;
 }
 
@@ -280,8 +284,8 @@ void WeightChunkPrefetcher::RunIoUringSubmissionLoop() {
     bool stop_requested = false;
     
     {
-      std::unique_lock<std::mutex> lock(io_worker_mutex_);
-      io_worker_cv_.wait(lock, [this]() {
+      std::unique_lock<std::mutex> lock(io_job_queue_mutex_);
+      io_submission_cv_.wait(lock, [this]() {
         return io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty();
       });
 
@@ -319,12 +323,19 @@ void WeightChunkPrefetcher::RunIoUringSubmissionLoop() {
     request.direct_io_fd = job.direct_io_fd;
     request.buffer_index = job.buffer_index;
 
-    const bool submitted = io_engine_->Submit(request);
-    if (!submitted) {
-      std::lock_guard<std::mutex> requeue_lock(io_worker_mutex_);
-      io_job_queue_.push_front(std::move(job));
-      io_worker_cv_.notify_one();
+    bool submitted = false;
+    {
+      std::lock_guard<std::mutex> engine_lock(io_engine_state_mutex_);
+      submitted = io_engine_->Submit(request);
     }
+    
+    if (!submitted) {
+      std::lock_guard<std::mutex> queue_lock(io_job_queue_mutex_);
+      io_job_queue_.push_front(std::move(job));
+    }
+    
+    // Submission 완료 후 completion 스레드를 깨움
+    io_completion_cv_.notify_one();
   }
 }
 
@@ -336,15 +347,43 @@ void WeightChunkPrefetcher::RunIoUringCompletionLoop() {
     bool has_pending = false;
     bool queue_empty = false;
     
+    // 상태 체크: pending IO가 있는지 확인
     {
-      std::lock_guard<std::mutex> lock(io_worker_mutex_);
+      std::unique_lock<std::mutex> lock(io_engine_state_mutex_);
+      
+      // Wait: stop 요청이 오거나 pending IO가 생길 때까지
+      io_completion_cv_.wait(lock, [this]() {
+        bool should_wake = io_worker_stop_requested_.load(std::memory_order_relaxed);
+        if (!should_wake && io_engine_) {
+          should_wake = io_engine_->HasPending();
+        }
+        return should_wake;
+      });
+      
       stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
       has_pending = io_engine_ && io_engine_->HasPending();
+    }
+    
+    // Job queue가 비었는지 확인 (별도 mutex)
+    {
+      std::lock_guard<std::mutex> queue_lock(io_job_queue_mutex_);
       queue_empty = io_job_queue_.empty();
     }
-
-    const bool should_wait = !stop_requested || has_pending;
-    io_engine_->DrainCompletions(&completions, should_wait);
+    
+    // Stop 요청 + 모든 작업 완료 시 종료
+    if (stop_requested && queue_empty && !has_pending) {
+      break;
+    }
+    
+    // Pending이 없으면 다시 대기
+    if (!has_pending) {
+      continue;
+    }
+    
+    // 락 해제 후 IO completion 수집 (blocking call)
+    if (io_engine_) {
+      io_engine_->DrainCompletions(&completions, true);
+    }
 
     for (const auto& completion : completions) {
       const int plan_index = DecodePlanIndex(completion.range_index);
@@ -373,17 +412,6 @@ void WeightChunkPrefetcher::RunIoUringCompletionLoop() {
       job_snapshot.mode = *mode;
       MarkJobCompleted(job_snapshot, completion.success);
     }
-
-    {
-      std::lock_guard<std::mutex> lock(io_worker_mutex_);
-      stop_requested = io_worker_stop_requested_.load(std::memory_order_relaxed);
-      has_pending = io_engine_ && io_engine_->HasPending();
-      queue_empty = io_job_queue_.empty();
-    }
-
-    if (stop_requested && queue_empty && !has_pending) {
-      break;
-    }
   }
 }
 
@@ -391,8 +419,8 @@ void WeightChunkPrefetcher::RunParallelPreadWorkerLoop() {
   while (true) {
     PrefetchJob job;
     {
-      std::unique_lock<std::mutex> lock(io_worker_mutex_);
-      io_worker_cv_.wait(lock, [this]() {
+      std::unique_lock<std::mutex> lock(io_job_queue_mutex_);
+      io_submission_cv_.wait(lock, [this]() {
         return io_worker_stop_requested_.load(std::memory_order_relaxed) || !io_job_queue_.empty();
       });
 
@@ -459,7 +487,7 @@ void WeightChunkPrefetcher::ResetChunkStates() {
 
 void WeightChunkPrefetcher::ResetRuntimeState() {
   {
-    std::lock_guard<std::mutex> lock(io_worker_mutex_);
+    std::lock_guard<std::mutex> lock(io_job_queue_mutex_);
     io_job_queue_.clear();
   }
   {
@@ -476,9 +504,6 @@ void WeightChunkPrefetcher::MarkJobCompleted(const PrefetchJob& job, bool succes
   if (!group) {
     return;
   }
-
-//   std::cout << "[WeightChunkPrefetcher] MarkJobCompleted: io_order=" << group->io_order
-//             << " success=" << success << std::endl;
 
   for (const size_t chunk_index : group->chunk_indices) {
     auto state = GetChunkIOState(chunk_index);

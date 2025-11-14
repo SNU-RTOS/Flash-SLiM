@@ -210,10 +210,18 @@ class WeightChunkPrefetcher {
   std::deque<PrefetchJob> io_job_queue_;
   std::thread io_submission_thread_;
   std::thread io_completion_thread_;
-  std::mutex io_worker_mutex_;
+  
+  // Mutex 분리: 각 목적별 전용 mutex
+  std::mutex io_job_queue_mutex_;           // Job queue 보호
+  std::mutex io_engine_state_mutex_;        // io_engine_ HasPending() 동기화
+  std::mutex io_worker_affinity_mutex_;     // CPU affinity 설정 보호
+  
   std::atomic<bool> io_worker_running_{false};
   std::atomic<bool> io_worker_stop_requested_{false};
-  std::condition_variable io_worker_cv_;
+  
+  std::condition_variable io_submission_cv_;   // Submission loop 전용
+  std::condition_variable io_completion_cv_;   // Completion loop 전용
+  
   std::vector<int> io_worker_cores_;
 };
 
