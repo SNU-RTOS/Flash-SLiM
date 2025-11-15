@@ -3,12 +3,6 @@ from bcc import BPF, USDT
 import atexit, signal, sys, re, os
 import common
 
-
-# binary_path = "bin/text_generator_main_mmap"
-# binary_path = "bin/text_generator_main"
-# binary_path = "tools/bin/benchmark_model"  # binary path to attach USDTs
-
-
 # ======== Config ========
 BINARY_PATH = "bin/cmt_generator"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

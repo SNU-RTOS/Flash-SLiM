@@ -1,6 +1,9 @@
 #include <uapi/linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/blkdev.h>
+#include <trace/events/block.h>
+#include <trace/events/syscalls.h>
+#include <linux/unistd.h>
 
 // ── VM_FAULT_* 플래그 (커널 버전에 따라 상수값 다를 수 있음) ──
 #define VM_FAULT_MAJOR 4
@@ -68,6 +71,7 @@ struct rw_stat_t
     u64 write_bytes;
 
     u64 start_ns; // sys_enter timestamp storage
+    u32 active_op; // 0=none,1=read,2=write (tracks syscall kind)
 };
 
 /* --- Block I/O helper structs ---
@@ -163,18 +167,6 @@ BPF_HASH(pfstat, u64, struct pf_stat_t);
 BPF_HASH(rwstat, u64, struct rw_stat_t);
 
 /*
- * readahead_count (u32 tgid -> u64)
- *  - Simple per-process counter incremented from the ondemand_readahead kprobe.
- *  - Keyed by tgid because readahead is attributed to the process scope.
- *
- * DECLARED BUT UNUSED: this map exists for historical reasons. The current
- * implementation increments readahead counters inside `pfstat` entries
- * (pf_stat_t.readahead_cnt) and userspace reads that field. Consider
- * removing this separate map or using it consistently.
- */
-BPF_HASH(readahead_count, u32, u64);
-
-/*
  * block_start : keyed by bio (dev,sector) -> block_start_t
  *  - At BIO issue time we capture a small blob (start_ns, pid_tgid, bytes, op)
  *    indexed by the bio key. On completion we lookup using the same key.
@@ -205,16 +197,60 @@ BPF_HASH(schedstat, u64, struct sched_stat_t);
 /* 02 BPF Helpers */
 static __always_inline u32 get_tgid(void)
 {
-    // Return the current process id (tgid). Use this in probes where we
-    // only need process-level membership (phase gate checks etc.).
     return (u32)(bpf_get_current_pid_tgid() >> 32);
 }
 static __always_inline u64 get_pid_tgid(void)
 {
-    // Return the raw 64-bit pid_tgid as produced by bpf_get_current_pid_tgid().
-    // Layout: upper 32 bits = tgid, lower 32 bits = tid. Many map keys use
-    // this packed value so consumers can recover both process and thread ids.
-    return bpf_get_current_pid_tgid(); // [63:32]=tgid, [31:0]=tid
+    return bpf_get_current_pid_tgid();
+}
+
+#define RW_OP_NONE 0
+#define RW_OP_READ 1
+#define RW_OP_WRITE 2
+
+static __always_inline int classify_rw_syscall(long id)
+{
+#ifdef __NR_read
+    if (id == __NR_read)
+        return RW_OP_READ;
+#endif
+#ifdef __NR_pread64
+    if (id == __NR_pread64)
+        return RW_OP_READ;
+#endif
+#ifdef __NR_preadv
+    if (id == __NR_preadv)
+        return RW_OP_READ;
+#endif
+#ifdef __NR_preadv2
+    if (id == __NR_preadv2)
+        return RW_OP_READ;
+#endif
+#ifdef __NR_readv
+    if (id == __NR_readv)
+        return RW_OP_READ;
+#endif
+#ifdef __NR_write
+    if (id == __NR_write)
+        return RW_OP_WRITE;
+#endif
+#ifdef __NR_pwrite64
+    if (id == __NR_pwrite64)
+        return RW_OP_WRITE;
+#endif
+#ifdef __NR_pwritev
+    if (id == __NR_pwritev)
+        return RW_OP_WRITE;
+#endif
+#ifdef __NR_pwritev2
+    if (id == __NR_pwritev2)
+        return RW_OP_WRITE;
+#endif
+#ifdef __NR_writev
+    if (id == __NR_writev)
+        return RW_OP_WRITE;
+#endif
+    return RW_OP_NONE;
 }
 
 /* BPF Functions */
@@ -258,12 +294,13 @@ int trace_phase_end(struct pt_regs *ctx)
     return 0;
 }
 
-/* ---------- tracepoint: syscalls (read/write) ---------- */
-/* Replaced function-style tracepoint handlers with TRACEPOINT_PROBE to
- * ensure the tracepoint `args` struct is available in BPF context.
- */
-TRACEPOINT_PROBE(syscalls, sys_enter_read)
+/* ---------- tracepoint: raw_syscalls (filtered read/write accounting) ---------- */
+TRACEPOINT_PROBE(raw_syscalls, sys_enter)
 {
+    int rw_op = classify_rw_syscall(args->id);
+    if (rw_op == RW_OP_NONE)
+        return 0;
+
     u64 pid_tgid = get_pid_tgid();
     u32 tgid = (u32)(pid_tgid >> 32);
     if (!phase_ts_pid.lookup(&tgid))
@@ -275,65 +312,52 @@ TRACEPOINT_PROBE(syscalls, sys_enter_read)
         return 0;
 
     s->start_ns = bpf_ktime_get_ns();
+    s->active_op = (u32)rw_op;
     return 0;
 }
 
-TRACEPOINT_PROBE(syscalls, sys_exit_read)
+TRACEPOINT_PROBE(raw_syscalls, sys_exit)
 {
+    int rw_op = classify_rw_syscall(args->id);
+    if (rw_op == RW_OP_NONE)
+        return 0;
+
     u64 pid_tgid = get_pid_tgid();
     struct rw_stat_t *s = rwstat.lookup(&pid_tgid);
-    if (!s || s->start_ns == 0)
+    if (!s || s->start_ns == 0 || s->active_op != (u32)rw_op)
+    {
+        if (s)
+        {
+            s->start_ns = 0;
+            s->active_op = RW_OP_NONE;
+        }
         return 0;
+    }
 
     u64 delta = bpf_ktime_get_ns() - s->start_ns;
-    s->read_cnt++;
-    s->read_ns += delta;
-
-    long ret = args->ret; // bytes read or error(<0)
-    if (ret > 0)
-        s->read_bytes += (u64)ret;
-
-    s->start_ns = 0;
-    return 0;
-}
-
-TRACEPOINT_PROBE(syscalls, sys_enter_write)
-{
-    u64 pid_tgid = get_pid_tgid();
-    u32 tgid = (u32)(pid_tgid >> 32);
-    if (!phase_ts_pid.lookup(&tgid))
-        return 0;
-
-    struct rw_stat_t zero = {};
-    struct rw_stat_t *s = rwstat.lookup_or_try_init(&pid_tgid, &zero);
-    if (!s)
-        return 0;
-
-    s->start_ns = bpf_ktime_get_ns();
-    return 0;
-}
-
-TRACEPOINT_PROBE(syscalls, sys_exit_write)
-{
-    u64 pid_tgid = get_pid_tgid();
-    struct rw_stat_t *s = rwstat.lookup(&pid_tgid);
-    if (!s || s->start_ns == 0)
-        return 0;
-
-    u64 delta = bpf_ktime_get_ns() - s->start_ns;
-    s->write_cnt++;
-    s->write_ns += delta;
-
-    long ret = args->ret; // bytes written or error(<0)
-    if (ret > 0)
-        s->write_bytes += (u64)ret;
+    long ret = args->ret;
+    if (rw_op == RW_OP_READ)
+    {
+        s->read_cnt++;
+        s->read_ns += delta;
+        if (ret > 0)
+            s->read_bytes += (u64)ret;
+    }
+    else
+    {
+        s->write_cnt++;
+        s->write_ns += delta;
+        if (ret > 0)
+            s->write_bytes += (u64)ret;
+    }
 
     s->start_ns = 0;
+    s->active_op = RW_OP_NONE;
     return 0;
 }
 
-/* ---------- kprobe: handle_mm_fault ---------- */
-int kprobe__handle_mm_fault(struct pt_regs *ctx)
+/* ---------- kprobe: do_handle_mm_fault ---------- */
+int kprobe__do_handle_mm_fault(struct pt_regs *ctx)
 {
     u64 pid_tgid = get_pid_tgid();
     u32 tgid = (u32)(pid_tgid >> 32);
@@ -349,8 +373,8 @@ int kprobe__handle_mm_fault(struct pt_regs *ctx)
     return 0;
 }
 
-/* ---------- kretprobe: handle_mm_fault ---------- */
-int kretprobe__handle_mm_fault(struct pt_regs *ctx)
+/* ---------- kretprobe: do_handle_mm_fault ---------- */
+int kretprobe__do_handle_mm_fault(struct pt_regs *ctx)
 {
     u64 pid_tgid = get_pid_tgid();
     struct pf_stat_t *s = pfstat.lookup(&pid_tgid);
@@ -403,8 +427,8 @@ int kprobe__ondemand_readahead(struct pt_regs *ctx)
     return 0;
 }
 
-/* ---------- tracepoint: block_io_start (start) / block_io_done (done) ---------- */
-TRACEPOINT_PROBE(block, block_io_start)
+/* ---------- tracepoint: block_rq_issue (start) / block_rq_complete (done) ---------- */
+TRACEPOINT_PROBE(block, block_rq_issue)
 {
     u32 tgid = get_tgid();
     if (!phase_ts_pid.lookup(&tgid))
@@ -414,7 +438,10 @@ TRACEPOINT_PROBE(block, block_io_start)
     st.start_ns = bpf_ktime_get_ns();
     u64 pid_tgid = get_pid_tgid();
     st.pid_tgid = pid_tgid;
-    st.bytes = args->bytes;
+    u64 req_bytes = args->bytes;
+    if (req_bytes == 0)
+        req_bytes = ((u64)args->nr_sector) << 9;
+    st.bytes = req_bytes;
 
     char c = 0;
     bpf_probe_read_kernel(&c, sizeof(c), &args->rwbs[0]);
@@ -429,7 +456,7 @@ TRACEPOINT_PROBE(block, block_io_start)
     return 0;
 }
 
-TRACEPOINT_PROBE(block, block_io_done)
+TRACEPOINT_PROBE(block, block_rq_complete)
 {
     struct bio_key_t key = {.dev = args->dev, .sector = args->sector};
     struct block_start_t *st = block_start.lookup(&key);
@@ -438,6 +465,9 @@ TRACEPOINT_PROBE(block, block_io_done)
 
     u64 now = bpf_ktime_get_ns();
     u64 delta = now - st->start_ns;
+
+    if (st->bytes == 0)
+        st->bytes = ((u64)args->nr_sector) << 9;
 
     struct block_stat_t zero = {};
     struct block_stat_t *bs = blockstat.lookup_or_try_init(&st->pid_tgid, &zero);

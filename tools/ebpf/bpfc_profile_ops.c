@@ -1,6 +1,9 @@
 #include <uapi/linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/blkdev.h>
+#include <trace/events/block.h>
+#include <trace/events/syscalls.h>
+#include <linux/unistd.h>
 
 // ── VM_FAULT_* 플래그 (커널 버전에 따라 상수값 다를 수 있음) ──
 #define VM_FAULT_MAJOR 4
@@ -73,6 +76,7 @@ struct rw_stat_t
     u64 write_bytes;
 
     u64 start_ns; // sys_enter timestamp storage
+    u32 active_op; // 0=none,1=read,2=write (tracks syscall kind)
 };
 
 /* --- Block I/O helper structs ---
@@ -166,18 +170,6 @@ BPF_HASH(pfstat, u64, struct pf_stat_t);
  *  - start_ns is set on sys_enter and used on exit to compute elapsed ns.
  */
 BPF_HASH(rwstat, u64, struct rw_stat_t);
-
-/*
- * readahead_count (u32 tgid -> u64)
- *  - Simple per-process counter incremented from the ondemand_readahead kprobe.
- *  - Keyed by tgid because readahead is attributed to the process scope.
- *
- * DECLARED BUT UNUSED: this map exists for historical reasons. The current
- * implementation increments readahead counters inside `pfstat` entries
- * (pf_stat_t.readahead_cnt) and userspace reads that field. Consider
- * removing this separate map or using it consistently.
- */
-BPF_HASH(readahead_count, u32, u64);
 
 /*
  * block_start : keyed by bio (dev,sector) -> block_start_t
@@ -419,8 +411,8 @@ int trace_ops_check(struct pt_regs *ctx)
 //     return 0;
 // }
 
-/* ---------- tracepoint: block_io_start (start) / block_io_done (done) ---------- */
-TRACEPOINT_PROBE(block, block_io_start)
+/* ---------- tracepoint: block_rq_issue (start) / block_rq_complete (done) ---------- */
+TRACEPOINT_PROBE(block, block_rq_issue)
 {
     u32 tgid = get_tgid();
     if (!phase_ts_pid.lookup(&tgid))
@@ -430,7 +422,10 @@ TRACEPOINT_PROBE(block, block_io_start)
     st.start_ns = bpf_ktime_get_ns();
     u64 pid_tgid = get_pid_tgid();
     st.pid_tgid = pid_tgid;
-    st.bytes = args->bytes;
+    u64 req_bytes = args->bytes;
+    if (req_bytes == 0)
+        req_bytes = ((u64)args->nr_sector) << 9; // tracepoint reports sectors if bytes not set
+    st.bytes = req_bytes;
 
     char c = 0;
     bpf_probe_read_kernel(&c, sizeof(c), &args->rwbs[0]);
@@ -445,7 +440,7 @@ TRACEPOINT_PROBE(block, block_io_start)
     return 0;
 }
 
-TRACEPOINT_PROBE(block, block_io_done)
+TRACEPOINT_PROBE(block, block_rq_complete)
 {
     struct bio_key_t key = {.dev = args->dev, .sector = args->sector};
     struct block_start_t *st = block_start.lookup(&key);
@@ -454,6 +449,9 @@ TRACEPOINT_PROBE(block, block_io_done)
 
     u64 now = bpf_ktime_get_ns();
     u64 delta = now - st->start_ns;
+
+    if (st->bytes == 0)
+        st->bytes = ((u64)args->nr_sector) << 9;
 
     struct block_stat_t zero = {};
     struct block_stat_t *bs = blockstat.lookup_or_try_init(&st->pid_tgid, &zero);
