@@ -256,7 +256,7 @@ run_with_single_prompt() {
     local io_subread_bytes=$((64*1024))
 
     local io_engine="parallel_pread" 
-    local io_min_block_size=$((1024*1024))
+    local io_min_block_size=$((64*1024))
     local io_max_threads=4
 
     if [[ "$LOG_ENABLED" == "true" ]]; then
@@ -325,31 +325,28 @@ run_with_single_prompt() {
     banner "--- C++ Binary Execution START ---"
     banner "Command: ${CMD[*]}"
 
+    LD_LIBRARY_PATH="/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib"
+    PATH="/overlay/host/rootfs/usr/bin:$PATH"
+
     # Activate cgroups if memory limit is specified
     if [[ -n "$MEMORY_LIMIT" ]]; then    
         # Use systemd-run for cgroup v2
+
         if [[ -f /sys/fs/cgroup/cgroup.controllers ]]; then
             log "cgroup v2 detected: systemd-run"
-            CMD=(
-                systemd-run --quiet --scope
-                -p MemoryMax="$MEMORY_LIMIT" -p MemoryHigh="$MEMORY_LIMIT" -p MemorySwapMax=0
+
+            # Use systemd-run for cgroup v2
+            # systemd-run --quiet --scope \
+            #     -p MemoryMax="$mmax" -p MemoryHigh="$mmax" -p MemorySwapMax=0 \
+            #      --setenv=LD_LIBRARY_PATH=/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib \
+            #     --setenv=PATH=/overlay/host/rootfs/usr/bin:$PATH \
+            #     -- "${cmd[@]}"
+            LD_LIBRARY_PATH=/usr/lib/systemd:$LD_LIBRARY_PATH \
+            systemd-run --quiet --scope \
+                -p MemoryMax="$MEMORY_LIMIT" -p MemoryHigh="$MEMORY_LIMIT"  \
+                --setenv=LD_LIBRARY_PATH=/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib \
+                --setenv=PATH="/overlay/host/rootfs/usr/bin:$PATH" \
                 -- "${CMD[@]}"
-            )
-        else
-            # Use cgexec for cgroup v1
-            log "cgroup v1 detected: cgexec"
-            
-            local cg="/sys/fs/cgroup/memory/llmbench"
-            if [[ ! -d "$cg" ]]; then
-                log "Creating cgroup: $cg"
-                sudo mkdir -p "$cg"
-            fi
-            echo 0 | sudo tee "$cg/memory.force_empty" >/dev/null || true
-            echo "$(($(numfmt --from=iec "$MEMORY_LIMIT")))" | sudo tee "$cg/memory.limit_in_bytes" >/dev/null
-            
-            # Execute with cgroup
-            CMD=(cgexec -g memory:llmbench "${CMD[@]}")
-            
         fi
     fi
 
