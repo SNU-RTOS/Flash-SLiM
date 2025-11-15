@@ -252,11 +252,11 @@ run_with_single_prompt() {
     # Build command as array (safe quoting)
     # Select io_engine (parallel_pread or io_uring) and following params
     # local io_engine="io_uring" 
-    local io_ring_depth=4
-    local io_subread_bytes=$((64*1024))
+    local io_ring_depth=16
+    local io_subread_bytes=$((128*1024))
 
     local io_engine="parallel_pread" 
-    local io_min_block_size=$((64*1024))
+    local io_min_block_size=$((512*1024))
     local io_max_threads=4
 
     if [[ "$LOG_ENABLED" == "true" ]]; then
