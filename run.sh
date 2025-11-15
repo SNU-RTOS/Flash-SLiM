@@ -67,7 +67,7 @@ MAX_TOK_LEN=16         # Default max tokens to generate
 NUM_REPEATS=1          # Default number of iterations
 MEMORY_LIMITS=()       # Array of memory limits for cgroup testing
 ENABLE_CGROUP=false    # Default cgroup enable state
-BPF_PHASE_LOGGING=false # Default BPF phase logging
+BPF_PHASE_LOGGING=true # Default BPF phase logging
 
 # --- Logging Settings ---
 # Base directory for logs. The final path will be e.g. <LOG_DIR_BASE>/<model_target_mem>
@@ -202,7 +202,6 @@ fi
 
 }
 
-
 # =========================================================================== #
 # 5. Core Functions                                                           #
 # =========================================================================== #
@@ -336,22 +335,24 @@ run_with_single_prompt() {
             log "cgroup v2 detected: systemd-run"
 
             # Use systemd-run for cgroup v2
-            # systemd-run --quiet --scope \
-            #     -p MemoryMax="$mmax" -p MemoryHigh="$mmax" -p MemorySwapMax=0 \
-            #      --setenv=LD_LIBRARY_PATH=/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib \
-            #     --setenv=PATH=/overlay/host/rootfs/usr/bin:$PATH \
-            #     -- "${cmd[@]}"
             LD_LIBRARY_PATH=/usr/lib/systemd:$LD_LIBRARY_PATH \
-            systemd-run --quiet --scope \
+                systemd-run \
+                --quiet --scope \
                 -p MemoryMax="$MEMORY_LIMIT" -p MemoryHigh="$MEMORY_LIMIT"  \
                 --setenv=LD_LIBRARY_PATH=/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib \
                 --setenv=PATH="/overlay/host/rootfs/usr/bin:$PATH" \
                 -- "${CMD[@]}"
         fi
+    else
+        log "No memory limit specified, running normally"
+        LD_LIBRARY_PATH=/usr/lib/systemd:$LD_LIBRARY_PATH \
+            systemd-run --quiet --scope \
+            --setenv=LD_LIBRARY_PATH=/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib \
+            --setenv=PATH="/overlay/host/rootfs/usr/bin:$PATH" \
+            -- "${CMD[@]}"
     fi
 
-    # execute CMD
-    sudo "${CMD[@]}"
+
 
     banner "--- C++ Binary Execution END ---"
     
