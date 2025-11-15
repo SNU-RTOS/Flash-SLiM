@@ -1,6 +1,15 @@
 #!/bin/bash
 
 # =========================================================================== #
+# Check for sudo command availability                                        #
+# =========================================================================== #
+if ! command -v sudo >/dev/null 2>&1; then
+    sudo() {
+        "$@"
+    }
+fi
+
+# =========================================================================== #
 # 1. Logging & Output Helpers                                                 #
 # =========================================================================== #
 
@@ -24,6 +33,7 @@ error() {
   echo -e "${C_RED}✖ Error in ${BASH_SOURCE[1]}:${BASH_LINENO[0]}:${C_RESET} \n -> $*" >&2
   exit 1;
 }
+
 execute_with_log() {
     # Executes a command, redirecting its output based on the implementation chosen below.
     # To switch behavior, comment out the active implementation and uncomment the desired one.
