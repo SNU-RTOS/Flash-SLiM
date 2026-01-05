@@ -1,6 +1,6 @@
-# flash-slim: A Research Framework for On-Device LLM Inference with OS-Aware Optimization
+# Flash-SLim
 
-**flash-slim** is a high-performance research framework for on-device Large Language Model (LLM) inference. Built with LiteRT (TensorFlow Lite) and Bazel, it is engineered to explore and evaluate advanced OS-aware optimization techniques, specifically targeting memory-constrained environments.
+**flash-slim** is a research framework for on-device Large Language Model (LLM) inference. Built with LiteRT (TensorFlow Lite) and Bazel, it is engineered to explore and evaluate advanced OS-aware optimization techniques, specifically targeting memory-constrained environments.
 
 The core research goal of this project is to implement and analyze a **Storage-Aware Weight Streaming Pipeline** with Compute–I/O Overlap, designed to run large decoder-only LLMs on devices with limited DRAM. This framework provides the essential tools to profile, analyze, and optimize the complex interplay between the inference engine and the underlying operating system.
 
