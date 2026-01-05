@@ -1,4 +1,4 @@
-# Flash-SLim
+# Flash-SLiM: Streaming LLM inference on Memory-constrained devices using Flash storage
 
 **flash-slim** is a research framework for on-device Large Language Model (LLM) inference. Built with LiteRT (TensorFlow Lite) and Bazel, it is engineered to explore and evaluate advanced OS-aware optimization techniques, specifically targeting memory-constrained environments.
 
