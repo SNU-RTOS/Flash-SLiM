@@ -256,11 +256,11 @@ def main() -> int:
 """
 Usage
 1. default: PREFILL non-circular, DECODE circular
-python prefetch_plan_analyzer.py prefetch_plan.json -o metrics.csv
+python prefetch_plan_analyzer.py prefetch_plan.json -o analysis.csv
 2. disable circular DECODE
-python prefetch_plan_analyzer.py prefetch_plan.json -o metrics.csv --no-decode-circular
+python prefetch_plan_analyzer.py prefetch_plan.json -o analysis.csv --no-decode-circular
 3. (optional) if you ever want to test circular PREFILL
-python prefetch_plan_analyzer.py prefetch_plan.json -o metrics.csv --prefill-circular
+python prefetch_plan_analyzer.py prefetch_plan.json -o analysis.csv --prefill-circular
 """
 if __name__ == "__main__":
     raise SystemExit(main())
