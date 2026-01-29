@@ -12,6 +12,9 @@
 #   "enable_repetition_penalty": true
 # }
 
+# Usage example
+#  ./run_cmt_generator.sh --core 3-6 --threads 4 -f ./prompt/sample_prompt_128_1.json
+
 set -euo pipefail
 
 # =========================================================================== #
@@ -32,11 +35,14 @@ banner "Script Configuration"
 
 # --- Model and Binary Settings ---
 # You can switch models by uncommenting the desired lines.
+MODEL_DIR="${MODEL_PATH}/Llama2-7B"
+MODEL_NAME="llama2_7b_q8_ekv1280"
+
 # MODEL_DIR="${MODEL_PATH}/Llama3.2-1B"
 # MODEL_NAME="llama3.2_q8_ekv1280"
 
-MODEL_DIR="${MODEL_PATH}/Llama3.2-3B"
-MODEL_NAME="llama3.2_q8_ekv1024"
+# MODEL_DIR="${MODEL_PATH}/Llama3.2-3B"
+# MODEL_NAME="llama3.2_q8_ekv1024"
 
 # MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
 # MODEL_NAME="gemma3_q4_ekv2048"
@@ -51,6 +57,9 @@ MODEL_NAME="llama3.2_q8_ekv1024"
 
 # MODEL_DIR="${MODEL_PATH}/Qwen2.5-3B"
 # MODEL_NAME="qwen2.5-3b_q8_ekv1280"
+
+# MODEL_DIR="${MODEL_PATH}/Qwen2.5-14B"
+# MODEL_NAME="qwen2_5_14b_q8_ekv1280"
 
 # MODEL_DIR="${MODEL_PATH}/SmolLM-135M"
 # MODEL_NAME="smollm_q8_ekv1280"
@@ -281,17 +290,35 @@ run_with_single_prompt() {
 
     
     # run prefetch_planner
-    python3 ./tools/model_prefetch_planner/prefetch_planner.py \
-        --cmt weight_chunks_metadata_table.json \
-        --output prefetch_plan_simple_${NUM_THREADS}_${TOKENS}.json \
-        --profile-pattern ${BPF_LOG_FILE_PATH} \
-        --strategy simple
+    # python3 ./tools/model_prefetch_planner/prefetch_planner.py \
+    #     --cmt weight_chunks_metadata_table.json \
+    #     --output prefetch_plan_simple_${NUM_THREADS}_${TOKENS}.json \
+    #     --profile-pattern ${BPF_LOG_FILE_PATH} \
+    #     --strategy simple
     
+    # python3 ./tools/model_prefetch_planner/prefetch_planner.py \
+    #     --cmt weight_chunks_metadata_table.json \
+    #     --output prefetch_plan_rechunk_${NUM_THREADS}_${TOKENS}.json \
+    #     --profile-pattern ${BPF_LOG_FILE_PATH} \
+    #     --strategy rechunk
+
     python3 ./tools/model_prefetch_planner/prefetch_planner.py \
         --cmt weight_chunks_metadata_table.json \
-        --output prefetch_plan_rechunk_${NUM_THREADS}_${TOKENS}.json \
+        --output prefetch_plan_fixedpair_${NUM_THREADS}_${TOKENS}.json \
         --profile-pattern ${BPF_LOG_FILE_PATH} \
-        --strategy rechunk
+        --strategy fixedpair
+
+    # python3 ./tools/model_prefetch_planner/prefetch_planner.py \
+    #     --cmt weight_chunks_metadata_table.json \
+    #     --output prefetch_plan_sizeonly_${NUM_THREADS}_${TOKENS}.json \
+    #     --profile-pattern ${BPF_LOG_FILE_PATH} \
+    #     --strategy sizeonly
+
+    python3 ./tools/model_prefetch_planner/prefetch_planner.py \
+        --cmt weight_chunks_metadata_table.json \
+        --output prefetch_plan_smart_${NUM_THREADS}_${TOKENS}.json \
+        --profile-pattern ${BPF_LOG_FILE_PATH} \
+        --strategy smart
 }
 
 # =========================================================================== #

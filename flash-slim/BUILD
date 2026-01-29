@@ -189,6 +189,20 @@ cc_binary(
 )
 
 cc_binary(
+    name = "text_generator_mmap",
+    srcs = [
+        "text_generator_main.cc",
+    ],
+    defines = [
+        "TF_LITE_TENSORFLOW_PROFILER",
+    ],
+    linkopts = tflite_linkopts(),
+    deps = [
+        ":common",
+    ],
+)
+
+cc_binary(
     name = "cmt_generator",
     srcs = [
         "cmt_generator.cc",
@@ -198,6 +212,26 @@ cc_binary(
         "TF_LITE_TENSORFLOW_PROFILER",
     ],
     linkopts = tflite_linkopts(),
+    deps = [
+        ":common",
+    ],
+)
+
+cc_binary(
+    name = "inference_driver",
+    srcs = ["inference_driver.cc"],
+    copts = [
+        "-std=c++17",
+        "-DUSE_OPENCV",
+        "-I/usr/include/opencv4",
+    ],
+    linkopts = tflite_linkopts() + [
+        "-lopencv_core",
+        "-lopencv_imgproc",
+        "-lopencv_imgcodecs",
+        "-ldl",
+        "-lpthread",
+    ],
     deps = [
         ":common",
     ],

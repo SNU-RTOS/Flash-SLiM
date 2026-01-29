@@ -12,9 +12,6 @@
 #   "enable_repetition_penalty": true
 # }
 
-# Usage example
-# ./run.sh --log --threads 4  --core 3-6  --tl 16 -f ./prompt/sample_prompt_128_1.json --memory 1G
-
 set -euo pipefail
 
 # =========================================================================== #
@@ -35,14 +32,11 @@ banner "Script Configuration"
 
 # --- Model and Binary Settings ---
 # You can switch models by uncommenting the desired lines.
-MODEL_DIR="${MODEL_PATH}/Llama2-7B"
-MODEL_NAME="llama2_7b_q8_ekv1280"
-
 # MODEL_DIR="${MODEL_PATH}/Llama3.2-1B"
 # MODEL_NAME="llama3.2_q8_ekv1280"
 
-# MODEL_DIR="${MODEL_PATH}/Llama3.2-3B"
-# MODEL_NAME="llama3.2_q8_ekv1024"
+MODEL_DIR="${MODEL_PATH}/Llama3.2-3B"
+MODEL_NAME="llama3.2_q8_ekv1024"
 
 # MODEL_DIR="${MODEL_PATH}/Gemma3-1B"
 # MODEL_NAME="gemma3_q4_ekv2048"
@@ -58,25 +52,21 @@ MODEL_NAME="llama2_7b_q8_ekv1280"
 # MODEL_DIR="${MODEL_PATH}/Qwen2.5-3B"
 # MODEL_NAME="qwen2.5-3b_q8_ekv1280"
 
-# MODEL_DIR="${MODEL_PATH}/Qwen2.5-14B"
-# MODEL_NAME="qwen2_5_14b_q8_ekv1280"
-
 # MODEL_DIR="${MODEL_PATH}/SmolLM-135M"
 # MODEL_NAME="smollm_q8_ekv1280"
 
-BIN="bin/text_generator_main"
+BIN="bin/text_generator_main_mmap"
 
 # --- Execution Settings ---
 TARGET="cpu"           # Default target: cpu | gpu
 LOG_ENABLED=false      # Default logging: false
 CORE_LIST="all"          # Default core list for taskset
 NUM_THREADS=1          # Default number of threads
-PROMPT_FILE="${PROMPT_PATH}/sample_prompt_512_1.json" # Default prompt file
+PROMPT_FILE="${PROMPT_PATH}/sample_prompt_8_1.json" # Default prompt file
 MAX_TOK_LEN=16         # Default max tokens to generate
 NUM_REPEATS=1          # Default number of iterations
 MEMORY_LIMITS=()       # Array of memory limits for cgroup testing
 ENABLE_CGROUP=false    # Default cgroup enable state
-BPF_PHASE_LOGGING=true # Default BPF phase logging
 
 # --- Logging Settings ---
 # Base directory for logs. The final path will be e.g. <LOG_DIR_BASE>/<model_target_mem>
@@ -212,12 +202,87 @@ fi
 }
 
 # =========================================================================== #
+# 4. Helper Functions                                                         #
+# =========================================================================== #
+# Memory-constrained execution helper (cgroup)
+run_with_memlimit() {
+    local mmax="$1"
+    shift
+    local cmd=("$@")
+    
+    LD_LIBRARY_PATH="/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib"
+    PATH="/overlay/host/rootfs/usr/bin:$PATH"
+
+    if [[ -f /sys/fs/cgroup/cgroup.controllers ]]; then
+        log "cgroup v2 detected: systemd-run"
+
+        # Use systemd-run for cgroup v2
+        # systemd-run --quiet --scope \
+        #     -p MemoryMax="$mmax" -p MemoryHigh="$mmax" -p MemorySwapMax=0 \
+        #      --setenv=LD_LIBRARY_PATH=/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib \
+        #     --setenv=PATH=/overlay/host/rootfs/usr/bin:$PATH \
+        #     -- "${cmd[@]}"
+        LD_LIBRARY_PATH=/usr/lib/systemd:$LD_LIBRARY_PATH  \
+        systemd-run --quiet --scope \
+            -p MemoryMax="$mmax" -p MemoryHigh="$mmax"  \
+            --setenv=LD_LIBRARY_PATH=/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib \
+            --setenv=PATH=/overlay/host/rootfs/usr/bin:$PATH \
+            -- "${cmd[@]}"
+    fi
+    # else
+    #     # Use cgexec for cgroup v1
+    #     log "cgroup v1 detected: cgexec"
+        
+    #     local cg="/sys/fs/cgroup/memory/llmbench"
+    #     if [[ ! -d "$cg" ]]; then
+    #         log "Creating cgroup: $cg"
+    #         mkdir -p "$cg"
+    #     fi
+    #     echo 0 | tee "$cg/memory.force_empty" >/dev/null || true
+    #     echo "$(($(numfmt --from=iec "$mmax")))" | tee "$cg/memory.limit_in_bytes" >/dev/null
+        
+    #     # Execute with cgroup
+    #     cgexec -g memory:llmbench -- "${cmd[@]}"
+    # fi
+}
+
+
+# =========================================================================== #
 # 5. Core Functions                                                           #
 # =========================================================================== #
 
 
+# Function to parse JSON and extract prompt data
+parse_json_file() {
+    local json_file="$1"
+    
+    log "Detected JSON format. Processing..." >&2
+    
+    # Check if Python3 is available
+    if ! command -v python3 >/dev/null 2>&1; then
+        error "Python3 is required for JSON parsing but not installed. Please install Python3: apt-get install python3"
+    fi
+    
+    # Check if parser script exists
+    local parser_script="./tools/prompt/parse_json_prompt.py"
+    if [[ ! -f "$parser_script" ]]; then
+        error "JSON parser script not found: $parser_script. Please ensure the script exists in the scripts directory."
+    fi
+    
+    # Run the Python parser
+    local parse_result
+    parse_result=$(python3 "$parser_script" "$json_file")
+    local parse_status=$?
+    
+    if [[ $parse_status -ne 0 ]]; then
+        error "Failed to parse JSON file:\n$parse_result"
+    fi
+    
+    echo "$parse_result"
+}
+
 # Function to run a single prompt
-run_with_single_prompt() {
+run_single_prompt() {
     local TOKENS="$1"
     local PROMPT="$2"  
     local LOG_FILE="$3"
@@ -228,8 +293,6 @@ run_with_single_prompt() {
     local ENABLE_REPETITION_PENALTY="$8"
     local MEMORY_LIMIT="${9:-}"
     local CSV_FILE="${LOG_FILE%.log}.csv"
-    local BPF_PHASE_PYTHON_PATH="./tools/ebpf/profile_phase.py"
-    local BPF_LOG_FILE_PATH="bpf_profile_phase_results_${NUM_THREADS}threads_prefill_${TOKENS}.log"
 
     banner "LLM inference start (${TARGET^^})"
     log "Model                           : ${MODEL_NAME}"
@@ -250,22 +313,10 @@ run_with_single_prompt() {
         log "Log file                        : ${LOG_FILE}"
         log "Op-level profiling csv results  : ${CSV_FILE}"
     fi
-    if [[ "$BPF_PHASE_LOGGING" == "true" ]]; then
-        log "BPF phase profiling script      : ${BPF_PHASE_PYTHON_PATH}"
-        log "BPF phase profiling log file    : ${BPF_LOG_FILE_PATH}"
-    fi
 
     clear_caches
 
     # Build command as array (safe quoting)
-    # Select io_engine (parallel_pread or io_uring) and following params
-    local io_engine="io_uring" 
-    local io_ring_depth=16
-    local io_subread_bytes=$((512*1024))
-
-    # local io_engine="parallel_pread" 
-    local io_min_block_size=$((128*1024))
-    local io_max_threads=4
 
     if [[ "$LOG_ENABLED" == "true" ]]; then
         local CMD=(
@@ -283,11 +334,6 @@ run_with_single_prompt() {
             --top_p "${TOP_P}"
             --repetition_penalty "${REPETITION_PENALTY}"
             --csv_profile_output_path "$CSV_FILE"
-            --io_engine "${io_engine}"
-            --io_ring_depth "${io_ring_depth}"
-            --io_subread_bytes "${io_subread_bytes}"
-            --io_min_block_size "${io_min_block_size}"
-            --io_max_threads "${io_max_threads}"
         )
     else
         local CMD=(
@@ -304,11 +350,6 @@ run_with_single_prompt() {
             --top_k "${TOP_K}"
             --top_p "${TOP_P}"
             --repetition_penalty "${REPETITION_PENALTY}"
-            --io_engine "${io_engine}"
-            --io_ring_depth "${io_ring_depth}"
-            --io_subread_bytes "${io_subread_bytes}"
-            --io_min_block_size "${io_min_block_size}"
-            --io_max_threads "${io_max_threads}"
         )
     fi
     
@@ -321,49 +362,21 @@ run_with_single_prompt() {
     # Add taskset if specified
     [[ "${CORE_LIST}" != "all" ]] && CMD=(taskset -c "${CORE_LIST}" "${CMD[@]}")
 
-    if [[ -n "$BPF_PHASE_LOGGING" && "$BPF_PHASE_LOGGING" == "true" ]]; then
-        # Start BPF profiler in the background with proper session management
-        banner "--- BPF PROFILER START ---"
-        run_bpf "$BPF_PHASE_PYTHON_PATH" "$BIN" "$BPF_LOG_FILE_PATH" &
-        BG_PID=$! # Get background process PID (run_bpf)
-        log "Started BPF profiler with PID: $BG_PID, Wait for initialization... 10 seconds"
-        sleep 10 # Give some time for BPF to initialize
-    fi
-
     banner "--- C++ Binary Execution START ---"
     banner "Command: ${CMD[*]}"
-
-
-    # Activate cgroups if memory limit is specified
-    if [[ -n "$MEMORY_LIMIT" ]]; then    
-        # Use systemd-run for cgroup v2
-
-        if [[ -f /sys/fs/cgroup/cgroup.controllers ]]; then
-            log "cgroup v2 detected: systemd-run"
-            systemd-run \
-                --quiet --scope \
-                -p MemoryMax="$MEMORY_LIMIT" -p MemoryHigh="$MEMORY_LIMIT"  \
-                --setenv=LD_LIBRARY_PATH=/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib \
-                --setenv=PATH="/overlay/host/rootfs/usr/bin:$PATH" \
-                -- "${CMD[@]}"
-        fi
+    # Execute command with or without memory limit
+    if [[ -n "$MEMORY_LIMIT" ]]; then
+        # Memory-constrained execution with cgroup
+        run_with_memlimit "$MEMORY_LIMIT" "${CMD[@]}"
     else
-        log "No memory limit specified, running normally"
-        "${CMD[@]}"
+        # Normal execution
+     "${CMD[@]}"
     fi
 
 
 
     banner "--- C++ Binary Execution END ---"
-    
-    banner "--- BPF PROFILER END ---"
-    
-    if [[ "$BPF_PHASE_LOGGING" == "true" ]]; then
-        cleanup_bpf "$BPF_PHASE_PYTHON_PATH" "$BG_PID"
-        log "BPF profiling log saved to ${BPF_LOG_FILE_PATH}"
-    fi
 
-    # Post-process CSV file to fix any formatting issues
     if [[ "$LOG_ENABLED" == "true" ]]; then
         local tmp_fixed_csv_file="${CSV_FILE}.fixed.csv"
 
@@ -384,7 +397,7 @@ run_with_single_prompt() {
 
 
 # Function to process multiple prompts from array
-process_prompts_and_run() {
+process_multiple_prompts() {
     local parse_result="$1"
     local memory_limit="${2:-}"
     local iteration="${3:-1}"
@@ -433,11 +446,9 @@ process_prompts_and_run() {
             fi
 
             log "Executing LLM Inference"
-            execute_with_log "$log_file" run_with_single_prompt \
-                "$current_tokens" "$current_prompt" "$log_file" \
+            execute_with_log "$log_file" run_single_prompt "$current_tokens" "$current_prompt" "$log_file" \
                 "$current_temperature" "$current_top_k" "$current_top_p" \
-                "$current_repetition_penalty" "$current_enable_repetition_penalty" \
-                "$memory_limit"
+                "$current_repetition_penalty" "$current_enable_repetition_penalty" "$memory_limit"
                 
         elif [[ "$in_prompt" == "true" ]]; then
             if [[ -z "$current_prompt" ]]; then
@@ -449,9 +460,40 @@ process_prompts_and_run() {
     done <<< "$parse_result"
 }
 
+# Function to process single prompt
+process_single_prompt() {
+    local parse_result="$1"
+    local memory_limit="${2:-}"
+    local iteration="${3:-}"
+    local log_dir="$4"
+    
+    # Parse: SINGLE tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
+    local first_line tokens temperature top_k top_p repetition_penalty enable_repetition_penalty
+    first_line=$(echo "$parse_result" | head -n1)
+    tokens=$(echo "$first_line" | awk '{print $2}')
+    temperature=$(echo "$first_line" | awk '{print $3}')
+    top_k=$(echo "$first_line" | awk '{print $4}')
+    top_p=$(echo "$first_line" | awk '{print $5}')
+    repetition_penalty=$(echo "$first_line" | awk '{print $6}')
+    enable_repetition_penalty=$(echo "$first_line" | awk '{print $7}')
+    
+    local prompt timestamp log_file
+    prompt=$(echo "$parse_result" | sed -n '/PROMPT_START/,/PROMPT_END/p' | sed '1d;$d')
+    timestamp=$(date +'%y%m%d_%H%M%S')
+    if [[ $NUM_REPEATS -gt 1 ]]; then
+        log_file="${log_dir}/run_${tokens}_${iteration}_${timestamp}.log"
+    else
+        log_file="${log_dir}/run_${tokens}_${timestamp}.log"
+    fi
+    
+    log "Executing LLM Inference"
+    execute_with_log "$log_file" run_single_prompt "$tokens" "$prompt" "$log_file" \
+        "$temperature" "$top_k" "$top_p" "$repetition_penalty" "$enable_repetition_penalty" "$memory_limit"
+}
+
 
 # Function to execute benchmarks with or without memory constraints
-run_benchmarks() {
+execute_benchmarks() {
     local memory_limit="${1:-}"
     local current_log_dir
     
@@ -485,11 +527,16 @@ run_benchmarks() {
         fi
         
         # Parse JSON file
-        local parse_result=$(parse_json_file "${PROMPT_FILE}")
+        local parse_result
+        parse_result=$(parse_json_file "${PROMPT_FILE}")
         
         # Process based on JSON structure
         if [[ "$parse_result" =~ ^ARRAY ]]; then
-            process_prompts_and_run "$parse_result" "$memory_limit" "$iter" "$current_log_dir"
+            # Multiple prompts
+            process_multiple_prompts "$parse_result" "$memory_limit" "$iter" "$current_log_dir"
+        elif [[ "$parse_result" =~ ^SINGLE ]]; then
+            # Single prompt
+            process_single_prompt "$parse_result" "$memory_limit" "$iter" "$current_log_dir"
         else
             error "Invalid JSON parse result format"
         fi
@@ -509,11 +556,11 @@ main() {
     if [[ "$ENABLE_CGROUP" == "true" ]]; then
         # Memory-constrained benchmarking
         for memory_limit in "${MEMORY_LIMITS[@]}"; do
-            run_benchmarks "$memory_limit"
+            execute_benchmarks "$memory_limit"
         done
     else
         # Normal benchmarking
-        run_benchmarks
+        execute_benchmarks
     fi
 
     log "All benchmarks completed successfully!"

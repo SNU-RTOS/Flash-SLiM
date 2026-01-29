@@ -44,8 +44,6 @@ log "  GPU_COPT_FLAGS: $GPU_COPT_FLAGS"
 
 APP_NAME="text_generator_main"
 OUT_DIR=bin
-BAZEL_BIN="bazel-bin/flash-slim/${APP_NAME}"
-OUTPUT_BIN="${OUT_DIR}/${APP_NAME}"
 
 # ---------------------------------------------------------------------------
 # 1. Parse argument
@@ -53,13 +51,19 @@ OUTPUT_BIN="${OUT_DIR}/${APP_NAME}"
 BUILD_TARGET="${1:-main}"    # default = main
 
 case "${BUILD_TARGET}" in
-    main|clean|test|all) ;;
+    main) APP_NAME="text_generator_main" ;;
+    mmap) APP_NAME="text_generator_mmap" ;;
+    inf) APP_NAME="inference_driver" ;;
+    clean|test|all) ;;
     *)
-        echo "Invalid target '${BUILD_TARGET}' (expected main|clean|test|all)" >&2
-        echo "Usage: $0 [main|clean|test|all]" >&2
+        echo "Invalid target '${BUILD_TARGET}' (expected main|mmap|inf|clean|test|all)" >&2
+        echo "Usage: $0 [main|mmap|inf|clean|test|all]" >&2
         exit 1
     ;;
 esac
+
+BAZEL_BIN="bazel-bin/flash-slim/${APP_NAME}"
+OUTPUT_BIN="${OUT_DIR}/${APP_NAME}"
 
 # ---------------------------------------------------------------------------
 # 2. Build helpers
@@ -139,6 +143,50 @@ do_main_build() {
     fi
 }
 
+do_mmap_build() {
+    banner "Building main text generator with Bazel"
+    
+    local arch_optimize_config=""
+    # Determine architecture
+    arch=$(uname -m)
+
+    # Set config based on architecture
+    case "${arch}" in
+        x86_64)
+            arch_optimize_config="--config=avx_linux"
+            ;;
+        aarch64*)
+            arch_optimize_config="--config=linux_arm64"
+            ;;
+        *)
+            echo "Unsupported architecture: ${arch}. Using default config."
+            arch_optimize_config=""
+            ;;
+    esac
+
+    bazel $BAZEL_LAUNCH_CONF \
+        build $BAZEL_CONF \
+        //flash-slim:$APP_NAME \
+        $COPT_FLAGS \
+        $LINKOPTS \
+        $GPU_FLAGS \
+        $GPU_COPT_FLAGS \
+        $arch_optimize_config \
+        --config=ebpf \
+
+    ensure_dir "${OUT_DIR}"
+    banner "Copying binary to output directory"
+    if [[ -f "${BAZEL_BIN}" ]]; then
+        [[ -f "${OUTPUT_BIN}" ]] && rm -f "${OUTPUT_BIN}"
+        cp "${BAZEL_BIN}" "${OUTPUT_BIN}"
+        log "Binary copied to ${OUTPUT_BIN}"
+    else
+        banner "Binary not found"
+        log "[ERROR] Binary not found at ${BAZEL_BIN}"
+        exit 1
+    fi
+}
+
 do_clean() {
     banner "Cleaning build artifacts"
     run bazel clean
@@ -150,6 +198,36 @@ do_test() {
     banner "Running tests"
     run bazel test //flash-slim:all
     log "Tests complete"
+}
+
+do_inf_build() {
+    banner "Building ViT demo with Bazel"
+
+    local arch_optimize_config=""
+    arch=$(uname -m)
+    case "${arch}" in
+        x86_64)  arch_optimize_config="--config=avx_linux" ;;
+        aarch64*) arch_optimize_config="--config=linux_arm64" ;;
+        *) arch_optimize_config="" ;;
+    esac
+
+    bazel $BAZEL_LAUNCH_CONF \
+        build $BAZEL_CONF \
+        //flash-slim:$APP_NAME \
+        $COPT_FLAGS \
+        $LINKOPTS \
+        $arch_optimize_config
+
+    ensure_dir "${OUT_DIR}"
+    banner "Copying binary to output directory"
+    if [[ -f "${BAZEL_BIN}" ]]; then
+        [[ -f "${OUTPUT_BIN}" ]] && rm -f "${OUTPUT_BIN}"
+        cp "${BAZEL_BIN}" "${OUTPUT_BIN}"
+        log "Binary copied to ${OUTPUT_BIN}"
+    else
+        log "[ERROR] Binary not found at ${BAZEL_BIN}"
+        exit 1
+    fi
 }
 
 do_all_build() {
@@ -186,8 +264,10 @@ fi
 # ---------------------------------------------------------------------------
 case "${BUILD_TARGET}" in
     main) do_main_build ;;
+    mmap) do_mmap_build ;;
     clean) do_clean ;;
     test) do_test ;;
+    inf) do_inf_build;;
     all) do_all_build ;;
 esac
 

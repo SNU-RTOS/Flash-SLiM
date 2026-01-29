@@ -19,6 +19,9 @@ from typing import Dict, List, Mapping
 
 from planning.__planner_data_structures__ import PrefetchPlan, WeightChunkInfo
 from planning.io_estimator import BandwidthIoTimeEstimator, DirectIoTimeEstimator
+from planning.strategy_smart import SmartPlanningStrategy
+from planning.strategy_sizeonly import SizeOnlyStrategy
+from planning.strategy_fixedpair import FixedPairDecodePlanningStrategy
 from planning.stratgey_rechunk import RechunkPlanningStrategy
 from planning.strategy_simple import SimplePlanningStrategy
 from planning.strategy_base import ChunkKey, PlanningContext, PlanningStrategy
@@ -91,6 +94,7 @@ class PrefetchPlanner:
             r"^(?P<mode>[A-Z_]+)\[(?P<chunk>\d+),(?P<offset>\d+)\]"
         )
 
+        line_count = 0
         for profile_file in profile_files:
             print(f"[PrefetchPlanner] Parsing profiling log: {profile_file}")
             with open(profile_file, "r", encoding="utf-8") as source:
@@ -111,12 +115,17 @@ class PrefetchPlanner:
                         continue
                     mode = match.group("mode")
                     chunk_idx = int(match.group("chunk"))
-                    origin_offset = int(match.group("offset"))
+                    # origin_offset = int(match.group("offset"))
+                    
                     try:
                         avg_ms = float(parts[2])
+                        # line_count += 1
+                        # print(f"{line_count} and {parts[2]}")
                     except ValueError:
                         continue
-                    aggregator[(mode, chunk_idx, origin_offset)].append(avg_ms)
+                    aggregator[(mode, chunk_idx)].append(avg_ms)
+                    # aggregator[(mode, chunk_idx, origin_offset)].append(avg_ms)
+                    # print(mode, chunk_idx, origin_offset, avg_ms)
 
         self.profile_stats = {
             key: statistics.mean(values) for key, values in aggregator.items()
@@ -198,6 +207,54 @@ class PrefetchPlanner:
                 io_estimator=io_estimator,
                 default_compute_ms=self._resolve_default_compute_ms(),
             )
+        
+        if normalized == "fixedpair":
+            buffer_size = self._resolve_buffer_size()
+            if buffer_size <= 0:
+                raise ValueError(
+                    "Fixed-pair strategy requires a positive max_buffer_size in metadata"
+                )
+            fallback_estimator = BandwidthIoTimeEstimator(bandwidth_bytes_per_sec=1e9)
+            io_estimator = DirectIoTimeEstimator(fallback=fallback_estimator)
+            return FixedPairDecodePlanningStrategy(
+                max_buffer_size=buffer_size,
+                io_estimator=io_estimator,
+                default_compute_ms=self._resolve_default_compute_ms(),
+            )
+        
+        if normalized == "sizeonly":
+            buffer_size = self._resolve_buffer_size()
+            if buffer_size <= 0:
+                raise ValueError(
+                    "Size-only strategy requires a positive weight_chunk_buffer_size in metadata"
+                )
+            fallback_estimator = BandwidthIoTimeEstimator(bandwidth_bytes_per_sec=1e9)
+            io_estimator = DirectIoTimeEstimator(fallback=fallback_estimator)
+            return SizeOnlyStrategy(
+                max_buffer_size=buffer_size,
+                io_estimator=io_estimator,
+                default_compute_ms=self._resolve_default_compute_ms(),
+            )
+            
+        if normalized == "smart":
+            buffer_size = self._resolve_buffer_size()
+            if buffer_size <= 0:
+                raise ValueError(
+                    "Smart strategy requires a positive max_buffer_size in metadata"
+                )
+            fallback_estimator = BandwidthIoTimeEstimator(bandwidth_bytes_per_sec=1e9)
+            io_estimator = DirectIoTimeEstimator(fallback=fallback_estimator)
+            from planning.strategy_smart import SmartPlanningStrategy
+
+            KiB = 1 << 10
+            MiB = 1 << 20
+            GiB = 1 << 30
+
+            return SmartPlanningStrategy(
+                max_buffer_size=700 * MiB, # buffer_size / 1 GB: 1 << 30 / 1 MB: 1 << 20
+                io_estimator=io_estimator,
+                default_compute_ms=self._resolve_default_compute_ms(),
+            )
 
         raise ValueError(f"Unknown planning strategy: {strategy_id}")
 
@@ -223,7 +280,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--strategy",
-        choices=["simple", "rechunk"],
+        choices=["simple", "rechunk", "fixedpair", "sizeonly", "smart"],
         default="simple",
         help="Planning strategy to apply",
     )

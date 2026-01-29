@@ -97,7 +97,7 @@ class DirectIoTimeEstimator:
     threads: int = 4
     block_size_bytes: int = 512 * 1024
     buffer_alignment: int = 4096
-    cache_results: bool = True
+    cache_results: bool = False
     _cache: Dict[int, float] = field(default_factory=dict, init=False)
 
     def estimate(

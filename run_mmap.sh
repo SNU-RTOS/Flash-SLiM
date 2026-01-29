@@ -12,9 +12,6 @@
 #   "enable_repetition_penalty": true
 # }
 
-# Usage example
-# ./run.sh --log --threads 4  --core 3-6  --tl 16 -f ./prompt/sample_prompt_128_1.json --memory 1G
-
 set -euo pipefail
 
 # =========================================================================== #
@@ -35,8 +32,8 @@ banner "Script Configuration"
 
 # --- Model and Binary Settings ---
 # You can switch models by uncommenting the desired lines.
-MODEL_DIR="${MODEL_PATH}/Llama2-7B"
-MODEL_NAME="llama2_7b_q8_ekv1280"
+# MODEL_DIR="${MODEL_PATH}/Llama2-7B"
+# MODEL_NAME="llama2_7b_q8_ekv1280"
 
 # MODEL_DIR="${MODEL_PATH}/Llama3.2-1B"
 # MODEL_NAME="llama3.2_q8_ekv1280"
@@ -58,20 +55,24 @@ MODEL_NAME="llama2_7b_q8_ekv1280"
 # MODEL_DIR="${MODEL_PATH}/Qwen2.5-3B"
 # MODEL_NAME="qwen2.5-3b_q8_ekv1280"
 
-# MODEL_DIR="${MODEL_PATH}/Qwen2.5-14B"
-# MODEL_NAME="qwen2_5_14b_q8_ekv1280"
+# MODEL_DIR="${MODEL_PATH}/Qwen2.5-7B"
+# MODEL_NAME="qwen2_5_7b_q8_ekv1280"
+
+MODEL_DIR="${MODEL_PATH}/Qwen2.5-14B"
+MODEL_NAME="qwen2_5_14b_q8_ekv1280"
 
 # MODEL_DIR="${MODEL_PATH}/SmolLM-135M"
 # MODEL_NAME="smollm_q8_ekv1280"
 
-BIN="bin/text_generator_main"
+BIN="bin/text_generator_mmap"
+# BIN="bin/text_generator_main"
 
 # --- Execution Settings ---
 TARGET="cpu"           # Default target: cpu | gpu
 LOG_ENABLED=false      # Default logging: false
 CORE_LIST="all"          # Default core list for taskset
 NUM_THREADS=1          # Default number of threads
-PROMPT_FILE="${PROMPT_PATH}/sample_prompt_512_1.json" # Default prompt file
+PROMPT_FILE="${PROMPT_PATH}/sample_prompt_8_1.json" # Default prompt file
 MAX_TOK_LEN=16         # Default max tokens to generate
 NUM_REPEATS=1          # Default number of iterations
 MEMORY_LIMITS=()       # Array of memory limits for cgroup testing
@@ -259,13 +260,18 @@ run_with_single_prompt() {
 
     # Build command as array (safe quoting)
     # Select io_engine (parallel_pread or io_uring) and following params
-    local io_engine="io_uring" 
-    local io_ring_depth=16
-    local io_subread_bytes=$((512*1024))
+    # local io_engine="io_uring" 
+    # local io_ring_depth=16
+    # local io_subread_bytes=$((128*1024))
 
     # local io_engine="parallel_pread" 
-    local io_min_block_size=$((128*1024))
-    local io_max_threads=4
+    # local io_min_block_size=$((512*1024))
+    # local io_max_threads=4
+    
+    # START_TOKEN="<bos>"
+    START_TOKEN="<s>"
+    # STOP_TOKEN="<end_of_turn>"
+    STOP_TOKEN="</s>"
 
     if [[ "$LOG_ENABLED" == "true" ]]; then
         local CMD=(
@@ -273,8 +279,8 @@ run_with_single_prompt() {
             --tflite_model "${MODEL_DIR}/${MODEL_NAME}.tflite"
             --sentencepiece_model "${MODEL_DIR}/tokenizer.model"
             --max_decode_steps "${MAX_TOK_LEN}"
-            --start_token "<bos>"
-            --stop_token "<end_of_turn>"
+            --start_token "${START_TOKEN}"
+            --stop_token "${STOP_TOKEN}"
             --num_threads "${NUM_THREADS}"
             --prompt "${PROMPT}"
             --weight_cache_path "${MODEL_DIR}/${MODEL_NAME}.xnnpack_cache"
@@ -283,11 +289,6 @@ run_with_single_prompt() {
             --top_p "${TOP_P}"
             --repetition_penalty "${REPETITION_PENALTY}"
             --csv_profile_output_path "$CSV_FILE"
-            --io_engine "${io_engine}"
-            --io_ring_depth "${io_ring_depth}"
-            --io_subread_bytes "${io_subread_bytes}"
-            --io_min_block_size "${io_min_block_size}"
-            --io_max_threads "${io_max_threads}"
         )
     else
         local CMD=(
@@ -295,8 +296,8 @@ run_with_single_prompt() {
             --tflite_model "${MODEL_DIR}/${MODEL_NAME}.tflite"
             --sentencepiece_model "${MODEL_DIR}/tokenizer.model"
             --max_decode_steps "${MAX_TOK_LEN}"
-            --start_token "<bos>"
-            --stop_token "<end_of_turn>"
+            --start_token "${START_TOKEN}"
+            --stop_token "${STOP_TOKEN}"
             --num_threads "${NUM_THREADS}"
             --prompt "${PROMPT}"
             --weight_cache_path "${MODEL_DIR}/${MODEL_NAME}.xnnpack_cache"
@@ -304,11 +305,6 @@ run_with_single_prompt() {
             --top_k "${TOP_K}"
             --top_p "${TOP_P}"
             --repetition_penalty "${REPETITION_PENALTY}"
-            --io_engine "${io_engine}"
-            --io_ring_depth "${io_ring_depth}"
-            --io_subread_bytes "${io_subread_bytes}"
-            --io_min_block_size "${io_min_block_size}"
-            --io_max_threads "${io_max_threads}"
         )
     fi
     
@@ -321,6 +317,7 @@ run_with_single_prompt() {
     # Add taskset if specified
     [[ "${CORE_LIST}" != "all" ]] && CMD=(taskset -c "${CORE_LIST}" "${CMD[@]}")
 
+    BPF_PHASE_LOGGING=false
     if [[ -n "$BPF_PHASE_LOGGING" && "$BPF_PHASE_LOGGING" == "true" ]]; then
         # Start BPF profiler in the background with proper session management
         banner "--- BPF PROFILER START ---"
@@ -340,11 +337,14 @@ run_with_single_prompt() {
 
         if [[ -f /sys/fs/cgroup/cgroup.controllers ]]; then
             log "cgroup v2 detected: systemd-run"
-            systemd-run \
+
+            # Use systemd-run for cgroup v2
+            LD_LIBRARY_PATH=/usr/lib/systemd:$LD_LIBRARY_PATH \
+                systemd-run \
                 --quiet --scope \
                 -p MemoryMax="$MEMORY_LIMIT" -p MemoryHigh="$MEMORY_LIMIT"  \
-                --setenv=LD_LIBRARY_PATH=/overlay/host/rootfs/usr/lib/aarch64-linux-gnu:/overlay/host/rootfs/usr/lib \
-                --setenv=PATH="/overlay/host/rootfs/usr/bin:$PATH" \
+                --setenv=LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
+                --setenv=PATH="$PATH" \
                 -- "${CMD[@]}"
         fi
     else

@@ -40,14 +40,21 @@ ABSL_DECLARE_FLAG(std::string, sentencepiece_model);
 
         // set file path of weight cache
         std::string weight_cache_path = absl::GetFlag(FLAGS_weight_cache_path);
-        delegate_options.weight_cache_file_path = weight_cache_path.c_str();
-
+        if(weight_cache_path.empty())
+        {
+            delegate_options.weight_cache_file_path = nullptr;
+        } else {
+            delegate_options.weight_cache_file_path = weight_cache_path.c_str();
+        }
+        
         // create and apply delegate
         MINIMAL_CHECK(interpreter->ModifyGraphWithDelegate(
                           tflite::Interpreter::TfLiteDelegatePtr(
                               TfLiteXNNPackDelegateCreate(&delegate_options),
                               [](TfLiteDelegate *d)
                               { TfLiteXNNPackDelegateDelete(d); })) == kTfLiteOk);
+        std::cout << "[INFO] Applied XNNPACK Delegate with Weight Caching at: "
+                  << weight_cache_path << std::endl;
     }
 #endif
 
@@ -69,21 +76,29 @@ ABSL_DECLARE_FLAG(std::string, sentencepiece_model);
         {
             return {};
         }
-
+        size_t total_bytes = 0;
         std::map<std::string, std::vector<float, AlignedAllocator<float>>> kv_cache;
         for (int i = 0; i < num_layers; ++i)
         {
             std::string k_cache_name = "kv_cache_k_" + std::to_string(i);
             std::string v_cache_name = "kv_cache_v_" + std::to_string(i);
+            std::cout << "[INFO] Allocating KV Cache for layer " << i
+                      << ": " << k_cache_name << ", " << v_cache_name << std::endl;
 
             TfLiteTensor *tensor = runner->input_tensor(k_cache_name.c_str());
             size_t count = tensor->bytes / sizeof(float);
+            total_bytes += tensor->bytes * 2; // for k and v
 
             kv_cache.emplace(k_cache_name,
                              std::vector<float, AlignedAllocator<float>>(count, 0.0f));
             kv_cache.emplace(v_cache_name,
                              std::vector<float, AlignedAllocator<float>>(count, 0.0f));
         }
+
+        std::cout << "[INFO] Allocated KV Cache Size: "
+                  << static_cast<float>(total_bytes) / (1024.0f * 1024.0f)
+                  << " MiB\n";
+
         return kv_cache;
     }
 
@@ -119,6 +134,8 @@ ABSL_DECLARE_FLAG(std::string, sentencepiece_model);
         tflite::SignatureRunner *runner = nullptr;
         int best_seq_size = -1;
         int delta = std::numeric_limits<int>::max();
+        std::cout << "[INFO] Selecting prefill runner for "
+                  << num_input_tokens << " input tokens.\n";
 
         for (const std::string *key : interpreter->signature_keys())
         {
@@ -129,7 +146,8 @@ ABSL_DECLARE_FLAG(std::string, sentencepiece_model);
             TfLiteTensor *input_pos =
                 interpreter->GetSignatureRunner(key->c_str())->input_tensor("input_pos");
             int seq_size = input_pos->dims->data[0];
-
+            std::cout << "[INFO] Found prefill runner: " << *key
+                      << " with seq_size: " << seq_size << std::endl;
             // Choose the runner where seq_size >= num_input_tokens and
             // (seq_size - num_input_tokens) is minimized
             if (num_input_tokens <= static_cast<size_t>(seq_size) &&
@@ -138,6 +156,8 @@ ABSL_DECLARE_FLAG(std::string, sentencepiece_model);
                 if (lora == nullptr)
                 {
                     runner = interpreter->GetSignatureRunner(key->c_str());
+                    std::cout << "[INFO] Selected prefill runner: " << *key << std::endl;
+                    MINIMAL_CHECK(runner != nullptr);
                 }
                 best_seq_size = seq_size;
                 delta = seq_size - static_cast<int>(num_input_tokens);

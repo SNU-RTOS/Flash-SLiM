@@ -215,8 +215,11 @@ void __run_main(GenAIMetrics &genai_metrics,
         {
 #ifdef USE_WEIGHT_STREAMING
             ApplyXNNPACKWithWeightCachingProvider(interpreter.get(), weight_cache_provider.get());
+            std::cout << "[INFO] Applied XNNPACK Delegate with Weight Caching at: "
+                      << absl::GetFlag(FLAGS_weight_cache_path) << std::endl;
 #else
             ApplyXNNPACKWithWeightCachingProvider(interpreter.get());
+            std::cout << "[WARN] Weight streaming is not enabled. Skipping weight caching provider application.\n";
 #endif
         }
     }
@@ -254,6 +257,10 @@ void __run_main(GenAIMetrics &genai_metrics,
         flash_slim::profiling::ScopeEventHandler handler("Prepare_Prompt");
         prompt = absl::GetFlag(FLAGS_prompt);
         MINIMAL_CHECK(sp_processor->Encode(prompt, &prompt_tokens).ok());
+        // Sanity check
+        std::string roundtrip;
+        MINIMAL_CHECK(sp_processor->Decode(prompt_tokens, &roundtrip).ok());
+        std::cout << "[DEBUG] prompt roundtrip: " << roundtrip << "\n";
 
         // Initialize start and stop tokens
         start_token = absl::GetFlag(FLAGS_start_token);
@@ -277,6 +284,7 @@ void __run_main(GenAIMetrics &genai_metrics,
             }
         }
     }
+    std::cout << "[INFO] Start token IDs: " << (start_token.empty() ? "N/A" : std::to_string(prompt_tokens[0])) << " for token: " << start_token << std::endl;
     std::cout << "[INFO] Stop token ID: " << stop_token_id << " for token: " << stop_token << std::endl;
 
     //* ============ [Phase] 7. Prepare Signature Runners ============ */
@@ -298,6 +306,15 @@ void __run_main(GenAIMetrics &genai_metrics,
     MINIMAL_CHECK(prefill_runner != nullptr || decode_runner != nullptr);
 
     //* ============ [Phase] 8. Prepare Input Tensors ============ */
+    auto dump_tensor = [](const char* name, const TfLiteTensor* t){
+        std::cout << "[DBG] " << name
+                    << " type=" << t->type
+                    << " bytes=" << t->bytes
+                    << " dims=";
+        for (int i=0;i<t->dims->size;i++) std::cout << t->dims->data[i] << " ";
+        std::cout << "\n";
+    };
+    
     TfLiteTensor *prefill_input = nullptr;
     TfLiteTensor *prefill_input_pos = nullptr;
     TfLiteTensor *decode_input = nullptr;
@@ -329,10 +346,20 @@ void __run_main(GenAIMetrics &genai_metrics,
         }
 
         prefill_seq_size = std::min<int>(prompt_tokens.size(), max_seq_size);
+        std::cout << "[INFO] Prefill sequence size: " << prefill_seq_size << " (max: " << max_seq_size << ")\n";
 
         // Zero out the input tensors
-        std::memset(prefill_input->data.i32, 0, prefill_input->bytes);
-        std::memset(prefill_input_pos->data.i32, 0, prefill_input_pos->bytes);
+        std::memset(prefill_input->data.i32, 0, prefill_seq_size);
+        std::memset(prefill_input_pos->data.i32, 0, prefill_seq_size);
+        // const int eos_id = 2; // or sp_processor->PieceToId("</s>")
+
+        // // Fill tokens with eos_id (int32 elements)
+        // std::fill_n(prefill_input->data.i32, max_seq_size, eos_id);
+
+        // // Fill positions with monotonic indices
+        // for (int i = 0; i < max_seq_size; ++i) {
+        //     prefill_input_pos->data.i32[i] = i;
+        // }
 
         // Prefill uses all but the last token from the prompt
         for (int i = 0; i < prefill_seq_size - 1; ++i)
@@ -342,6 +369,32 @@ void __run_main(GenAIMetrics &genai_metrics,
         }
     }
     std::cout << "[INFO] KV Cache Max Size: " << kv_cache_max_size << " (from dimension index " << seq_dim_index << ")" << std::endl;
+    dump_tensor("prefill_input", prefill_input);
+    dump_tensor("prefill_input_pos", prefill_input_pos);
+    dump_tensor("decode_input", decode_input);
+    dump_tensor("decode_input_pos", decode_input_pos);
+    dump_tensor("kv_cache_k_0", kv_cache_k_0);
+
+    auto dump_kv_tensors = [&](tflite::SignatureRunner* r, const char* tag) {
+        std::cout << "[DBG] ---- " << tag << " KV tensors ----\n";
+
+        // inputs
+        for (const std::string& name : r->input_names()) {
+            if (name.find("kv_cache") != std::string::npos) {
+                dump_tensor(name.c_str(), r->input_tensor(name.c_str()));
+            }
+        }
+
+        // outputs
+        for (const std::string& name : r->output_names()) {
+            if (name.find("kv_cache") != std::string::npos) {
+                dump_tensor(name.c_str(), r->output_tensor(name.c_str()));
+            }
+        }
+    };
+
+    dump_kv_tensors(prefill_runner, "prefill");
+    dump_kv_tensors(decode_runner, "decode");
 
     //* ============ [Phase] 9. Prefill Phase ============ */
     double prefill_time_ms = 0.0;
@@ -388,6 +441,11 @@ void __run_main(GenAIMetrics &genai_metrics,
 
     MINIMAL_CHECK(decode_steps > 0);
 
+    std::cout << "Piece(0)=" << sp_processor->IdToPiece(0) << "\n";
+    std::cout << "Piece(1)=" << sp_processor->IdToPiece(1) << "\n";
+    std::cout << "Piece(2)=" << sp_processor->IdToPiece(2) << "\n";
+    std::cout << "VocabSize=" << sp_processor->GetPieceSize() << "\n";
+
 #ifdef USE_WEIGHT_STREAMING
     weight_chunk_controller->UpdatePrefetcherMode(WeightChunkPrefetcher::PrefetchMode::DECODE);
 #endif
@@ -410,6 +468,24 @@ void __run_main(GenAIMetrics &genai_metrics,
                 decode_input->data.i32[0] = next_token_id;
                 decode_input_pos->data.i32[0] = next_position;
                 MINIMAL_CHECK(decode_runner->Invoke() == kTfLiteOk);
+                dump_tensor("Decode output", decode_runner->output_tensor("logits"));
+
+                const TfLiteTensor* t = decode_runner->output_tensor("logits");
+                int vocab = t->dims->data[t->dims->size - 1];
+                const float* logits = t->data.f; // rows==1 here
+
+                std::vector<std::pair<float,int>> v;
+                v.reserve(vocab);
+                for (int id=0; id<vocab; ++id) v.push_back({logits[id], id});
+                std::partial_sort(v.begin(), v.begin()+5, v.end(),
+                                [](auto&a, auto&b){ return a.first > b.first; });
+
+                for (int i=0;i<5;i++){
+                int id = v[i].second;
+                std::cout << "[TOP] id=" << id
+                            << " logit=" << v[i].first
+                            << " piece=" << sp_processor->IdToPiece(id) << "\n";
+                }
             }
 
             // 2) Token Sampling
